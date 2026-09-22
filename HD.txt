@@ -2,7 +2,7 @@
 cách để push lên git
 git config --global user.name "tên đăng nhập"
 git config --global user.email "mail của bản thân"
-cd vào thư mục chưa code
+cd vào thư mục chứa code
 git switch <tên nhánh tên của bạn thân + họ>
 git branch #kiểm tra nhánh
 git add .
