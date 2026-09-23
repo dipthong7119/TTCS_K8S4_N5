@@ -76,7 +76,7 @@ TTCS_K8S4_N5/
 
 |                     |                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Mô tả**   | Khởi tạo dự án, cấu hình kết nối SQLite, chạy được migration đầu tiên. Viết `docker-compose.yml` để chạy ứng dụng (CSDL SQLite lưu dưới dạng file cục bộ). Migration này là mẫu đặt tên bảng và cột cho mọi migration sau — đặt tên theo `snake_case`, khoá chính `id`, cột thời gian `created_at`/`updated_at`. |
+| **Mô tả**   | Khởi tạo dự án, cấu hình kết nối PostgreSQL, chạy được migration đầu tiên. Viết`docker-compose.yml` gồm ứng dụng và cơ sở dữ liệu để cả team dùng chung một cấu hình. Migration này là mẫu đặt tên bảng và cột cho mọi migration sau — đặt tên theo `snake_case`, khoá chính `id`, cột thời gian `created_at`/`updated_at`. |
 | **AC**        | Chạy`docker compose up` rồi khởi động ứng dụng thì kết nối được cơ sở dữ liệu, migration chạy sạch và chạy lùi được                                                                                                                                                                                                                                         |
 | **NFR**       | Chuỗi kết nối đọc từ biến môi trường                                                                                                                                                                                                                                                                                                                                         |
 | **Deps**      | không                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -88,7 +88,7 @@ TTCS_K8S4_N5/
 2. Tạo `hardware/app/database.py` — SQLAlchemy async engine + session maker + Base
 3. Tạo `hardware/app/main.py` — FastAPI app với lifespan quản lý DB connection
 4. Tạo `hardware/Dockerfile` — multi-stage build Python 3.11+
-5. Tạo `docker-compose.yml` — chỉ cần service `app` (SQLite là file local)
+5. Tạo `docker-compose.yml` — service `app` + `db` (PostgreSQL 15)
 6. Init Alembic, tạo migration đầu tiên (bảng health check)
 7. Tạo `.env.example` với mẫu biến cần thiết
 
@@ -136,7 +136,7 @@ TTCS_K8S4_N5/
 
 ```
 users:
-  id              INTEGER PRIMARY KEY AUTOINCREMENT
+  id              SERIAL PRIMARY KEY
   email           VARCHAR(255) UNIQUE NOT NULL
   password_hash   VARCHAR(512) NOT NULL     -- argon2id hash
   full_name       VARCHAR(255) NOT NULL
@@ -152,7 +152,7 @@ users:
 
 ```
 roles:
-  id              INTEGER PRIMARY KEY AUTOINCREMENT
+  id              SERIAL PRIMARY KEY
   name            VARCHAR(50) UNIQUE NOT NULL  -- driver, station_owner, operator, accountant, admin
   created_at      TIMESTAMP DEFAULT NOW()
 
@@ -243,7 +243,7 @@ def require_role(*roles: str):
 
 ```
 stations:
-  id              INTEGER PRIMARY KEY AUTOINCREMENT
+  id              SERIAL PRIMARY KEY
   name            VARCHAR(255) NOT NULL
   address         TEXT
   latitude        FLOAT
@@ -284,7 +284,7 @@ stations:
 
 ```
 charge_points:
-  id              INTEGER PRIMARY KEY AUTOINCREMENT
+  id              SERIAL PRIMARY KEY
   code            VARCHAR(50) UNIQUE NOT NULL (INDEX)
   station_id      FK -> stations.id
   vendor          VARCHAR(255)
@@ -300,7 +300,7 @@ charge_points:
 
 ```
 connectors:
-  id              INTEGER PRIMARY KEY AUTOINCREMENT
+  id              SERIAL PRIMARY KEY
   charge_point_id FK -> charge_points.id
   connector_id    INTEGER NOT NULL        -- bắt đầu từ 1, khớp OCPP connectorId
   status          VARCHAR(20) DEFAULT 'unavailable'
@@ -384,7 +384,7 @@ K-01 (song song, không phụ thuộc)
 
 ```env
 # Database
-DATABASE_URL=sqlite:///./csms.db
+DATABASE_URL=postgresql+asyncpg://csms:csms@db:5432/csms
 
 # Security
 SECRET_KEY=change-me-in-production
@@ -406,7 +406,8 @@ LOCKOUT_DURATION_MINUTES=15
 ```
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-sqlalchemy>=2.0.23
+sqlalchemy[asyncio]>=2.0.23
+asyncpg>=0.29.0
 alembic>=1.13.0
 pydantic-settings>=2.1.0
 argon2-cffi>=23.1.0
