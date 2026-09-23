@@ -5,6 +5,7 @@ git config --global user.email "mail của bản thân"
 cd vào thư mục chưa code
 git switch <tên nhánh tên của bạn thân + họ>
 git branch #kiểm tra nhánh
+git remote origin https://github.com/dipthong7119/TTCS_K8S4_N5.git
 git add .
 git commit -m "viết commit vào đây"
 git push origin tên nhánh
