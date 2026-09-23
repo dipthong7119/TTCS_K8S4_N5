@@ -42,7 +42,15 @@ alembic revision --autogenerate -m "thêm_bảng_users"
 alembic upgrade head
 ```
 
-### 4. Quy tắc Commit & Quản lý
+### 4. Cấu hình CI/CD & Deploy tự động (Staging)
+Dự án được cấu hình Pipeline (Build, Test, Deploy) qua **GitHub Actions**. Để luồng Deploy (`deploy.yml`) hoạt động, Developer/Admin cần vào tab **Settings > Secrets and variables > Actions** trên GitHub và thiết lập các biến sau:
+- `STAGING_HOST`: Địa chỉ IP hoặc Domain của server Staging.
+- `STAGING_USERNAME`: Tên người dùng SSH (ví dụ: `ubuntu`).
+- `STAGING_SSH_KEY`: Private Key SSH dùng để kết nối vào máy chủ.
+- `STAGING_SSH_PORT`: Cổng kết nối (thường là `22`).
+- `GHCR_PAT`: Personal Access Token của GitHub có quyền pull package từ GHCR.
+
+### 5. Quy tắc Commit & Quản lý
 - Các Task được giao theo Sprint cần được làm từng phần.
 - Sau khi hoàn thành một chức năng, phải ghi lại log/prompt tại thư mục `promtp/` kèm theo kết quả `_ket_qua` tương ứng.
 - **Không commit** file chứa dữ liệu nhạy cảm (như `.env`, `.sqlite` / `csms.db`).
