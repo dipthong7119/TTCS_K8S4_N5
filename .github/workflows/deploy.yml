@@ -33,7 +33,26 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/csms-app:latest
 
+      - name: Kiểm tra secrets Staging (bỏ qua nếu chưa cấu hình)
+        id: check-secrets
+        run: |
+          MISSING=()
+          [[ -z "${{ secrets.STAGING_HOST }}" ]]     && MISSING+=("STAGING_HOST")
+          [[ -z "${{ secrets.STAGING_USERNAME }}" ]] && MISSING+=("STAGING_USERNAME")
+          [[ -z "${{ secrets.STAGING_SSH_KEY }}" ]]  && MISSING+=("STAGING_SSH_KEY")
+          [[ -z "${{ secrets.STAGING_SSH_PORT }}" ]] && MISSING+=("STAGING_SSH_PORT")
+          [[ -z "${{ secrets.GHCR_PAT }}" ]]         && MISSING+=("GHCR_PAT")
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "⚠️  Chưa cấu hình secrets: ${MISSING[*]}"
+            echo "   → Bỏ qua bước SSH Deploy (cần cấu hình khi có server staging thật)."
+            echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to Staging Server via SSH
+        if: steps.check-secrets.outputs.deploy_enabled == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
