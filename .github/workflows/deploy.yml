@@ -33,7 +33,33 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/csms-app:latest
 
+      - name: Validate staging deploy secrets
+        id: validate-staging-secrets
+        shell: bash
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USERNAME: ${{ secrets.STAGING_USERNAME }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          missing=()
+
+          [[ -z "$STAGING_HOST" ]] && missing+=("STAGING_HOST")
+          [[ -z "$STAGING_USERNAME" ]] && missing+=("STAGING_USERNAME")
+          [[ -z "$STAGING_SSH_KEY" ]] && missing+=("STAGING_SSH_KEY")
+          [[ -z "$STAGING_SSH_PORT" ]] && missing+=("STAGING_SSH_PORT")
+          [[ -z "$GHCR_PAT" ]] && missing+=("GHCR_PAT")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::Skipping deploy-staging because missing secrets: ${missing[*]}"
+            echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to Staging Server via SSH
+        if: steps.validate-staging-secrets.outputs.deploy_enabled == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
