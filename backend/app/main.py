@@ -1,10 +1,9 @@
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
 from pathlib import Path
 
-from app.config import settings
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 from app.routers.pages import router as pages_router
 
 app = FastAPI(
@@ -15,8 +14,10 @@ app = FastAPI(
 
 # ── Static files (CSS, JS, ảnh) ───────────────────────────────────
 # Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
-# Sử dụng đường dẫn tuyệt đối /app/frontend vì volume mount này luôn tồn tại khi container chạy
+# Ưu tiên /app/frontend khi chạy container, fallback về thư mục frontend trong repo cho local/CI
 frontend_dir = Path("/app/frontend")
+if not frontend_dir.exists():
+    frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
 app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
 
 # ── Templates (Jinja2) ─────────────────────────────────────────────
