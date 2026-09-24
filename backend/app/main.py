@@ -14,13 +14,16 @@ app = FastAPI(
 
 # ── Static files (CSS, JS, ảnh) ───────────────────────────────────
 # Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
-# Sử dụng đường dẫn tuyệt đối /app/frontend vì volume mount này luôn tồn tại khi container chạy
+# Chỉ mount khi thư mục tồn tại (trong Docker). Khi chạy pytest CI thì bỏ qua.
 frontend_dir = Path("/app/frontend")
-app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
+
+if frontend_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
 
 # ── Templates (Jinja2) ─────────────────────────────────────────────
-# Cùng đường mount trên
-templates = Jinja2Templates(directory=str(frontend_dir / "templates"))
+# Cùng đường mount trên — dùng fallback path nếu không có volume mount
+_templates_dir = frontend_dir / "templates" if frontend_dir.exists() else Path(__file__).parent
+templates = Jinja2Templates(directory=str(_templates_dir))
 
 # ── Routers ────────────────────────────────────────────────────────
 app.include_router(pages_router)
