@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Request
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
 from pathlib import Path
+
+from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter()
 
 # Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
 frontend_dir = Path("/app/frontend")
+if not frontend_dir.exists():
+    frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
 templates = Jinja2Templates(directory=str(frontend_dir / "templates"))
 
 def _user():

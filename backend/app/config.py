@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     # Dùng SQLite cho môi trường phát triển
     DATABASE_URL: str = "sqlite:///./csms.db"
