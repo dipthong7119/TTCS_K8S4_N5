@@ -1,8 +1,9 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "stations" %}
-{% set is_edit = station is defined %}
+{% set is_edit = station is defined and station %}
 
-{% block title %}{{ "Sửa trạm" if is_edit else "Thêm trạm mới" }}{% endblock %}
+{% block title %}{{ "Sửa trạm — " + station.name if is_edit else "Thêm trạm mới" }}{% endblock %}
+{% block meta_description %}{{ "Cập nhật thông tin trạm sạc " + station.name if is_edit else "Khai báo trạm sạc xe điện mới vào hệ thống CSMS" }}{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -19,11 +20,16 @@
 {% block content %}
 <div class="page-header">
   <div class="page-header__info">
-    <h1 class="page-header__title">{{ "Sửa thông tin trạm" if is_edit else "Thêm trạm mới" }}</h1>
-    <p class="page-header__subtitle">{{ "Cập nhật thông tin trạm sạc" if is_edit else "Khai báo trạm sạc và thêm trụ sạc" }}</p>
+    <h1 class="page-header__title">
+      {{ "Sửa thông tin trạm" if is_edit else "Thêm trạm mới" }}
+    </h1>
+    <p class="page-header__subtitle">
+      {{ "Cập nhật thông tin trạm: " + station.name if is_edit else "Khai báo trạm sạc và cấu hình cơ bản" }}
+    </p>
   </div>
-  <a href="/stations" class="btn btn--secondary">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <a href="/stations" class="btn btn--secondary" id="btn-back-to-list">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <polyline points="15 18 9 12 15 6"/>
     </svg>
     Quay lại
@@ -31,20 +37,23 @@
 </div>
 
 <div class="station-form-layout">
-  <!-- Main form -->
+  <!-- ── Form thông tin trạm ── -->
   <div class="card">
     <div class="card__header">
       <div>
         <div class="card__title">Thông tin trạm</div>
-        <div class="card__subtitle">Các trường có dấu <span style="color:var(--color-fault)">*</span> là bắt buộc</div>
+        <div class="card__subtitle">
+          Trường có dấu <span style="color:var(--color-fault)" aria-label="bắt buộc">*</span> là bắt buộc
+        </div>
       </div>
     </div>
     <div class="card__body">
-      <form id="station-form" novalidate>
+      <form id="station-form" novalidate aria-label="Form thông tin trạm sạc">
         {% if is_edit %}
         <input type="hidden" name="station_id" value="{{ station.id }}" />
         {% endif %}
 
+        <!-- Tên trạm -->
         <div class="form-group">
           <label class="form-label" for="station-name">
             Tên trạm <span class="required" aria-hidden="true">*</span>
@@ -54,12 +63,13 @@
             class="form-input"
             placeholder="VD: Trạm sạc Quận 1 — Tòa nhà ABC"
             value="{{ station.name | default('') }}"
-            maxlength="120"
+            maxlength="255"
             required aria-required="true" aria-describedby="name-error"
           />
           <p class="form-error" id="name-error" data-error="name" role="alert"></p>
         </div>
 
+        <!-- Địa chỉ -->
         <div class="form-group">
           <label class="form-label" for="station-address">
             Địa chỉ <span class="required" aria-hidden="true">*</span>
@@ -74,32 +84,58 @@
           <p class="form-error" id="address-error" data-error="address" role="alert"></p>
         </div>
 
+        <!-- Toạ độ -->
         <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="station-lat">Vĩ độ (Latitude)</label>
-            <input id="station-lat" name="latitude" type="number" step="any"
-              class="form-input" placeholder="VD: 10.762622"
+            <input
+              id="station-lat" name="latitude" type="number" step="any"
+              class="form-input"
+              placeholder="VD: 10.762622"
               value="{{ station.latitude | default('') }}"
-              aria-describedby="lat-hint" />
-            <p class="form-hint" id="lat-hint">Tuỳ chọn — dùng cho bản đồ</p>
+              aria-describedby="lat-hint"
+              min="-90" max="90"
+            />
+            <p class="form-hint" id="lat-hint">Tuỳ chọn — dùng cho bản đồ (−90 đến 90)</p>
           </div>
           <div class="form-group">
             <label class="form-label" for="station-lng">Kinh độ (Longitude)</label>
-            <input id="station-lng" name="longitude" type="number" step="any"
-              class="form-input" placeholder="VD: 106.660172"
-              value="{{ station.longitude | default('') }}" />
+            <input
+              id="station-lng" name="longitude" type="number" step="any"
+              class="form-input"
+              placeholder="VD: 106.660172"
+              value="{{ station.longitude | default('') }}"
+              aria-describedby="lng-error"
+              min="-180" max="180"
+            />
+            <p class="form-error" id="lng-error" data-error="longitude" role="alert"></p>
           </div>
         </div>
 
+        <!-- Trạng thái (chỉ hiện khi edit) -->
+        {% if is_edit %}
         <div class="form-group">
-          <label class="form-label" for="station-desc">Mô tả</label>
-          <textarea id="station-desc" name="description"
-            class="form-textarea" placeholder="Thông tin thêm về trạm..." rows="2">{{ station.description | default('') }}</textarea>
+          <label class="form-label" for="station-status">Trạng thái</label>
+          <select id="station-status" name="status" class="form-select"
+                  aria-describedby="status-hint">
+            <option value="active"       {% if station.status == 'active' %}selected{% endif %}>Hoạt động</option>
+            <option value="inactive"     {% if station.status == 'inactive' %}selected{% endif %}>Tạm dừng</option>
+            <option value="maintenance"  {% if station.status == 'maintenance' %}selected{% endif %}>Bảo trì</option>
+          </select>
+          <p class="form-hint" id="status-hint">
+            Trạng thái ảnh hưởng đến hiển thị trên trang giám sát
+          </p>
         </div>
+        {% endif %}
 
-        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid var(--color-border);margin-top:var(--space-4);">
+        <!-- Nút hành động -->
+        <div class="form-actions">
           <a href="/stations" class="btn btn--secondary">Huỷ</a>
           <button type="submit" class="btn btn--primary" id="station-submit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
             {{ "Lưu thay đổi" if is_edit else "Tạo trạm" }}
           </button>
         </div>
@@ -107,7 +143,7 @@
     </div>
   </div>
 
-  <!-- Charge points panel (only shown in edit mode) -->
+  <!-- ── Panel trụ sạc (chỉ hiện khi edit) ── -->
   {% if is_edit %}
   <div class="card" id="charge-points-card">
     <div class="card__header">
@@ -115,15 +151,17 @@
         <div class="card__title">Trụ sạc</div>
         <div class="card__subtitle">Quản lý trụ sạc trong trạm này</div>
       </div>
-      <button class="btn btn--primary btn--sm" id="btn-add-cp" type="button">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button class="btn btn--primary btn--sm" id="btn-add-cp" type="button"
+              aria-haspopup="dialog" aria-controls="cp-modal">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
         Thêm trụ
       </button>
     </div>
     <div class="table-wrap">
-      <table class="table" aria-label="Danh sách trụ sạc">
+      <table class="table" aria-label="Danh sách trụ sạc trong trạm">
         <thead>
           <tr>
             <th scope="col">Mã trụ</th>
@@ -136,18 +174,29 @@
         <tbody id="cp-tbody">
           {% for cp in charge_points | default([]) %}
           <tr>
-            <td><code style="font-family:monospace;background:var(--color-surface-alt);padding:2px 6px;border-radius:4px;">{{ cp.code }}</code></td>
+            <td>
+              <code class="code-tag">{{ cp.code }}</code>
+            </td>
             <td>{{ cp.vendor | default('—') }}</td>
             <td>{{ cp.model | default('—') }}</td>
             <td>
-              <span class="badge badge--{{ cp.status | default('offline') }}">
-                {{ {'online':'Trực tuyến','offline':'Ngoại tuyến','charging':'Đang sạc','fault':'Lỗi'}.get(cp.status,'Không rõ') }}
+              {% set cp_status = cp.status | default('offline') %}
+              <span class="badge badge--{{ cp_status }}">
+                {% if cp_status == 'online' %}Trực tuyến
+                {% elif cp_status == 'offline' %}Ngoại tuyến
+                {% elif cp_status == 'charging' %}Đang sạc
+                {% elif cp_status == 'fault' %}Lỗi
+                {% else %}Không rõ{% endif %}
               </span>
             </td>
             <td class="text-right">
-              <button class="btn btn--ghost btn--icon-sm" type="button" aria-label="Xoá trụ {{ cp.code }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+              <button class="btn btn--ghost btn--icon-sm" type="button"
+                      data-cp-delete-id="{{ cp.id }}"
+                      aria-label="Xoá trụ {{ cp.code }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14H6L5 6"/>
                   <path d="M10 11v6"/><path d="M14 11v6"/>
                   <path d="M9 6V4h6v2"/>
                 </svg>
@@ -155,53 +204,102 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-muted);">Chưa có trụ sạc nào</td></tr>
+          <tr>
+            <td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-muted);">
+              Chưa có trụ sạc nào — bấm <strong>Thêm trụ</strong> để bắt đầu
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
+  {% else %}
+  <!-- Hướng dẫn khi tạo mới -->
+  <div class="card station-guide-card">
+    <div class="card__body">
+      <div class="guide-steps">
+        <div class="guide-steps__title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Các bước tiếp theo
+        </div>
+        <ol class="guide-steps__list">
+          <li>Điền thông tin trạm và bấm <strong>Tạo trạm</strong></li>
+          <li>Vào trang chi tiết trạm vừa tạo</li>
+          <li>Thêm trụ sạc với mã OCPP ID khớp với thiết bị thực</li>
+          <li>Trụ sạc kết nối WebSocket về <code class="code-tag">/ocpp/{mã_trụ}</code></li>
+        </ol>
+        <div class="guide-steps__note">
+          💡 Mã trụ phải khớp với cấu hình trong phần cứng và là duy nhất trong toàn hệ thống.
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
 </div>
 
-<!-- Add charge point modal -->
-<div class="modal-backdrop is-hidden" id="cp-modal" role="dialog" aria-modal="true" aria-labelledby="cp-modal-title">
+<!-- Modal thêm trụ sạc -->
+<div class="modal-backdrop is-hidden" id="cp-modal"
+     role="dialog" aria-modal="true" aria-labelledby="cp-modal-title">
   <div class="modal">
     <div class="modal__header">
       <h2 class="modal__title" id="cp-modal-title">Thêm trụ sạc</h2>
-      <button class="modal__close" id="cp-modal-close" type="button" aria-label="Đóng">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button class="modal__close" id="cp-modal-close" type="button" aria-label="Đóng hộp thoại">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     </div>
     <div class="modal__body">
-      <form id="cp-form" novalidate>
+      <form id="cp-form" novalidate aria-label="Form thêm trụ sạc">
         <div class="form-group">
-          <label class="form-label" for="cp-code">Mã trụ (OCPP ID) <span class="required" aria-hidden="true">*</span></label>
-          <input id="cp-code" name="code" type="text" class="form-input"
+          <label class="form-label" for="cp-code">
+            Mã trụ (OCPP ID) <span class="required" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="cp-code" name="code" type="text" class="form-input"
             placeholder="VD: T-01, CP-001"
-            required aria-required="true" aria-describedby="cp-code-error" />
+            required aria-required="true" aria-describedby="cp-code-error cp-code-hint"
+            autocomplete="off"
+          />
           <p class="form-error" id="cp-code-error" data-error="code" role="alert"></p>
-          <p class="form-hint">Mã phải khớp với cấu hình trong trụ sạc vật lý</p>
+          <p class="form-hint" id="cp-code-hint">
+            Phải khớp với cấu hình trong trụ sạc vật lý — duy nhất toàn hệ thống
+          </p>
+          <!-- Trạng thái kiểm tra trùng mã -->
+          <p id="cp-code-check" style="font-size:var(--font-size-xs);margin-top:4px;" aria-live="polite"></p>
         </div>
+
         <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="cp-vendor">Nhà sản xuất</label>
-            <input id="cp-vendor" name="vendor" type="text" class="form-input" placeholder="VD: ABB, Schneider" />
+            <input id="cp-vendor" name="vendor" type="text" class="form-input"
+                   placeholder="VD: ABB, Schneider" />
           </div>
           <div class="form-group">
             <label class="form-label" for="cp-model">Model</label>
-            <input id="cp-model" name="model" type="text" class="form-input" placeholder="VD: Terra AC" />
+            <input id="cp-model" name="model" type="text" class="form-input"
+                   placeholder="VD: Terra AC" />
           </div>
         </div>
+
         <div class="form-group">
           <label class="form-label" for="cp-connectors">Số đầu nối</label>
-          <select id="cp-connectors" name="connector_count" class="form-select">
+          <select id="cp-connectors" name="connector_count" class="form-select"
+                  aria-describedby="cp-connectors-hint">
             <option value="1">1 đầu nối</option>
             <option value="2" selected>2 đầu nối</option>
             <option value="4">4 đầu nối</option>
           </select>
+          <p class="form-hint" id="cp-connectors-hint">
+            Connector ID bắt đầu từ 1, khớp với <code>connectorId</code> trong tin nhắn OCPP
+          </p>
         </div>
       </form>
     </div>

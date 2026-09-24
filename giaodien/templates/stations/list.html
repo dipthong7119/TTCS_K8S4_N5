@@ -1,8 +1,8 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "stations" %}
 
 {% block title %}Trạm sạc{% endblock %}
-{% block meta_description %}Quản lý danh sách trạm sạc xe điện của bạn{% endblock %}
+{% block meta_description %}Quản lý danh sách trạm sạc xe điện của bạn — CSMS{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -21,60 +21,84 @@
     <p class="page-header__subtitle">Quản lý toàn bộ trạm và trụ sạc của bạn</p>
   </div>
   <a href="/stations/new" class="btn btn--primary" id="btn-add-station">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
     </svg>
     Thêm trạm mới
   </a>
 </div>
 
-<!-- Stats -->
-<div class="stats-grid" id="station-stats">
-  <div class="stat-card stat-card--blue">
+<!-- Thẻ thống kê -->
+<div class="stats-grid" id="station-stats" aria-label="Thống kê trạm sạc">
+  <div class="stat-card stat-card--blue" role="img" aria-label="Tổng trạm">
     <div class="stat-card__label">Tổng trạm</div>
-    <div class="stat-card__value" id="stat-total">—</div>
+    <div class="stat-card__value" id="stat-total" aria-live="polite">—</div>
     <div class="stat-card__sub">trạm đã đăng ký</div>
-    <div class="stat-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+      </svg>
+    </div>
   </div>
-  <div class="stat-card stat-card--green">
-    <div class="stat-card__label">Trực tuyến</div>
-    <div class="stat-card__value" id="stat-online">—</div>
-    <div class="stat-card__sub">trạm đang hoạt động</div>
-    <div class="stat-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg></div>
+  <div class="stat-card stat-card--green" role="img" aria-label="Trạm đang hoạt động">
+    <div class="stat-card__label">Hoạt động</div>
+    <div class="stat-card__value" id="stat-active" aria-live="polite">—</div>
+    <div class="stat-card__sub">trạng thái active</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/>
+      </svg>
+    </div>
   </div>
-  <div class="stat-card stat-card--orange">
-    <div class="stat-card__label">Ngoại tuyến</div>
-    <div class="stat-card__value" id="stat-offline">—</div>
-    <div class="stat-card__sub">cần kiểm tra</div>
-    <div class="stat-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+  <div class="stat-card stat-card--orange" role="img" aria-label="Trạm bảo trì">
+    <div class="stat-card__label">Bảo trì</div>
+    <div class="stat-card__value" id="stat-maintenance" aria-live="polite">—</div>
+    <div class="stat-card__sub">đang bảo dưỡng</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
   </div>
-  <div class="stat-card stat-card--purple">
-    <div class="stat-card__label">Đang sạc</div>
-    <div class="stat-card__value" id="stat-charging">—</div>
-    <div class="stat-card__sub">phiên đang hoạt động</div>
-    <div class="stat-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+  <div class="stat-card stat-card--gray" role="img" aria-label="Trạm không hoạt động">
+    <div class="stat-card__label">Tạm dừng</div>
+    <div class="stat-card__value" id="stat-inactive" aria-live="polite">—</div>
+    <div class="stat-card__sub">trạng thái inactive</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
   </div>
 </div>
 
-<!-- Filters -->
+<!-- Bộ lọc -->
 <div class="card" style="margin-bottom: var(--space-5);">
   <div class="card__body" style="padding-top: var(--space-4); padding-bottom: var(--space-4);">
     <div class="filters-bar">
       <div class="search-input-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <input type="search" class="search-input" id="station-search" placeholder="Tìm theo tên, địa chỉ..." aria-label="Tìm kiếm trạm" />
+        <input type="search" class="search-input" id="station-search"
+               placeholder="Tìm theo tên, địa chỉ..." aria-label="Tìm kiếm trạm" />
       </div>
-      <select class="form-select" id="status-filter" style="width:auto;min-width:150px;" aria-label="Lọc theo trạng thái">
+      <select class="form-select" id="status-filter"
+              style="width:auto;min-width:160px;" aria-label="Lọc theo trạng thái">
         <option value="">Tất cả trạng thái</option>
-        <option value="online">Trực tuyến</option>
-        <option value="offline">Ngoại tuyến</option>
-        <option value="fault">Lỗi</option>
+        <option value="active">Hoạt động</option>
+        <option value="inactive">Tạm dừng</option>
+        <option value="maintenance">Bảo trì</option>
       </select>
-      <button class="btn btn--secondary btn--sm" id="btn-refresh" type="button" aria-label="Làm mới danh sách">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+      <button class="btn btn--secondary btn--sm" id="btn-refresh" type="button"
+              aria-label="Làm mới danh sách">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
         </svg>
         Làm mới
@@ -83,12 +107,12 @@
   </div>
 </div>
 
-<!-- Table -->
+<!-- Bảng danh sách -->
 <div class="card">
   <div class="card__header">
     <div>
       <div class="card__title">Danh sách trạm</div>
-      <div class="card__subtitle" id="result-count">Đang tải...</div>
+      <div class="card__subtitle" id="result-count" aria-live="polite">Đang tải...</div>
     </div>
   </div>
   <div class="table-wrap">
@@ -104,35 +128,47 @@
         </tr>
       </thead>
       <tbody id="station-tbody">
-        <!-- Skeleton rows -->
-        <tr class="skeleton-row"><td colspan="6" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải dữ liệu...</td></tr>
+        <!-- Skeleton loading -->
+        <tr class="skeleton-row">
+          <td colspan="6" style="text-align:center;padding:40px;color:var(--color-text-muted);">
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+              <div class="spinner" aria-hidden="true"></div>
+              <span>Đang tải dữ liệu...</span>
+            </div>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
   <div class="card__footer">
-    <div class="pagination" id="pagination" role="navigation" aria-label="Phân trang">
-    </div>
+    <div class="pagination" id="pagination" role="navigation" aria-label="Phân trang"></div>
   </div>
 </div>
 
-<!-- Delete confirm modal -->
-<div class="modal-backdrop is-hidden" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+<!-- Modal xác nhận xoá -->
+<div class="modal-backdrop is-hidden" id="delete-modal"
+     role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
   <div class="modal">
     <div class="modal__header">
       <h2 class="modal__title" id="delete-modal-title">Xác nhận xoá trạm</h2>
       <button class="modal__close" id="delete-modal-close" type="button" aria-label="Đóng hộp thoại">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     </div>
     <div class="modal__body">
       <div class="alert alert--danger">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <span>Bạn có chắc muốn xoá trạm <strong id="delete-station-name"></strong>? Hành động này không thể hoàn tác.</span>
+        <span>
+          Bạn có chắc muốn xoá trạm <strong id="delete-station-name"></strong>?
+          Hành động này không thể hoàn tác và sẽ xoá toàn bộ trụ sạc liên quan.
+        </span>
       </div>
     </div>
     <div class="modal__footer">
