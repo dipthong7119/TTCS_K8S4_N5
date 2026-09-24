@@ -9,9 +9,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.config import settings
+from app.routers.auth import router as auth_router
 from app.routers.pages import router as pages_router
 
 
@@ -37,6 +40,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# -- Session cookie (httpOnly, SameSite=lax) ---------------------------------
+# SECRET_KEY doc tu config.py -- khong hardcode (02_CODING_STANDARDS.md quy tac 1)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    session_cookie="csms_session",
+    max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    same_site="lax",
+    https_only=False,  # doi thanh True khi deploy HTTPS
+)
+
 # -- Static files (CSS, JS, anh) -------------------------------------------
 # Volume mount: ./frontend:/app/frontend (tu docker-compose.yml)
 # Chi mount khi thu muc ton tai (trong Docker). Khi chay pytest CI thi bo qua.
@@ -50,6 +64,7 @@ _templates_dir = frontend_dir / "templates" if frontend_dir.exists() else Path(_
 templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------
+app.include_router(auth_router)
 app.include_router(pages_router)
 
 # -- Health check -------------------------------------------------------------

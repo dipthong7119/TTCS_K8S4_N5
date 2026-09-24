@@ -9,8 +9,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Mount file SQLite cục bộ để dữ liệu không bị mất khi xoá container
-      - ./csms.db:/app/csms.db
+      # Mount file SQLite từ backend/ ra host để dữ liệu không bị mất khi xoá container
+      # Lưu ý: file backend/csms.db phải TỒN TẠI trên host trước khi mount
+      # (nếu chưa có: chạy 'cd backend && alembic upgrade head' một lần trên local)
+      - ./backend/csms.db:/app/csms.db
       # Mount frontend: sửa HTML/CSS/JS trên host là thấy ngay trong container, không cần rebuild
       - ./frontend:/app/frontend
     env_file:
