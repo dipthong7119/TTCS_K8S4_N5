@@ -12,9 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy toàn bộ mã nguồn
 COPY app/ ./app/
-# Copy cấu hình alembic (sẽ được tạo ở bước sau)
-# COPY alembic/ ./alembic/
-# COPY alembic.ini .
 
 # Mở port
 EXPOSE 8000
