@@ -1,0 +1,20 @@
+﻿/* pages/stations.css */
+.station-form-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .station-form-layout { grid-template-columns: 1fr; }
+}
+
+/* Station card in list (hover effect) */
+.station-row-actions { display: flex; align-items: center; gap: var(--space-2); justify-content: flex-end; }
+
+/* Charge point dot */
+.cp-count {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 600; color: var(--color-text);
+}
+.cp-count__sub { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: 400; }

@@ -1,0 +1,123 @@
+﻿{% extends "base.html" %}
+{% set active_page = "monitoring" %}
+
+{% block title %}Giám sát thời gian thực{% endblock %}
+{% block meta_description %}Theo dõi trạng thái toàn bộ trạm sạc và trụ sạc theo thời gian thực{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Giám sát</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/monitoring.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Giám sát thời gian thực</h1>
+    <p class="page-header__subtitle">Trạng thái trực tiếp tất cả trạm và trụ sạc</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:var(--space-3);">
+    <div class="sse-indicator" id="sse-indicator" aria-live="polite">
+      <span class="sse-dot" aria-hidden="true"></span>
+      <span id="sse-label">Đang kết nối...</span>
+    </div>
+    <button class="btn btn--secondary btn--sm" id="btn-refresh-monitoring" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+      Làm mới
+    </button>
+  </div>
+</div>
+
+<!-- Summary bar -->
+<div class="stats-grid" style="margin-bottom:var(--space-5);">
+  <div class="stat-card stat-card--blue">
+    <div class="stat-card__label">Tổng trụ</div>
+    <div class="stat-card__value" id="mon-total">—</div>
+    <div class="stat-card__sub">trụ đang quản lý</div>
+  </div>
+  <div class="stat-card stat-card--green">
+    <div class="stat-card__label">Đang sạc</div>
+    <div class="stat-card__value" id="mon-charging">—</div>
+    <div class="stat-card__sub">đầu nối hoạt động</div>
+  </div>
+  <div class="stat-card stat-card--orange">
+    <div class="stat-card__label">Ngoại tuyến</div>
+    <div class="stat-card__value" id="mon-offline">—</div>
+    <div class="stat-card__sub">cần kiểm tra</div>
+  </div>
+  <div class="stat-card stat-card--red">
+    <div class="stat-card__label">Lỗi</div>
+    <div class="stat-card__value" id="mon-fault">—</div>
+    <div class="stat-card__sub">trụ báo lỗi</div>
+  </div>
+</div>
+
+<!-- View toggle + filter -->
+<div class="filters-bar" style="margin-bottom:var(--space-4);">
+  <div class="search-input-wrap" style="max-width:280px;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input type="search" class="search-input" id="mon-search" placeholder="Tìm trạm, trụ..." aria-label="Tìm kiếm" />
+  </div>
+  <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;" aria-label="Lọc trạng thái">
+    <option value="">Tất cả trạng thái</option>
+    <option value="available">Sẵn sàng</option>
+    <option value="charging">Đang sạc</option>
+    <option value="offline">Ngoại tuyến</option>
+    <option value="fault">Lỗi</option>
+    <option value="finishing">Kết thúc</option>
+  </select>
+  <div class="view-toggle" role="group" aria-label="Chế độ xem">
+    <button class="view-toggle__btn is-active" id="view-grid" type="button" aria-pressed="true" title="Xem dạng lưới">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+    </button>
+    <button class="view-toggle__btn" id="view-list" type="button" aria-pressed="false" title="Xem dạng danh sách">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Grid container -->
+<div id="monitoring-grid" class="monitoring-grid" aria-label="Lưới trạm sạc" aria-live="polite">
+  <!-- Filled by JS from SSE or API -->
+  <div class="loading-state" id="mon-loading">
+    <div class="spinner spinner--lg" aria-hidden="true"></div>
+    <p style="margin-top:var(--space-4);color:var(--color-text-secondary);">Đang tải dữ liệu...</p>
+  </div>
+</div>
+
+<!-- Station detail drawer -->
+<div class="drawer-backdrop is-hidden" id="detail-backdrop" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+  <div class="drawer" id="detail-drawer">
+    <div class="drawer__header">
+      <h2 class="drawer__title" id="detail-title">Chi tiết trạm</h2>
+      <button class="modal__close" id="detail-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer__body" id="detail-body">
+      <!-- injected by JS -->
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/monitoring_grid.js"></script>
+{% endblock %}

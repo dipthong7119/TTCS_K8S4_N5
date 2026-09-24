@@ -1,0 +1,218 @@
+﻿{% extends "base.html" %}
+{% set active_page = "stations" %}
+{% set is_edit = station is defined %}
+
+{% block title %}{{ "Sửa trạm" if is_edit else "Thêm trạm mới" }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/stations">Trạm sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">{{ "Sửa trạm" if is_edit else "Thêm mới" }}</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/stations.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">{{ "Sửa thông tin trạm" if is_edit else "Thêm trạm mới" }}</h1>
+    <p class="page-header__subtitle">{{ "Cập nhật thông tin trạm sạc" if is_edit else "Khai báo trạm sạc và thêm trụ sạc" }}</p>
+  </div>
+  <a href="/stations" class="btn btn--secondary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+    Quay lại
+  </a>
+</div>
+
+<div class="station-form-layout">
+  <!-- Main form -->
+  <div class="card">
+    <div class="card__header">
+      <div>
+        <div class="card__title">Thông tin trạm</div>
+        <div class="card__subtitle">Các trường có dấu <span style="color:var(--color-fault)">*</span> là bắt buộc</div>
+      </div>
+    </div>
+    <div class="card__body">
+      <form id="station-form" novalidate>
+        {% if is_edit %}
+        <input type="hidden" name="station_id" value="{{ station.id }}" />
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label" for="station-name">
+            Tên trạm <span class="required" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="station-name" name="name" type="text"
+            class="form-input"
+            placeholder="VD: Trạm sạc Quận 1 — Tòa nhà ABC"
+            value="{{ station.name | default('') }}"
+            maxlength="120"
+            required aria-required="true" aria-describedby="name-error"
+          />
+          <p class="form-error" id="name-error" data-error="name" role="alert"></p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="station-address">
+            Địa chỉ <span class="required" aria-hidden="true">*</span>
+          </label>
+          <textarea
+            id="station-address" name="address"
+            class="form-textarea"
+            placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+            rows="3"
+            required aria-required="true" aria-describedby="address-error"
+          >{{ station.address | default('') }}</textarea>
+          <p class="form-error" id="address-error" data-error="address" role="alert"></p>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="station-lat">Vĩ độ (Latitude)</label>
+            <input id="station-lat" name="latitude" type="number" step="any"
+              class="form-input" placeholder="VD: 10.762622"
+              value="{{ station.latitude | default('') }}"
+              aria-describedby="lat-hint" />
+            <p class="form-hint" id="lat-hint">Tuỳ chọn — dùng cho bản đồ</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="station-lng">Kinh độ (Longitude)</label>
+            <input id="station-lng" name="longitude" type="number" step="any"
+              class="form-input" placeholder="VD: 106.660172"
+              value="{{ station.longitude | default('') }}" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="station-desc">Mô tả</label>
+          <textarea id="station-desc" name="description"
+            class="form-textarea" placeholder="Thông tin thêm về trạm..." rows="2">{{ station.description | default('') }}</textarea>
+        </div>
+
+        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid var(--color-border);margin-top:var(--space-4);">
+          <a href="/stations" class="btn btn--secondary">Huỷ</a>
+          <button type="submit" class="btn btn--primary" id="station-submit">
+            {{ "Lưu thay đổi" if is_edit else "Tạo trạm" }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Charge points panel (only shown in edit mode) -->
+  {% if is_edit %}
+  <div class="card" id="charge-points-card">
+    <div class="card__header">
+      <div>
+        <div class="card__title">Trụ sạc</div>
+        <div class="card__subtitle">Quản lý trụ sạc trong trạm này</div>
+      </div>
+      <button class="btn btn--primary btn--sm" id="btn-add-cp" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Thêm trụ
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table class="table" aria-label="Danh sách trụ sạc">
+        <thead>
+          <tr>
+            <th scope="col">Mã trụ</th>
+            <th scope="col">Nhà sản xuất</th>
+            <th scope="col">Model</th>
+            <th scope="col">Trạng thái</th>
+            <th scope="col" class="text-right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="cp-tbody">
+          {% for cp in charge_points | default([]) %}
+          <tr>
+            <td><code style="font-family:monospace;background:var(--color-surface-alt);padding:2px 6px;border-radius:4px;">{{ cp.code }}</code></td>
+            <td>{{ cp.vendor | default('—') }}</td>
+            <td>{{ cp.model | default('—') }}</td>
+            <td>
+              <span class="badge badge--{{ cp.status | default('offline') }}">
+                {{ {'online':'Trực tuyến','offline':'Ngoại tuyến','charging':'Đang sạc','fault':'Lỗi'}.get(cp.status,'Không rõ') }}
+              </span>
+            </td>
+            <td class="text-right">
+              <button class="btn btn--ghost btn--icon-sm" type="button" aria-label="Xoá trụ {{ cp.code }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/>
+                  <path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-muted);">Chưa có trụ sạc nào</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add charge point modal -->
+<div class="modal-backdrop is-hidden" id="cp-modal" role="dialog" aria-modal="true" aria-labelledby="cp-modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="cp-modal-title">Thêm trụ sạc</h2>
+      <button class="modal__close" id="cp-modal-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <form id="cp-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="cp-code">Mã trụ (OCPP ID) <span class="required" aria-hidden="true">*</span></label>
+          <input id="cp-code" name="code" type="text" class="form-input"
+            placeholder="VD: T-01, CP-001"
+            required aria-required="true" aria-describedby="cp-code-error" />
+          <p class="form-error" id="cp-code-error" data-error="code" role="alert"></p>
+          <p class="form-hint">Mã phải khớp với cấu hình trong trụ sạc vật lý</p>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="cp-vendor">Nhà sản xuất</label>
+            <input id="cp-vendor" name="vendor" type="text" class="form-input" placeholder="VD: ABB, Schneider" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cp-model">Model</label>
+            <input id="cp-model" name="model" type="text" class="form-input" placeholder="VD: Terra AC" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cp-connectors">Số đầu nối</label>
+          <select id="cp-connectors" name="connector_count" class="form-select">
+            <option value="1">1 đầu nối</option>
+            <option value="2" selected>2 đầu nối</option>
+            <option value="4">4 đầu nối</option>
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="cp-modal-cancel" type="button">Huỷ</button>
+      <button class="btn btn--primary" id="cp-modal-submit" type="button">Thêm trụ</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/stations_form.js"></script>
+{% endblock %}
