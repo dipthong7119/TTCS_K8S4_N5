@@ -1,0 +1,152 @@
+﻿{% extends "base.html" %}
+{% set active_page = "wallet" %}
+
+{% block title %}Ví của tôi{% endblock %}
+{% block meta_description %}Quản lý ví điện tử nạp tiền và xem lịch sử giao dịch{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Ví của tôi</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/wallet.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Ví của tôi</h1>
+    <p class="page-header__subtitle">Quản lý số dư và lịch sử giao dịch</p>
+  </div>
+</div>
+
+<div class="wallet-layout">
+  <!-- Balance card -->
+  <div class="wallet-balance-card" id="wallet-balance-card" aria-labelledby="wallet-balance-label">
+    <div class="wallet-balance-card__inner">
+      <div class="wallet-balance-card__header">
+        <div class="wallet-balance-card__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
+        </div>
+        <span class="wallet-balance-card__badge">Ví chính</span>
+      </div>
+      <div class="wallet-balance-card__label" id="wallet-balance-label">Số dư hiện tại</div>
+      <div class="wallet-balance-card__amount" id="wallet-amount" aria-live="polite">Đang tải...</div>
+      <div class="wallet-balance-card__sub" id="wallet-sub">—</div>
+    </div>
+    <div class="wallet-balance-card__actions">
+      <button class="btn btn--primary" id="btn-topup" type="button" style="flex:1;justify-content:center;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Nạp tiền
+      </button>
+      <button class="btn btn--secondary" id="btn-refresh-wallet" type="button" aria-label="Làm mới số dư">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right column: summary + ledger -->
+  <div class="wallet-right">
+    <!-- Summary stats -->
+    <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:var(--space-5);">
+      <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Tổng nạp</div>
+        <div class="stat-card__value" id="total-topup">—</div>
+        <div class="stat-card__sub">VNĐ đã nạp</div>
+      </div>
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Tổng chi</div>
+        <div class="stat-card__value" id="total-spent">—</div>
+        <div class="stat-card__sub">VNĐ đã dùng</div>
+      </div>
+    </div>
+
+    <!-- Ledger table -->
+    <div class="card">
+      <div class="card__header">
+        <div class="card__title">Lịch sử giao dịch</div>
+        <select class="form-select" id="ledger-period" style="width:auto;min-width:140px;" aria-label="Khoảng thời gian">
+          <option value="30" selected>30 ngày</option>
+          <option value="90">3 tháng</option>
+          <option value="all">Tất cả</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="ledger-table" aria-label="Lịch sử giao dịch ví">
+          <thead>
+            <tr>
+              <th scope="col">Thời gian</th>
+              <th scope="col">Loại</th>
+              <th scope="col">Mô tả</th>
+              <th scope="col" class="text-right">Số tiền</th>
+              <th scope="col" class="text-right">Số dư sau</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-tbody">
+            <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card__footer">
+        <div class="pagination" id="ledger-pagination" role="navigation" aria-label="Phân trang giao dịch"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nạp tiền modal -->
+<div class="modal-backdrop is-hidden" id="topup-modal" role="dialog" aria-modal="true" aria-labelledby="topup-modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="topup-modal-title">Nạp tiền vào ví</h2>
+      <button class="modal__close" id="topup-modal-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <form id="topup-form" novalidate>
+        <!-- Quick amounts -->
+        <div class="form-group">
+          <label class="form-label">Chọn số tiền nạp</label>
+          <div class="quick-amounts" role="group" aria-label="Mệnh giá nhanh">
+            <button type="button" class="quick-amount-btn" data-amount="50000">50.000 ₫</button>
+            <button type="button" class="quick-amount-btn" data-amount="100000">100.000 ₫</button>
+            <button type="button" class="quick-amount-btn" data-amount="200000">200.000 ₫</button>
+            <button type="button" class="quick-amount-btn" data-amount="500000">500.000 ₫</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="topup-amount">Hoặc nhập số tiền (VNĐ) <span class="required" aria-hidden="true">*</span></label>
+          <input
+            id="topup-amount" name="amount" type="number"
+            class="form-input" placeholder="VD: 150000"
+            min="10000" max="10000000" step="1000"
+            required aria-required="true" aria-describedby="topup-amount-error topup-hint"
+          />
+          <p class="form-hint" id="topup-hint">Tối thiểu 10.000 ₫ — Tối đa 10.000.000 ₫</p>
+          <p class="form-error" id="topup-amount-error" data-error="amount" role="alert"></p>
+        </div>
+      </form>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="topup-cancel" type="button">Huỷ</button>
+      <button class="btn btn--primary" id="topup-submit" type="button">Tiếp tục thanh toán</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/wallet.js"></script>
+{% endblock %}

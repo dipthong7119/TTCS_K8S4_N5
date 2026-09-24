@@ -1,0 +1,188 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Đăng nhập vào hệ thống quản lý trạm sạc xe điện CSMS" />
+  <title>Đăng nhập — CSMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <link rel="stylesheet" href="/static/css/components.css" />
+  <link rel="stylesheet" href="/static/css/pages/login.css" />
+</head>
+<body class="login-body">
+
+<div class="login-shell">
+  <!-- Left panel (branding) -->
+  <div class="login-brand" aria-hidden="true">
+    <div class="login-brand__content">
+      <div class="login-brand__logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <h1 class="login-brand__title">CSMS</h1>
+      <p class="login-brand__tagline">Nền tảng vận hành<br/>trạm sạc xe điện</p>
+
+      <div class="login-brand__features">
+        <div class="login-brand__feature">
+          <div class="login-brand__feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+          </div>
+          <div>
+            <div class="login-brand__feature-title">Giám sát thời gian thực</div>
+            <div class="login-brand__feature-desc">Theo dõi trạng thái mọi trụ sạc qua SSE</div>
+          </div>
+        </div>
+        <div class="login-brand__feature">
+          <div class="login-brand__feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <div>
+            <div class="login-brand__feature-title">Phiên sạc OCPP 1.6J</div>
+            <div class="login-brand__feature-desc">Quản lý toàn bộ vòng đời phiên sạc</div>
+          </div>
+        </div>
+        <div class="login-brand__feature">
+          <div class="login-brand__feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+          </div>
+          <div>
+            <div class="login-brand__feature-title">Ví điện tử</div>
+            <div class="login-brand__feature-desc">Nạp tiền, sổ cái minh bạch</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Decorative glow balls -->
+    <div class="login-brand__glow login-brand__glow--1" aria-hidden="true"></div>
+    <div class="login-brand__glow login-brand__glow--2" aria-hidden="true"></div>
+  </div>
+
+  <!-- Right panel (form) -->
+  <div class="login-form-panel">
+    <div class="login-form-wrap">
+      <div class="login-form-header">
+        <div class="login-form-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <h2 class="login-form-title">Đăng nhập</h2>
+        <p class="login-form-subtitle">Vui lòng nhập thông tin tài khoản của bạn</p>
+      </div>
+
+      <!-- Alert area (general errors shown here) -->
+      <div class="alert alert--danger" id="login-alert" role="alert" aria-live="assertive" style="display:none;margin-bottom:20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span id="login-alert-text"></span>
+      </div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="email">
+            Email <span class="required" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            class="form-input"
+            placeholder="ten@email.com"
+            autocomplete="email"
+            required
+            aria-required="true"
+            aria-describedby="email-error"
+          />
+          <p class="form-error" id="email-error" data-error="email" role="alert"></p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">
+            Mật khẩu <span class="required" aria-hidden="true">*</span>
+          </label>
+          <div class="password-wrap">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              class="form-input"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+              aria-required="true"
+              aria-describedby="password-error"
+            />
+            <button type="button" class="password-toggle" id="password-toggle" aria-label="Hiện/ẩn mật khẩu" aria-pressed="false">
+              <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <p class="form-error" id="password-error" data-error="password" role="alert"></p>
+        </div>
+
+        <button type="submit" class="btn btn--primary" id="login-btn" style="width:100%;justify-content:center;margin-top:8px;">
+          Đăng nhập
+        </button>
+      </form>
+
+      <p class="login-form-footer">
+        Phiên bản <strong>1.0.0</strong> &mdash; CSMS &copy; 2026
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api_client.js"></script>
+<script src="/static/js/form_guard.js"></script>
+<script>
+(function () {
+  // Password show/hide
+  const pwdInput  = document.getElementById('password');
+  const pwdToggle = document.getElementById('password-toggle');
+  const eyeIcon   = document.getElementById('eye-icon');
+  pwdToggle.addEventListener('click', () => {
+    const show = pwdInput.type === 'password';
+    pwdInput.type = show ? 'text' : 'password';
+    pwdToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+    eyeIcon.innerHTML = show
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  });
+
+  const alertBox  = document.getElementById('login-alert');
+  const alertText = document.getElementById('login-alert-text');
+
+  FormGuard.protect(
+    document.getElementById('login-form'),
+    async (data) => {
+      alertBox.style.display = 'none';
+      await ApiClient.login(data.email, data.password);
+      // Chuyển trang theo tham số ?next= hoặc mặc định /monitoring
+      const params = new URLSearchParams(window.location.search);
+      window.location.href = params.get('next') || '/monitoring';
+    },
+    { loadingText: 'Đang đăng nhập...' }
+  );
+
+  // Lắng nghe lỗi submit để hiển thị alert chung
+  document.getElementById('login-form').addEventListener('submit', () => {
+    alertBox.style.display = 'none';
+  });
+})();
+</script>
+</body>
+</html>
