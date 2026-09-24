@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./hardware
+        working-directory: ./backend
 
     steps:
       - name: Checkout Code
