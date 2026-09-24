@@ -11,8 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import Base
 
-# Tương lai sẽ import các model vào đây:
-# from app.models.user import User
+# Import tất cả models để Alembic autogenerate phát hiện được toàn bộ schema
+# Thứ tự quan trọng: user trước (không phụ thuộc), sau đó station, charge_point
+import app.models  # noqa: F401 — kích hoạt import toàn bộ qua __init__.py
 
 config = context.config
 
