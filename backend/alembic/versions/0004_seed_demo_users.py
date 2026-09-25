@@ -1,4 +1,4 @@
-﻿"""
+"""
 Migration: seed 5 tai khoan demo (1 moi vai tro) cho moi truong dev/staging
 Tham chieu: SPRINT_1.md T-05, README.md muc Tai khoan dang nhap demo
 CANH BAO: khong dung tren production
@@ -16,31 +16,31 @@ depends_on = None
 _DEMO_USERS = [
     {
         "email": "admin@csms.local",
-        "password_hash": "=19=65536,t=2,p=2/SQOpiQVLeOse1KtZNNg+5g",
+        "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$eBllLULr6mx3+xQ1kujRHA$4OPrEtVpy+hE6mRI0cxdz1OBYi4tt+5U7puUnXskiO0",
         "full_name": "Quan tri vien",
         "role": "admin",
     },
     {
         "email": "owner@csms.local",
-        "password_hash": "=19=65536,t=2,p=2",
+        "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$7RVsGm7Gz1sE+5C6g0kX5Q$Qs0y66C2pgx8bXtJFdvvOJNivqADuyMkZpsyMoz5BQY",
         "full_name": "Chu Tram Demo",
         "role": "station_owner",
     },
     {
         "email": "operator@csms.local",
-        "password_hash": "=19=65536,t=2,p=2$/exHewZw6UZL2lZVQF8Jkw",
+        "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$8y3g3z58610Xi53ZDGRu3g$5xevnVzG4XCGPU69w3ZfbCohXaoltUv12LtNEddh+JQ",
         "full_name": "Van Hanh Vien Demo",
         "role": "operator",
     },
     {
         "email": "accountant@csms.local",
-        "password_hash": "=19=65536,t=2,p=2/jk1ieFw+D6YPOw1kE",
+        "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$PLObzNiiOaC5qw75amy+hA$bHLYbHxnkfugtGNPhXknAgx0OYTC3ip0xbos+O6FLrY",
         "full_name": "Ke Toan Demo",
         "role": "accountant",
     },
     {
         "email": "driver@csms.local",
-        "password_hash": "=19=65536,t=2,p=2/jAAk+A+utd7Xl+vIfunmjCsfuhzMa89jMoEAYSmg",
+        "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$7T8z+z075vbUiQoVXUkVpQ$tLeVsRh95UfyhzTagvt9YJsfBTmYkjeyc4bBii51u2o",
         "full_name": "Tai Xe Demo",
         "role": "driver",
     },

@@ -1,4 +1,4 @@
-﻿"""
+"""
 routers/auth.py -- S-02: dang nhap, khoa tam khi sai nhieu lan
 Tham chieu: SPRINT_1.md T-05, SSD-1 trong 03_SSD_SPEC.md
 """
@@ -17,8 +17,8 @@ from app.schemas.user import LoginRequest, LoginResponse
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Thong bao loi GIONG HET NHAU -- khong tiet lo email co ton tai hay khong (SSD-1)
-_ERR_WRONG = "email hoac mat khau khong dung"
-_ERR_LOCKED = "tai khoan tam khoa, vui long thu lai sau"
+_ERR_WRONG = "email hoặc mật khẩu không đúng"
+_ERR_LOCKED = "tài khoản tạm khoá 15 phút"
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -36,6 +36,17 @@ async def login(
     user: User | None = db.query(User).filter(User.email == body.email).first()
 
     # --- Kiem tra khoa truoc (du mat khau co dung thi van khoa) ---
+    client_ip = request.client.host if request.client else None
+    
+    # 1. Check IP lockout first
+    ip_user = None
+    if client_ip:
+        ip_user_email = f"ip:{client_ip}"
+        ip_user = db.query(User).filter(User.email == ip_user_email).first()
+        if ip_user and ip_user.locked_until and ip_user.locked_until > datetime.utcnow():
+            raise HTTPException(status_code=401, detail=_ERR_LOCKED)
+
+    # 2. Check account lockout
     if user and user.locked_until and user.locked_until > datetime.utcnow():
         raise HTTPException(status_code=401, detail=_ERR_LOCKED)
 
@@ -43,17 +54,32 @@ async def login(
     ok = user is not None and user.is_active and verify_password(body.password, user.password_hash)
 
     if not ok:
+        # Update IP tracker
+        if client_ip:
+            if not ip_user:
+                ip_user = User(email=ip_user_email, password_hash="", full_name="IP Tracker", is_active=False, failed_login_count=0)
+                db.add(ip_user)
+            ip_user.failed_login_count = (ip_user.failed_login_count or 0) + 1
+            if ip_user.failed_login_count >= settings.MAX_LOGIN_ATTEMPTS:
+                ip_user.locked_until = datetime.utcnow() + timedelta(minutes=settings.LOCKOUT_DURATION_MINUTES)
+                
+        # Update User tracker
         if user:
             # +1 so lan sai, luu IP
             user.failed_login_count = (user.failed_login_count or 0) + 1
-            user.last_failed_ip = request.client.host if request.client else None
+            user.last_failed_ip = client_ip
             if user.failed_login_count >= settings.MAX_LOGIN_ATTEMPTS:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=settings.LOCKOUT_DURATION_MINUTES)
-            db.commit()
+                
+        db.commit()
         # Tra ve cung thong bao loi (khong tiet lo email co ton tai hay khong)
         raise HTTPException(status_code=401, detail=_ERR_WRONG)
 
     # --- Dang nhap thanh cong: reset dem sai ---
+    if ip_user:
+        ip_user.failed_login_count = 0
+        ip_user.locked_until = None
+    
     user.failed_login_count = 0
     user.locked_until = None
     user.last_failed_ip = None

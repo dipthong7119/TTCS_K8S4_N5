@@ -4,7 +4,7 @@
  */
 
 const ApiClient = (() => {
-  const BASE_URL = '';   // same-origin; thay bằng URL thật khi deploy tách riêng
+  const BASE_URL = '/api';   // same-origin; thay bằng URL thật khi deploy tách riêng
 
   /**
    * Gọi fetch nội bộ, tự xử lý redirect 401 về trang login
@@ -21,8 +21,8 @@ const ApiClient = (() => {
       if (res.status === 401) {
         if (window.location.pathname !== '/login') {
           window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+          throw { status: 401, message: 'Phiên đã hết hạn, vui lòng đăng nhập lại.' };
         }
-        throw { status: 401, message: 'Phiên đã hết hạn, vui lòng đăng nhập lại.' };
       }
 
       let data;
@@ -34,7 +34,11 @@ const ApiClient = (() => {
       }
 
       if (!res.ok) {
-        throw { status: res.status, message: data?.detail || data || 'Có lỗi xảy ra' };
+        let errMsg = data?.detail || data || 'Có lỗi xảy ra';
+        if (Array.isArray(errMsg)) {
+          errMsg = errMsg.map(e => `${e.loc ? e.loc.join('.') : ''}: ${e.msg}`).join(', ');
+        }
+        throw { status: res.status, message: errMsg };
       }
       return data;
     } catch (err) {

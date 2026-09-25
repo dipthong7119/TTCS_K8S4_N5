@@ -16,8 +16,8 @@ def _user():
 
 @router.get("/")
 async def root():
-    """Redirect trang chủ tới /monitoring"""
-    return RedirectResponse(url="/monitoring", status_code=302)
+    """Redirect trang chủ tới /login"""
+    return RedirectResponse(url="/login", status_code=302)
 
 @router.get("/login")
 async def login_page(request: Request):
@@ -30,8 +30,9 @@ async def logout_get(request: Request):
     return RedirectResponse(url="/login", status_code=302)
 
 @router.post("/auth/logout")
-async def logout_post():
+async def logout_post(request: Request):
     """POST /auth/logout — từ form trong base.html, sau khi logout về trang login"""
+    request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
 @router.get("/monitoring")

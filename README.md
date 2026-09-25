@@ -38,10 +38,16 @@ cd TTCS_K8S4_N5
 # 2. Tạo file cấu hình từ mẫu
 cp .env.example .env
 
-# 3. Build và khởi chạy
+# 3. Tạo sẵn file database rỗng (QUAN TRỌNG: để Docker không tạo nhầm thành thư mục khi mount volume)
+# Trên Windows PowerShell:
+New-Item -ItemType File -Path backend/csms.db -Force
+# Trên macOS / Linux:
+touch backend/csms.db
+
+# 4. Build và khởi chạy
 docker compose up --build -d
 
-# 4. Kiểm tra trạng thái
+# 5. Kiểm tra trạng thái
 curl http://localhost:8000/health
 ```
 

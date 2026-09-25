@@ -1,6 +1,6 @@
 """
-main.py -- Khoi tao FastAPI app, mount router, quan ly vong doi ung dung.
-Tham chieu: SPRINT_1.md S-01 T-01, 01_CODEBASE_MAP.md
+main.py -- Khởi tạo FastAPI app, mount router, quản lý vòng đời ứng dụng.
+Tham chiếu: SPRINT_1.md S-01 T-01, 01_CODEBASE_MAP.md
 """
 
 import subprocess
@@ -15,16 +15,18 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.routers.auth import router as auth_router
+from app.routers.charge_points import router as charge_points_router
 from app.routers.pages import router as pages_router
+from app.routers.stations import router as stations_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Chay Alembic 'upgrade head' khi container khoi dong.
-    Dam bao schema luon dong bo truoc khi nhan request dau tien.
+    Chạy Alembic 'upgrade head' khi container khởi động.
+    Đảm bảo schema luôn đồng bộ trước khi nhận request đầu tiên.
     """
-    backend_dir = Path(__file__).parent.parent  # thu muc backend/
+    backend_dir = Path(__file__).parent.parent  # thư mục backend/
     subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=str(backend_dir),
@@ -34,26 +36,25 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CSMS - Nen tang van hanh tram sac xe dien",
-    description="He thong quan ly tru sac va giao tiep OCPP",
+    title="CSMS - Nền tảng vận hành trạm sạc xe điện",
+    description="Hệ thống quản lý trụ sạc và giao tiếp OCPP",
     version="1.0.0",
     lifespan=lifespan,
 )
 
 # -- Session cookie (httpOnly, SameSite=lax) ---------------------------------
-# SECRET_KEY doc tu config.py -- khong hardcode (02_CODING_STANDARDS.md quy tac 1)
+# SECRET_KEY đọc từ config.py -- không hardcode (02_CODING_STANDARDS.md quy tắc 1)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     session_cookie="csms_session",
     max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     same_site="lax",
-    https_only=False,  # doi thanh True khi deploy HTTPS
+    https_only=False,  # đổi thành True khi deploy HTTPS
 )
 
-# -- Static files (CSS, JS, anh) -------------------------------------------
-# Volume mount: ./frontend:/app/frontend (tu docker-compose.yml)
-# Chi mount khi thu muc ton tai (trong Docker). Khi chay pytest CI thi bo qua.
+# -- Static files (CSS, JS, ảnh) -------------------------------------------
+# Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
 frontend_dir = Path("/app/frontend")
 
 if frontend_dir.exists():
@@ -64,11 +65,13 @@ _templates_dir = frontend_dir / "templates" if frontend_dir.exists() else Path(_
 templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(stations_router, prefix="/api")
+app.include_router(charge_points_router, prefix="/api")
 app.include_router(pages_router)
 
 # -- Health check -------------------------------------------------------------
 @app.get("/health")
 async def health_check():
-    """API kiem tra suc khoe he thong (Health Check) -- dung cho Docker/Load Balancer"""
-    return {"status": "ok", "message": "He thong dang hoat dong on dinh"}
+    """API kiểm tra sức khỏe hệ thống (Health Check) -- dùng cho Docker/Load Balancer"""
+    return {"status": "ok", "message": "Hệ thống đang hoạt động ổn định"}

@@ -1,13 +1,12 @@
-﻿"""
+"""
 schemas/user.py -- Pydantic schema cho auth
 Tham chieu: SPRINT_1.md T-05
 """
 
-from pydantic import BaseModel, EmailStr
-
+from pydantic import BaseModel
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
