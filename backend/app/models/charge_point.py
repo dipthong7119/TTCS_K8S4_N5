@@ -3,7 +3,7 @@ Models: charge_points, connectors
 Tham chieu: SPRINT_1.md T-10, 02_CODING_STANDARDS.md muc 2.2
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 

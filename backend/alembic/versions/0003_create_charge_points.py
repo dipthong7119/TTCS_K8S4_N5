@@ -3,8 +3,9 @@ Migration: tao bang charge_points va connectors
 Tham chieu: SPRINT_1.md T-10
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0003_create_charge_points"
 down_revision = "0002_create_stations"

@@ -1,0 +1,6 @@
+1. hướng dẫn dùng claude trên web làm prompt cho AI trong Anitgravity 
+- file dự án + file tài liệu excel liên quan đến dự án
+- rồi nhắn thêm cả nhiệm vụ mình được giao, rồi bảo nó làm đoàn prompt cho bản thân rồi 
+copy cho vào Anitgravity làm thôi copy xong có thể chat thêm là đọc file codebasemap để nó hiểu cấu trúc dự án để nó hiểu hơn đỡ tốn token.
+2. thuộc nhóm nào thì giao tiếp với thành viên nhóm đây rồi đặt đại diện 1 nhánh của nhóm up lên nhánh đấy.
+3. liên tục giao tiếp với nhóm dev của bản thân được giao.

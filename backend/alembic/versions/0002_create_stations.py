@@ -3,8 +3,9 @@ Migration: tao bang stations co khoa ngoai toi users
 Tham chieu: SPRINT_1.md T-08
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0002_create_stations"
 down_revision = "0001_create_users_roles"

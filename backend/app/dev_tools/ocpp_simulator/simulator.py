@@ -14,10 +14,9 @@ Module này độc lập — dùng để spike/K-01 test chứ không phải s�
 
 import asyncio
 import json
-import uuid
 import time
+import uuid
 from datetime import datetime, timezone
-from typing import Optional
 
 # OCPP 1.6J message formats (mang trong module riêng — T-14)
 # CALL:      [2, message_id, action, transactionId, data]
@@ -29,7 +28,7 @@ MODEL = "TestModel"
 FIRMWARE = "1.0.0"
 
 
-def make_call(action: str, data: Optional[dict] = None) -> list:
+def make_call(action: str, data: dict | None = None) -> list:
     """Tạo khung CALL [2, message_id, action, data]"""
     msg_id = uuid.uuid4().int & 0x7FFFFF  # 23-bit positive int
     payload = data or {}
@@ -111,7 +110,7 @@ class SimpleSimulator:
         except asyncio.TimeoutError:
             print("[Simulator] Boot notification timeout")
 
-    async def send_meter_values(self, timestamp: Optional[str] = None):
+    async def send_meter_values(self, timestamp: str | None = None):
         """Gửi MeterValues."""
         if not self.connected:
             return
@@ -128,7 +127,7 @@ class SimpleSimulator:
         await self.ws.send(json.dumps(meter))
         print(f"[Simulator] Sent MeterValues at {now_utc}")
 
-    async def start_transaction(self, id_tag: str = "TEST-USER") -> Optional[dict]:
+    async def start_transaction(self, id_tag: str = "TEST-USER") -> dict | None:
         """Gửi StartTransaction."""
         if not self.connected:
             return None
@@ -139,12 +138,12 @@ class SimpleSimulator:
             "meterStart": 0,
         })
         await self.ws.send(json.dumps(start))
-        print(f"[Simulator] Sent StartTransaction")
+        print("[Simulator] Sent StartTransaction")
         # Đợi response (simplified)
         await asyncio.sleep(0.5)
         return {"transactionId": tx_id, "idTagInfo": {"status": "Accepted"}}
 
-    async def stop_transaction(self, transaction_id: int, meter_stop: int = 5000) -> Optional[dict]:
+    async def stop_transaction(self, transaction_id: int, meter_stop: int = 5000) -> dict | None:
         """Gửi StopTransaction."""
         if not self.connected:
             return None
@@ -153,7 +152,7 @@ class SimpleSimulator:
             "meterStop": meter_stop,
         })
         await self.ws.send(json.dumps(stop))
-        print(f"[Simulator] Sent StopTransaction")
+        print("[Simulator] Sent StopTransaction")
         await asyncio.sleep(0.5)
         return {"transactionId": transaction_id, "meterStop": meter_stop,
                 "idTagInfo": {"status": "Accepted"}, "kWh": 5.0}

@@ -3,7 +3,6 @@ Models: users, roles, user_roles
 Tham chieu: SPRINT_1.md T-04, 02_CODING_STANDARDS.md muc 2.2
 """
 
-from datetime import datetime
 
 from sqlalchemy import (
     Boolean,

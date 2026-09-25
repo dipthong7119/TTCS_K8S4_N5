@@ -3,8 +3,9 @@ Migration: tao bang users, roles, user_roles va seed 5 vai tro
 Tham chieu: SPRINT_1.md T-04
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0001_create_users_roles"
 down_revision = None

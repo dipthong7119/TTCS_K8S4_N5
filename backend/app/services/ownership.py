@@ -3,7 +3,6 @@ services/ownership.py -- Ham loc theo quyen so huu, dung chung (T-07)
 Tham chieu: SPRINT_1.md T-07, 02_CODING_STANDARDS.md, SSD-1
 """
 
-from sqlalchemy.orm import Session
 
 from app.models.station import Station
 

@@ -4,12 +4,15 @@ import sys
 # Add backend directory to sys.path so we can import app modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sqlalchemy.orm import Session
-from app.database import SessionLocal, engine
-from app.models.station import Station
-from app.models.charge_point import ChargePoint, Connector
-from app.models.user import User
 from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal
+from app.models.charge_point import ChargePoint, Connector
+from app.models.station import Station
+from app.models.user import User
+
 
 def seed_data():
     db: Session = SessionLocal()

@@ -4,8 +4,9 @@ Tham chieu: SPRINT_1.md T-05, README.md muc Tai khoan dang nhap demo
 CANH BAO: khong dung tren production
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0004_seed_demo_users"
 down_revision = "0003_create_charge_points"

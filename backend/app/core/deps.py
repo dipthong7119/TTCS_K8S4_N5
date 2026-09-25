@@ -3,12 +3,11 @@ deps.py -- FastAPI Dependencies: current_user, require_role(...)
 Tham chieu: SPRINT_1.md T-06, SSD-1, 02_CODING_STANDARDS.md
 """
 
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
 from app.models.user import User
 

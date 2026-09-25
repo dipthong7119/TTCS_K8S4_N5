@@ -4,22 +4,24 @@ Tham chieu: SPRINT_1.md T-10, T-11, 02_CODING_STANDARDS.md
 """
 
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.deps import CurrentUser
 from app.database import get_db
 from app.models.charge_point import ChargePoint, Connector
 from app.models.station import Station
-from app.models.user import User
-from app.schemas.charge_point import ChargePointCreate, ChargePointUpdate, ChargePointResponse, ConnectorResponse
-from app.core.deps import CurrentUser, require_role
+from app.schemas.charge_point import (
+    ChargePointCreate,
+    ChargePointResponse,
+    ChargePointUpdate,
+)
 
 router = APIRouter(prefix="/charge-points", tags=["charge_points"])
 
 
-def _get_station_owner_role(db: Session, station_id: int) -> Optional[str]:
+def _get_station_owner_role(db: Session, station_id: int) -> str | None:
     """Lấy vai trò của người sở hữu trạm"""
     from app.models.station import Station
     station = db.query(Station).filter(Station.id == station_id).first()
@@ -94,7 +96,7 @@ async def create_charge_point(
 @router.get("", response_model=list[ChargePointResponse])
 async def list_charge_points(
     current_user: CurrentUser,
-    station_id: Optional[int] = Query(None, description="Lọc theo trạm"),
+    station_id: int | None = Query(None, description="Lọc theo trạm"),
     db: Session = Depends(get_db),
 ):
     """Danh sách trụ. Chủ trạm chỉ thấy trụ của trạm mình."""
@@ -205,7 +207,6 @@ async def delete_charge_point(
 
     db.delete(cp)
     db.commit()
-    return None
 
 
 @router.get("/check-code", status_code=200)

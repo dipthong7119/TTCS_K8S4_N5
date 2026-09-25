@@ -5,15 +5,14 @@ Tham chieu: SPRINT_1.md T-08, T-09, SSD-1, 02_CODING_STANDARDS.md
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.deps import CurrentUser
 from app.database import get_db
 from app.models.station import Station
-from app.models.user import User
-from app.schemas.station import StationCreate, StationUpdate, StationResponse
+from app.schemas.station import StationCreate, StationResponse, StationUpdate
 from app.services.ownership import filter_by_owner
-from app.core.deps import CurrentUser, require_role
 
 router = APIRouter(prefix="/stations", tags=["stations"])
 
@@ -167,4 +166,3 @@ async def delete_station(
 
     db.delete(station)
     db.commit()
-    return None
