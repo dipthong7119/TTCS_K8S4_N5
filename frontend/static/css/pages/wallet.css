@@ -1,0 +1,68 @@
+﻿/* pages/wallet.css */
+.wallet-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .wallet-layout { grid-template-columns: 1fr; }
+}
+.wallet-right { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.wallet-balance-card {
+  background: linear-gradient(145deg, hsl(222,47%,14%) 0%, hsl(210,60%,22%) 100%);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: var(--space-6);
+  position: relative; overflow: hidden;
+}
+.wallet-balance-card::before {
+  content: '';
+  position: absolute; top: -60px; right: -60px;
+  width: 200px; height: 200px; border-radius: 50%;
+  background: hsla(210,90%,54%,.15);
+}
+.wallet-balance-card__inner { position: relative; z-index: 1; }
+.wallet-balance-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6); }
+.wallet-balance-card__icon {
+  width: 44px; height: 44px; border-radius: var(--radius-lg);
+  background: hsla(210,90%,54%,.25);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-primary-light);
+}
+.wallet-balance-card__icon svg { width: 22px; height: 22px; }
+.wallet-balance-card__badge {
+  background: hsla(210,90%,54%,.2);
+  color: var(--color-primary-light);
+  font-size: var(--font-size-xs); font-weight: 600;
+  padding: 3px 10px; border-radius: var(--radius-full);
+}
+.wallet-balance-card__label { font-size: var(--font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: hsla(215,25%,75%,.8); margin-bottom: var(--space-2); }
+.wallet-balance-card__amount { font-size: 36px; font-weight: 800; color: white; letter-spacing: -.02em; margin-bottom: var(--space-1); }
+.wallet-balance-card__sub { font-size: var(--font-size-sm); color: hsla(215,25%,75%,.7); }
+.wallet-balance-card__actions { display: flex; gap: var(--space-3); }
+
+/* Top-up quick amount buttons */
+.quick-amounts {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2);
+}
+.quick-amount-btn {
+  padding: 10px;
+  background: var(--color-surface-alt);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm); font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+.quick-amount-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-subtle); }
+.quick-amount-btn.is-selected { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+
+/* Ledger entry type */
+.ledger-credit { color: var(--color-online); font-weight: 700; }
+.ledger-debit  { color: var(--color-fault);  font-weight: 700; }

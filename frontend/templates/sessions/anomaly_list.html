@@ -1,0 +1,139 @@
+﻿{% extends "base.html" %}
+{% set active_page = "anomalies" %}
+
+{% block title %}Phiên bất thường{% endblock %}
+{% block meta_description %}Danh sách phiên sạc bất thường cần xem xét{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/sessions">Phiên sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Bất thường</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Phiên sạc bất thường</h1>
+    <p class="page-header__subtitle">Các phiên cần xem xét: số đo bất thường, trụ ngoại tuyến kéo dài, kết thúc không bình thường</p>
+  </div>
+  <button class="btn btn--secondary btn--sm" id="btn-refresh-anomalies" type="button">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+    </svg>
+    Làm mới
+  </button>
+</div>
+
+<div class="alert alert--warning" style="margin-bottom:var(--space-5);" role="note">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <span>Các phiên bất thường <strong>không tự đóng</strong>. Cần vận hành viên xem xét và xử lý thủ công.</span>
+</div>
+
+<!-- Summary -->
+<div class="stats-grid" style="margin-bottom:var(--space-5);">
+  <div class="stat-card stat-card--orange">
+    <div class="stat-card__label">Cần xem xét</div>
+    <div class="stat-card__value" id="anom-count">—</div>
+    <div class="stat-card__sub">phiên đánh dấu bất thường</div>
+  </div>
+  <div class="stat-card stat-card--red">
+    <div class="stat-card__label">Trụ mất kết nối</div>
+    <div class="stat-card__value" id="anom-offline">—</div>
+    <div class="stat-card__sub">trong khi đang có phiên</div>
+  </div>
+  <div class="stat-card stat-card--purple">
+    <div class="stat-card__label">Số đo âm</div>
+    <div class="stat-card__value" id="anom-negative">—</div>
+    <div class="stat-card__sub">kWh không hợp lệ</div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar" style="margin-bottom:var(--space-4);">
+  <select class="form-select" id="anomaly-reason" style="width:auto;min-width:190px;" aria-label="Lý do bất thường">
+    <option value="">Tất cả lý do</option>
+    <option value="offline">Trụ ngoại tuyến</option>
+    <option value="negative_kwh">Số đo âm</option>
+    <option value="no_stop">Không có StopTransaction</option>
+    <option value="orphan">Orphan message</option>
+  </select>
+  <select class="form-select" id="anomaly-period" style="width:auto;min-width:150px;" aria-label="Khoảng thời gian">
+    <option value="7">7 ngày</option>
+    <option value="30" selected>30 ngày</option>
+    <option value="all">Tất cả</option>
+  </select>
+</div>
+
+<!-- Table -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__title">Danh sách phiên bất thường</div>
+    <span class="tag" id="anomaly-result-count">Đang tải...</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table" id="anomaly-table" aria-label="Danh sách phiên bất thường">
+      <thead>
+        <tr>
+          <th scope="col">Mã phiên</th>
+          <th scope="col">Trạm / Trụ</th>
+          <th scope="col">Tài xế</th>
+          <th scope="col">Bắt đầu</th>
+          <th scope="col">Lý do bất thường</th>
+          <th scope="col">kWh</th>
+          <th scope="col" class="text-right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="anomaly-tbody">
+        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card__footer">
+    <div class="pagination" id="anomaly-pagination" role="navigation" aria-label="Phân trang"></div>
+  </div>
+</div>
+
+<!-- Remote stop modal -->
+<div class="modal-backdrop is-hidden" id="remote-stop-modal" role="dialog" aria-modal="true" aria-labelledby="remote-stop-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="remote-stop-title">Dừng phiên từ xa</h2>
+      <button class="modal__close" id="remote-stop-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="alert alert--info" style="margin-bottom:var(--space-4);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>Lệnh dừng sẽ được gửi tới trụ. Phiên <strong>chỉ đóng khi nhận được StopTransaction thật</strong> từ trụ.</span>
+      </div>
+      <p style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">
+        Phiên: <strong id="stop-session-id">—</strong><br/>
+        Trụ: <strong id="stop-cp-code">—</strong>
+      </p>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="remote-stop-cancel" type="button">Huỷ</button>
+      <button class="btn btn--danger" id="remote-stop-confirm" type="button">Gửi lệnh dừng</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/anomaly_list.js"></script>
+{% endblock %}

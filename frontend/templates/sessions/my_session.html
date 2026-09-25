@@ -1,0 +1,126 @@
+﻿{% extends "base.html" %}
+{% set active_page = "my-sessions" %}
+
+{% block title %}Lịch sử sạc của tôi{% endblock %}
+{% block meta_description %}Xem toàn bộ lịch sử phiên sạc xe điện của bạn{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Lịch sử sạc</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Lịch sử sạc của tôi</h1>
+    <p class="page-header__subtitle">Xem chi tiết từng phiên sạc và mức tiêu thụ điện</p>
+  </div>
+</div>
+
+<!-- Active session banner -->
+<div class="active-session-banner" id="active-session-banner" style="display:none;" aria-live="polite">
+  <div class="active-session-banner__content">
+    <div class="active-session-banner__indicator" aria-hidden="true"></div>
+    <div>
+      <div class="active-session-banner__title">Đang có phiên sạc hoạt động</div>
+      <div class="active-session-banner__meta" id="active-session-meta">—</div>
+    </div>
+  </div>
+  <div class="active-session-banner__right">
+    <div class="active-session-banner__kwh" id="active-kwh">0.000 kWh</div>
+    <div class="active-session-banner__duration" id="active-duration">00:00:00</div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar" style="margin-bottom:var(--space-4);">
+  <select class="form-select" id="session-period" style="width:auto;min-width:160px;" aria-label="Khoảng thời gian">
+    <option value="7">7 ngày gần đây</option>
+    <option value="30" selected>30 ngày gần đây</option>
+    <option value="90">3 tháng gần đây</option>
+    <option value="365">1 năm qua</option>
+  </select>
+  <select class="form-select" id="session-status-filter" style="width:auto;min-width:150px;" aria-label="Trạng thái phiên">
+    <option value="">Tất cả</option>
+    <option value="completed">Hoàn thành</option>
+    <option value="active">Đang sạc</option>
+    <option value="anomaly">Bất thường</option>
+  </select>
+</div>
+
+<!-- Summary cards -->
+<div class="stats-grid" style="margin-bottom:var(--space-5);" id="session-stats">
+  <div class="stat-card stat-card--blue">
+    <div class="stat-card__label">Tổng phiên</div>
+    <div class="stat-card__value" id="s-total">—</div>
+    <div class="stat-card__sub">trong kỳ đã chọn</div>
+  </div>
+  <div class="stat-card stat-card--green">
+    <div class="stat-card__label">Tổng kWh</div>
+    <div class="stat-card__value" id="s-kwh">—</div>
+    <div class="stat-card__sub">kilowatt-giờ tiêu thụ</div>
+  </div>
+  <div class="stat-card stat-card--purple">
+    <div class="stat-card__label">Tổng chi</div>
+    <div class="stat-card__value" id="s-cost">—</div>
+    <div class="stat-card__sub">VNĐ đã thanh toán</div>
+  </div>
+</div>
+
+<!-- Sessions table -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__title">Danh sách phiên</div>
+    <span class="tag" id="session-count">Đang tải...</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table" id="sessions-table" aria-label="Danh sách phiên sạc">
+      <thead>
+        <tr>
+          <th scope="col">Mã phiên</th>
+          <th scope="col">Trạm / Trụ</th>
+          <th scope="col">Bắt đầu</th>
+          <th scope="col">Kết thúc</th>
+          <th scope="col">Thời gian</th>
+          <th scope="col">kWh</th>
+          <th scope="col">Chi phí</th>
+          <th scope="col">Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-tbody">
+        <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card__footer">
+    <div class="pagination" id="sessions-pagination" role="navigation" aria-label="Phân trang phiên sạc"></div>
+  </div>
+</div>
+
+<!-- Session detail modal -->
+<div class="modal-backdrop is-hidden" id="session-detail-modal" role="dialog" aria-modal="true" aria-labelledby="session-detail-title">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="session-detail-title">Chi tiết phiên sạc</h2>
+      <button class="modal__close" id="session-modal-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body" id="session-detail-body">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/sse_client.js"></script>
+<script src="/static/js/pages/my_session.js"></script>
+{% endblock %}

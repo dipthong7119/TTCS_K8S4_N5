@@ -1,0 +1,93 @@
+name: CD Pipeline - Deploy to Staging
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+# Phân quyền cho token để có thể đẩy package lên GitHub Container Registry
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    # Yêu cầu job CI (Build, Lint, Test) phải chạy qua trước khi Deploy.
+    # Lưu ý: ở đây demo tách biệt nên không cài requires, tuỳ dự án setup link job.
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/csms-app:latest
+
+      - name: Kiểm tra secrets Staging (bỏ qua nếu chưa cấu hình)
+        id: check-secrets
+        run: |
+          MISSING=()
+          [[ -z "${{ secrets.STAGING_HOST }}" ]]     && MISSING+=("STAGING_HOST")
+          [[ -z "${{ secrets.STAGING_USERNAME }}" ]] && MISSING+=("STAGING_USERNAME")
+          [[ -z "${{ secrets.STAGING_SSH_KEY }}" ]]  && MISSING+=("STAGING_SSH_KEY")
+          [[ -z "${{ secrets.STAGING_SSH_PORT }}" ]] && MISSING+=("STAGING_SSH_PORT")
+          [[ -z "${{ secrets.GHCR_PAT }}" ]]         && MISSING+=("GHCR_PAT")
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "⚠️  Chưa cấu hình secrets: ${MISSING[*]}"
+            echo "   → Bỏ qua bước SSH Deploy (cần cấu hình khi có server staging thật)."
+            echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to Staging Server via SSH
+        if: steps.check-secrets.outputs.deploy_enabled == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          script: |
+            echo "Bắt đầu triển khai trên Staging..."
+            
+            # Thư mục chứa project docker-compose trên server
+            cd /opt/csms-staging
+            
+            # Đăng nhập GHCR trên server (Sử dụng PAT)
+            echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull image mới nhất
+            docker pull ghcr.io/${{ github.repository_owner }}/csms-app:latest
+            
+            # Chạy container lên (tái tạo lại container app)
+            docker-compose up -d --no-deps app
+            
+            echo "Đợi 10 giây để FastAPI khởi động..."
+            sleep 10
+            
+            # Gọi Health Check
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+            
+            if [ "$HTTP_STATUS" -ne 200 ]; then
+              echo "❌ Healthcheck THẤT BẠI (Status: $HTTP_STATUS)!"
+              echo "Tiến hành Rollback về phiên bản trước (Down ứng dụng để DevOps xử lý)..."
+              # Nếu ứng dụng lỗi, ta dừng container app lại. 
+              # Cách an toàn nhất là giữ container cũ (không down) nếu config kiểu blue-green, 
+              # nhưng do dùng chung docker-compose.yml, tạm thời ta tắt nó đi để không làm sai dữ liệu.
+              docker-compose stop app
+              exit 1
+            fi
+            
+            echo "✅ Triển khai thành công! Healthcheck OK (Status 200)."

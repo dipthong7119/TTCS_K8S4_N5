@@ -1,0 +1,126 @@
+/* ==========================================================================
+   pages/stations.css — CSS đặc thù trang danh sách + form trạm (T-09)
+   Giới hạn: ~80 dòng (02_CODING_STANDARDS.md 3.2)
+   Phần chung (card, table, badge, btn) nằm ở components.css
+   ========================================================================== */
+
+/* ── Layout form tạo/sửa trạm ── */
+.station-form-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .station-form-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Nút hành động dưới form ── */
+.form-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+}
+
+/* ── Hàng thao tác trong bảng danh sách ── */
+.station-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* ── Hiện số trụ sạc trong bảng ── */
+.cp-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.cp-count__sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* ── Cột địa chỉ + ngày tạo (bảng danh sách) ── */
+.td-address {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.td-date {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* ── Tag code cho mã trụ ── */
+.code-tag {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+/* ── Panel hướng dẫn (khi tạo trạm mới) ── */
+.station-guide-card {
+  border: 1px dashed var(--color-border-strong);
+  background: var(--color-surface-alt);
+}
+
+.guide-steps__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  margin-bottom: var(--space-4);
+}
+.guide-steps__list {
+  padding-left: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 2;
+}
+.guide-steps__note {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-primary-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-dark);
+  line-height: 1.6;
+}
+
+/* ── Spinner loading state ── */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Pagination ellipsis ── */
+.pagination__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
