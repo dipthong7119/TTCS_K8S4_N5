@@ -1,40 +1,40 @@
-# Ket qua thuc thi prompt Backend QA Sprint 1
+# Kết quả thực thi prompt Backend QA Sprint 1
 
-**Nguoi thuc hien**: Ta Nhu Vinh
-**Vai tro**: Backend QA, Security Tester
+**Người thực hiện**: Tạ Như Vinh
+**Vai trò**: Backend QA, Security Tester
 **Branch**: TA-VINH
-**Ngay thuc thi**: 2026-09-25
+**Ngày thực thi**: 2026-09-25
 
-## Tai lieu da doi chieu
+## Tài liệu đã đối chiếu
 
 - `prompts/01_CODEBASE_MAP.md`
 - `prompts/02_CODING_STANDARDS.md`
 - `prompts/03_SSD_SPEC.md`
 - `prompts/SPRINT_1.md`
 - `prompts/plant-sprint1.md`
-- Source Backend hien co trong `backend/`
+- Source Backend hiện có trong `backend/`
 
-## File da sinh
+## File đã sinh
 
-| File | Muc dich |
+| File | Mục đích |
 | --- | --- |
-| `tests/conftest.py` | Database SQLite co lap, TestClient va factory tao user |
-| `tests/test_migrations.py` | Test migration, seed role, email unique va tai khoan demo |
-| `tests/test_auth.py` | Test dang nhap, khoa tam, cookie va gioi han theo IP |
-| `tests/test_health.py` | Test contract cua endpoint health check |
-| `tests/backend_test_results.md` | Bao cao ket qua chay pytest va cac blocker |
+| `tests/conftest.py` | Database SQLite cô lập, TestClient và factory tạo user |
+| `tests/test_migrations.py` | Test migration, seed role, email unique và tài khoản demo |
+| `tests/test_auth.py` | Test đăng nhập, khóa tạm, cookie và giới hạn theo IP |
+| `tests/test_health.py` | Test contract của endpoint health check |
+| `tests/backend_test_results.md` | Báo cáo kết quả chạy pytest và các blocker |
 
-## Pham vi da thuc hien
+## Phạm vi đã thực hiện
 
-- T-04 / SCRUM-12: da tao test cho migration va database constraint.
-- T-05 / SCRUM-13: da tao test cho SSD-1 va login protection.
-- T-03 / SCRUM-101: da doi chieu health check contract hien co.
+- T-04 / SCRUM-12: đã tạo test cho migration và database constraint.
+- T-05 / SCRUM-13: đã tạo test cho SSD-1 và login protection.
+- T-03 / SCRUM-101: đã đối chiếu health check contract hiện có.
 
-## Pham vi bi chan
+## Phạm vi bị chặn
 
-- SCRUM-102 / T-06: `backend/app/core/deps.py` chua co tren `main`.
-- SCRUM-103 / T-07: `backend/app/services/ownership.py` va API station chua co.
-- K-01: OCPP simulator va WebSocket gateway chua co.
+- SCRUM-102 / T-06: `backend/app/core/deps.py` chưa có trên `main`.
+- SCRUM-103 / T-07: `backend/app/services/ownership.py` và API station chưa có.
+- K-01: OCPP simulator và WebSocket gateway chưa có.
 
-Khong sinh test gia cho cac chuc nang chua ton tai va khong sua code developer.
-Ket qua chay thuc te duoc ghi rieng trong `backend_test_results.md`.
+Không sinh test giả cho các chức năng chưa tồn tại và không sửa code developer.
+Kết quả chạy thực tế được ghi riêng trong `backend_test_results.md`.

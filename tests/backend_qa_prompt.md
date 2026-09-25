@@ -1,13 +1,13 @@
-# Yeu cau thuc thi Backend QA Sprint 1
+# Yêu cầu thực thi Backend QA Sprint 1
 
-**Nguoi thuc hien**: Ta Nhu Vinh
-**Vai tro**: Backend QA, Security Tester
+**Người thực hiện**: Tạ Như Vinh
+**Vai trò**: Backend QA, Security Tester
 **Branch**: TA-VINH
-**Ngay**: 2026-09-25
+**Ngày**: 2026-09-25
 
-## Tai lieu bat buoc doc truoc
+## Tài liệu bắt buộc đọc trước
 
-Truoc khi viet test, phai doc va doi chieu day du cac file:
+Trước khi viết test, phải đọc và đối chiếu đầy đủ các file:
 
 1. `prompts/01_CODEBASE_MAP.md`
 2. `prompts/02_CODING_STANDARDS.md`
@@ -15,42 +15,42 @@ Truoc khi viet test, phai doc va doi chieu day du cac file:
 4. `prompts/SPRINT_1.md`
 5. `prompts/plant-sprint1.md`
 
-Phai kiem tra source hien tai trong `backend/`, khong tu suy dien endpoint hoac
-chuc nang chua ton tai. Theo quy trinh ban giao cua truong nhom, toan bo artifact
-QA trong yeu cau nay dat tai thu muc `tests/` o root, ngang hang voi `backend/`
-va `frontend/`. Khong sua code cua developer.
+Phải kiểm tra source hiện tại trong `backend/`, không tự suy diễn endpoint hoặc
+chức năng chưa tồn tại. Theo quy trình bàn giao của trưởng nhóm, toàn bộ artifact
+QA trong yêu cầu này đặt tại thư mục `tests/` ở root, ngang hàng với `backend/`
+và `frontend/`. Không sửa code của developer.
 
-## Nhiem vu
+## Nhiệm vụ
 
-1. Tao fixture pytest dung SQLite rieng, khong doc/ghi `backend/csms.db`.
-2. Override FastAPI dependency `get_db` de API test dung database test.
-3. Kiem thu T-04 / SCRUM-12:
-   - Alembic migration chay tien den `head` va chay lui ve `base`.
-   - Seed co dung 5 role: driver, station_owner, operator, accountant, admin.
-   - `users.email` co rang buoc unique.
-   - Tai khoan demo seed phai xac thuc duoc bang mat khau cong bo trong README.
-4. Kiem thu T-05 / SCRUM-13 va SSD-1:
-   - Sai email va sai mat khau tra cung mot loi chung.
-   - Lan sai thu 6 bi khoa 15 phut.
-   - Nhap dung mat khau trong luc khoa van bi tu choi.
-   - Trang thai khoa con sau khi tao lai TestClient.
-   - Dang nhap thanh cong tao cookie HttpOnly va reset bo dem sai.
-   - Bao ve dang nhap sai theo tai khoan va theo IP.
-5. Kiem thu endpoint `/health` theo contract test hien co.
-6. Chay toan bo test, khong sua assertion de chieu theo code dang loi.
-7. Ghi ket qua pass/fail va blocker vao file bao cao trong `tests/`.
+1. Tạo fixture pytest dùng SQLite riêng, không đọc/ghi `backend/csms.db`.
+2. Override FastAPI dependency `get_db` để API test dùng database test.
+3. Kiểm thử T-04 / SCRUM-12:
+   - Alembic migration chạy tiến đến `head` và chạy lùi về `base`.
+   - Seed có đúng 5 role: driver, station_owner, operator, accountant, admin.
+   - `users.email` có ràng buộc unique.
+   - Tài khoản demo seed phải xác thực được bằng mật khẩu công bố trong README.
+4. Kiểm thử T-05 / SCRUM-13 và SSD-1:
+   - Sai email và sai mật khẩu trả cùng một lỗi chung.
+   - Lần sai thứ 6 bị khóa 15 phút.
+   - Nhập đúng mật khẩu trong lúc khóa vẫn bị từ chối.
+   - Trạng thái khóa còn sau khi tạo lại TestClient.
+   - Đăng nhập thành công tạo cookie HttpOnly và reset bộ đếm sai.
+   - Bảo vệ đăng nhập sai theo tài khoản và theo IP.
+5. Kiểm thử endpoint `/health` theo contract test hiện có.
+6. Chạy toàn bộ test, không sửa assertion để chiều theo code đang lỗi.
+7. Ghi kết quả pass/fail và blocker vào file báo cáo trong `tests/`.
 
-## Rang buoc
+## Ràng buộc
 
-- Dung `pytest`, FastAPI `TestClient`, SQLAlchemy va Alembic da co trong du an.
-- Khong them package trung chuc nang.
-- Khong hardcode secret va khong log mat khau/token.
-- Moi file test chi kiem thu mot nhom hanh vi.
-- SCRUM-102, SCRUM-103 va K-01 chi viet test khi source tuong ung da co tren
-  `main`; neu chua co thi ghi ro la blocked, khong gia lap code developer.
-- Test fail do san pham la ket qua QA hop le va phai duoc ghi vao bao cao.
+- Dùng `pytest`, FastAPI `TestClient`, SQLAlchemy và Alembic đã có trong dự án.
+- Không thêm package trùng chức năng.
+- Không hardcode secret và không log mật khẩu/token.
+- Mỗi file test chỉ kiểm thử một nhóm hành vi.
+- SCRUM-102, SCRUM-103 và K-01 chỉ viết test khi source tương ứng đã có trên
+  `main`; nếu chưa có thì ghi rõ là blocked, không giả lập code developer.
+- Test fail do sản phẩm là kết quả QA hợp lệ và phải được ghi vào báo cáo.
 
-## Dau ra yeu cau
+## Đầu ra yêu cầu
 
 ```text
 tests/
@@ -63,10 +63,10 @@ tests/
 `-- test_migrations.py
 ```
 
-## Tieu chi hoan thanh
+## Tiêu chí hoàn thành
 
-- Test khong lam thay doi database that.
-- Test code vuot qua `ruff check tests`.
-- Co output pytest thuc te trong file bao cao.
-- Moi test fail co ket qua mong doi, ket qua thuc te va vi tri source lien quan.
-- Khong sua file ngoai thu muc root `tests/`.
+- Test không làm thay đổi database thật.
+- Test code vượt qua `ruff check tests`.
+- Có output pytest thực tế trong file báo cáo.
+- Mỗi test fail có kết quả mong đợi, kết quả thực tế và vị trí source liên quan.
+- Không sửa file ngoài thư mục root `tests/`.
