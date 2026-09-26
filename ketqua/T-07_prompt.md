@@ -51,47 +51,31 @@ Mọi route trong `backend/app/routers/stations.py` (list/get/update/delete) ch�
 
 ### 2. Test tự động phủ ca 403 — `backend/app/tests/integration/test_ownership_access.py` (mới)
 
-AC yêu cầu: *"Chủ trạm A gọi API trạm của B bằng curl nhận 403 và có một dòng nhật ký; test tự động phủ ca này"*. Bổ sung integration test dùng `TestClient` + fixture `two_owners_with_stations` đã có sẵn trong `conftest.py`:
+AC yêu cầu: *"Chủ trạm A gọi API trạm của B bằng curl nhận 403 và có một dòng nhật ký; test tự động phủ ca này"*. File `test_ownership.py` hiện có ở `tests/unit/` mới chỉ test hàm `filter_by_owner` ở mức truy vấn thuần (SQLAlchemy `select`), **chưa** test qua tầng HTTP. Bổ sung integration test dùng `TestClient` + fixture `two_owners_with_stations` đã có sẵn trong `conftest.py`:
 
-- Đăng nhập bằng `owner_a` (`POST /api/auth/login`), lấy session cookie.
-- Gọi `GET /api/stations/{station_b.id}` → assert status `403`.
-- Gọi `PUT /api/stations/{station_b.id}` và `DELETE /api/stations/{station_b.id}` → cũng assert `403`.
-- Dùng `caplog` (pytest) để assert có đúng 1 dòng log mức `WARNING` chứa `user_id` của owner_a và `station_id` của station_b.
-- Thêm 1 case dương: `owner_a` gọi `GET /api/stations/{station_a.id}` → assert `200`.
+- Đăng nhập bằng `owner_a` (`POST /auth/login`), lấy session cookie.
+- Gọi `GET /stations/{station_b.id}` (trạm thuộc `owner_b`) → assert status `403`.
+- Gọi `PUT /stations/{station_b.id}` và `DELETE /stations/{station_b.id}` → cũng assert `403` (đủ 3 route nghiệp vụ đang có kiểm tra sở hữu).
+- Dùng `caplog` (pytest) để assert có đúng 1 dòng log mức `WARNING` chứa `user_id` của owner_a và `station_id` của station_b — khớp với log mà `check_station_access` ghi ra.
+- Thêm 1 case dương: `owner_a` gọi `GET /stations/{station_a.id}` (trạm của chính mình) → assert `200`, để chắc chắn không lọc nhầm.
 
-Không sửa test unit hiện có ở `tests/unit/test_ownership.py`.
+Không sửa test unit hiện có ở `tests/unit/test_ownership.py`; chỉ thêm test HTTP-level ở integration.
 
 ### 3. Kịch bản curl tái hiện thủ công
 
-Viết kèm trong docstring đầu file test và trong `README.md`:
+Viết kèm trong docstring đầu file test hoặc trong `README.md` (mục ngắn) các bước curl để một reviewer tái hiện tay AC, dùng đúng 2 tài khoản chủ trạm khác nhau đã seed/tạo sẵn (email + mật khẩu test), ví dụ luồng:
 
 ```bash
-# 1. Đăng nhập bằng Owner A, lưu cookie phiên
-curl -c cookies_a.txt -X POST http://localhost:8000/api/auth/login \
+# 1. Đăng nhập bằng chủ trạm A, lưu cookie phiên
+curl -c cookies_a.txt -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"ownerA@example.com","password":"TestPass123!"}'
 
-# 2. Đăng nhập Owner B để lấy station_id của trạm B
-curl -c cookies_b.txt -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"ownerB@example.com","password":"TestPass123!"}'
-curl -b cookies_b.txt http://localhost:8000/api/stations
-
-# 3. Owner A gọi GET trạm của B -> phải nhận 403
-curl -b cookies_a.txt -i http://localhost:8000/api/stations/<ID_TRAM_B>
-# Log kỳ vọng (stdout/uvicorn, mức WARNING, 1 dòng):
-#   ACCESS_DENIED user_id=<A_ID> station_id=<ID_TRAM_B> at=<ISO8601_UTC>
-
-# 4. Owner A gọi PUT trạm của B -> 403
-curl -b cookies_a.txt -i -X PUT http://localhost:8000/api/stations/<ID_TRAM_B> \
-  -H "Content-Type: application/json" -d '{"name":"Ten bi chiem"}'
-
-# 5. Owner A gọi DELETE trạm của B -> 403
-curl -b cookies_a.txt -i -X DELETE http://localhost:8000/api/stations/<ID_TRAM_B>
-
-# 6. Owner A gọi GET trạm của chính mình -> 200
-curl -b cookies_a.txt -i http://localhost:8000/api/stations/<ID_TRAM_A>
+# 2. Dùng cookie của A gọi vào trạm thuộc chủ trạm B -> phải nhận 403
+curl -b cookies_a.txt -i http://localhost:8000/stations/<id_tram_cua_B>
 ```
+
+Ghi rõ log kỳ vọng xuất hiện ở stdout/uvicorn log (`ACCESS_DENIED user_id=... station_id=... at=...`) khi chạy lệnh curl thứ 2.
 
 ---
 
@@ -100,18 +84,16 @@ curl -b cookies_a.txt -i http://localhost:8000/api/stations/<ID_TRAM_A>
 | Ràng buộc | Nguồn |
 |-----------|-------|
 | Điều kiện sở hữu nằm trong đúng một hàm dùng chung, không chép tay vào từng truy vấn | T-07 NFR |
-| Lấy tài khoản hiện tại phải dùng lại `get_current_user`/`CurrentUser` từ T-06 | T-07 Deps: T-06 |
+| Lấy tài khoản hiện tại phải dùng lại `get_current_user`/`CurrentUser` từ T-06, không tự viết cách khác | T-07 Deps: T-06 |
 | Chủ trạm A gọi API trạm của B → 403 + đúng 1 dòng log; phải có test tự động phủ ca này | T-07 AC |
 | Không log mật khẩu/token/PII, chỉ log id liên quan | 02_CODING_STANDARDS #2 |
 | Mọi logic nghiệp vụ mới phải có unit/integration test kèm theo | 02_CODING_STANDARDS |
 | Unit test (hàm thuần) đặt ở `tests/unit/`, test qua DB thật/HTTP đặt ở `tests/integration/` | 01_CODEBASE_MAP |
 
----
-
 ## Tiêu chí hoàn thành (AC)
 
 - `backend/app/services/ownership.py` chỉ có một hàm chứa điều kiện `owner_id`, được `stations.py` gọi lại ở cả 4 route (list/get/update/delete).
-- Test tích hợp mới: gọi `GET/PUT/DELETE /api/stations/{id}` bằng chủ trạm A trỏ vào trạm của B → 403, có assert bắt được đúng 1 dòng log WARNING.
+- Test tích hợp mới: gọi `GET/PUT/DELETE /stations/{id}` bằng chủ trạm A trỏ vào trạm của B → 403, có assert bắt được đúng 1 dòng log WARNING.
 - Test dương: chủ trạm A gọi vào trạm của chính A → 200 (không lọc nhầm).
 - `pytest` chạy xanh toàn bộ `backend/app/tests/` (cả unit lẫn integration mới thêm).
 - Có hướng dẫn curl tái hiện thủ công đúng như AC mô tả.
