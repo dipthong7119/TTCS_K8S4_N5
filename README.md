@@ -12,7 +12,7 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 
 | Vai trò | Thành viên |
 |---|---|
-| Srcum Master | Trịnh Thanh Tùng |
+| Scrum Master | Trịnh Thanh Tùng |
 | Backend Developer | Ngô Quang Tùng, Nguyễn Lâm Tùng, Hoàng Văn Tân |
 | Frontend Developer | Phạm Văn Tuấn, Vy Hoàng Tú, Đặng Ngọc Đại |
 | Tester | Tạ Như Vinh, Hoàng Văn Đức |
