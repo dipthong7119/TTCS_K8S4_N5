@@ -55,3 +55,4 @@ class Connector(Base):
     )
 
     charge_point = relationship("ChargePoint", back_populates="connectors")
+    errors = relationship("ConnectorError", back_populates="connector", cascade="all, delete-orphan")

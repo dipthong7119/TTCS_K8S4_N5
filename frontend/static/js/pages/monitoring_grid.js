@@ -134,7 +134,7 @@
 
   // ── SSE integration ──
   function connectSSE() {
-    SseClient.connect('/monitoring/sse');
+    SseClient.connect('/api/monitoring/sse');
     const indicator = document.getElementById('sse-indicator');
     const label     = document.getElementById('sse-label');
 

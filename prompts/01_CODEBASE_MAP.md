@@ -11,16 +11,12 @@
 
 ## 0. Ánh xạ với repo hiện tại
 
-| Thư mục trong repo (ảnh bạn gửi) | Vai trò thực sự | Ghi chú |
+| Thư mục trong repo | Vai trò thực sự | Ghi chú |
 | --- | --- | --- |
-| `giaodien/` | **Frontend** — HTML/CSS/JS thuần | Không dùng framework JS nặng, xem lý do ở mục 2 |
-| **`hardware/`** | **Backend** — toàn bộ Python/FastAPI (REST API + WebSocket OCPP + job nền) | Tên thư mục giữ nguyên như đã tạo trong repo; đừng để tên đánh lừa — bên trong 100% là code phần mềm, không có gì "phần cứng" |
-| `main.py` (ở root) | Nên di chuyển vào `hardware/app/main.py` | Root không nên có code chạy trực tiếp |
-
-> Nếu sau này bạn thấy tên `hardware/` gây nhầm lẫn cho người mới vào repo, có
-> thể đổi tên thư mục thành `backend/` bất cứ lúc nào (chỉ là `git mv`, không
-> ảnh hưởng logic) — nhưng vì bạn muốn giữ tên đã tạo, toàn bộ tài liệu dưới
-> đây dùng đúng tên `hardware/`.
+| `frontend/` | **Frontend** — HTML/CSS/JS thuần | Giao diện phía client hiển thị dựa trên Jinja2 template. Trước đây bị nhầm là `giaodien/`. |
+| `backend/` | **Backend** — toàn bộ Python/FastAPI (REST API + WebSocket OCPP + job nền) | Logic server, giao tiếp CSDL, và giả lập thiết bị. Trước đây bị nhầm là `hardware/`. |
+| `tests/` (root) | **Testing / QA** | Chứa các tài liệu kiểm thử QA, test dùng chung toàn hệ thống. |
+| `prompts/` | **Hướng dẫn AI (Prompts)** | Chứa các quy ước chuẩn để đảm bảo AI sinh code đúng chuẩn. |
 
 ---
 
@@ -28,187 +24,133 @@
 
 ```
 TTCS_K8S4_N5/
-├── hardware/                 # BACKEND — FastAPI, toàn bộ logic server (Python)
-├── giaodien/                 # FRONTEND — HTML/CSS/JS thuần
-├── docker-compose.yml        # app + db + N trụ ảo (T-01, T-55)
-├── .env.example               # KHÔNG commit .env thật (bí mật qua biến môi trường)
-├── README.md
-└── HD.txt / hướng_dẫn_clone_push.txt   # giữ nguyên, không đụng
+├── backend/                  # BACKEND — FastAPI, toàn bộ logic server (Python)
+├── frontend/                 # FRONTEND — HTML/CSS/JS thuần
+├── prompts/                  # Chứa các file định hướng, quy ước cho AI
+├── tests/                    # Tài liệu QA, script test tổng thể
+├── ketqua/                   # Lưu kết quả test, báo cáo
+├── huongdan/                 # Chứa các tài liệu hướng dẫn
+├── docker-compose.yml        # Cấu hình deploy Docker (app + db + redis...)
+├── .env / .env.example       # File cấu hình biến môi trường
+├── run.py                    # Script khởi chạy ứng dụng 
+├── README.md                 # Tài liệu mô tả dự án
+└── sprint1.xlsx              # File theo dõi công việc Sprint
 ```
 
-Quy tắc cứng: **mọi thứ Python nằm trong `hardware/`, mọi thứ tĩnh
-(HTML/CSS/JS) nằm trong `giaodien/`.** Không có file `.py` rải ở root ngoài
-script CLI tiện ích, không có `<script>` logic nghiệp vụ nhúng thẳng trong HTML.
+Quy tắc cứng: **mọi thứ Python nghiệp vụ nằm trong `backend/`, mọi thứ tĩnh
+(HTML/CSS/JS) nằm trong `frontend/`.**
 
 ---
 
-## 2. `hardware/` (= BACKEND) — chi tiết
+## 2. `backend/` (= BACKEND) — chi tiết
 
-Kiến trúc phân lớp, **một handler OCPP = một file** (đúng quy ước T-16: *"cấu
-trúc file của nó là mẫu cho mọi handler sau"*).
+Kiến trúc phân lớp chuẩn của FastAPI.
 
 ```
-hardware/
+backend/
 ├── app/
-│   ├── main.py                     # khởi tạo FastAPI app, mount router, lifespan
-│   ├── config.py                   # đọc biến môi trường (pydantic Settings) — nơi DUY NHẤT đọc os.environ
-│   ├── database.py                 # engine, session, Base
+│   ├── main.py                     # Khởi tạo FastAPI app, mount router, kết nối DB/Lifespan
+│   ├── config.py                   # Đọc biến môi trường, thiết lập pydantic Settings
+│   ├── database.py                 # Engine, SessionLocal, declarative_base
 │   │
-│   ├── models/                     # SQLAlchemy models — 1 file = 1 bảng hoặc 1 nhóm bảng liên quan chặt
-│   │   ├── user.py                 # users, roles, user_roles
-│   │   ├── station.py              # stations
-│   │   ├── charge_point.py         # charge_points, connectors
-│   │   ├── session.py              # charging_sessions, meter_values, orphan_messages
-│   │   ├── ocpp_message.py         # ocpp_messages (chống trùng — S-14)
-│   │   ├── tariff.py               # biểu giá (E-05, từ sprint 4)
-│   │   ├── wallet.py               # wallets, ledger_entries (E-06, từ sprint 5)
-│   │   └── audit_log.py            # audit_logs (chỉ ghi thêm — T-57)
+│   ├── models/                     # SQLAlchemy models — 1 file = 1 bảng
+│   │   ├── user.py                 # Bảng người dùng
+│   │   ├── station.py              # Bảng trạm sạc
+│   │   ├── charge_point.py         # Bảng trụ sạc
+│   │   └── ownership.py            # Bảng quản lý quyền sở hữu
 │   │
-│   ├── schemas/                    # Pydantic request/response — 1 file khớp tên với models/
+│   ├── schemas/                    # Pydantic request/response validation
 │   │   ├── user.py
 │   │   ├── station.py
-│   │   ├── charge_point.py
-│   │   ├── session.py
-│   │   └── ...
+│   │   └── charge_point.py
 │   │
-│   ├── routers/                    # REST endpoints — nhóm theo epic, KHÔNG nhóm theo CRUD
-│   │   ├── auth.py                 # S-02: đăng nhập, khoá tạm
-│   │   ├── stations.py             # S-04: CRUD trạm (đi qua ownership filter)
-│   │   ├── charge_points.py        # S-05: thêm trụ/đầu nối
-│   │   ├── monitoring.py           # S-11: cây trạng thái + SSE endpoint (T-23, T-25)
-│   │   ├── sessions.py             # S-22, S-23, S-24: phiên của tài xế + remote start/stop
-│   │   ├── wallet.py                # S-35..S-41: ví, webhook nạp tiền
-│   │   └── audit.py                 # S-27: tra nhật ký
+│   ├── routers/                    # API Endpoints (Controllers)
+│   │   ├── auth.py                 # Đăng nhập, đăng ký, xác thực
+│   │   ├── stations.py             # CRUD Trạm sạc
+│   │   ├── charge_points.py        # CRUD Trụ sạc
+│   │   └── pages.py                # Phục vụ render giao diện Jinja2 HTML cho Frontend
 │   │
-│   ├── ocpp/                       # LÕI KỸ THUẬT — nơi xử lý giao thức OCPP 1.6J qua WebSocket. Vẫn là phần mềm thuần, KHÔNG liên quan phần cứng thật.
-│   │   ├── ws_gateway.py           # endpoint WebSocket /ocpp/{code} — chỉ lo bắt tay + định tuyến (T-12, T-13, T-28)
-│   │   ├── frame_codec.py          # module THUẦN: đọc/ghi CALL/CALLRESULT/CALLERROR (T-14) — không phụ thuộc WebSocket, test không cần mở kết nối
-│   │   ├── dispatcher.py           # tra ocpp_messages chống trùng (T-30) rồi gọi đúng handler
-│   │   ├── outbound.py             # gửi CALL từ server -> trụ ảo, chờ CALLRESULT theo mã (T-34)
-│   │   └── handlers/               # MỖI FILE = ĐÚNG MỘT ACTION OCPP — không gộp nhiều action vào 1 file
-│   │       ├── boot_notification.py     # S-08
-│   │       ├── heartbeat.py             # S-09
-│   │       ├── status_notification.py   # S-10
-│   │       ├── authorize.py             # S-15
-│   │       ├── start_transaction.py     # S-17
-│   │       ├── stop_transaction.py      # S-18
-│   │       ├── meter_values.py          # S-19, S-20
-│   │       ├── reset.py                 # S-16
-│   │       └── remote_stop_transaction.py  # S-23
+│   ├── core/                       # Utilities cốt lõi (dùng chung)
+│   │   ├── security.py             # Băm mật khẩu, tạo token JWT
+│   │   └── deps.py                 # Các dependency FastAPI (get_db, get_current_user)
 │   │
-│   ├── services/                   # Logic nghiệp vụ THUẦN (pure function ưu tiên) — routers và handlers gọi vào đây, không xử lý trực tiếp trong router
-│   │   ├── ownership.py            # hàm lọc sở hữu DÙNG CHUNG (T-07) — CHỈ một chỗ, không copy vào từng query
-│   │   ├── energy_calc.py          # tính kWh từ số đo (T-39) — hàm thuần, test theo bảng
-│   │   ├── billing/                # E-05, sprint 4 trở đi
-│   │   │   ├── segment_split.py    # chia đoạn theo khung giờ — HÀM THUẦN, không đọc DB (S-30, NFR)
-│   │   │   └── invoice.py
-│   │   └── wallet_service.py       # trừ ví trong cùng transaction với lập hoá đơn (S-37)
-│   │
-│   ├── jobs/                       # job nền — theo mẫu T-26, ĐĂNG KÝ Ở MỘT NƠI DUY NHẤT
-│   │   ├── scheduler.py            # nơi duy nhất khai báo job + chu kỳ chạy
-│   │   ├── offline_detector.py     # T-26: quét last_seen_at
-│   │   ├── stale_message_cleanup.py # T-31: dọn ocpp_messages > 7 ngày
-│   │   └── stale_session_detector.py # T-53: phiên treo -> bất thường
-│   │
-│   ├── core/
-│   │   ├── security.py             # argon2id hash, cookie httpOnly
-│   │   ├── deps.py                 # FastAPI Depends: current_user, require_role(...)
-│   │   └── logging.py              # cấu hình log — CHẶN log mật khẩu/token/mã thẻ đầy đủ/PII
+│   ├── services/                   # Logic nghiệp vụ (Business logic thuần)
 │   │
 │   ├── dev_tools/
-│   │   └── ocpp_simulator/         # PHẦN MỀM giả lập trụ sạc, chỉ dùng cho dev/CI — KHÔNG phải mạch/thiết bị thật
-│   │       ├── simulator.py        # simulator chọn ở K-01 (mã nguồn mở hoặc tự viết, lý do chọn ghi trong docs/spike/)
-│   │       ├── scenarios/          # kịch bản test: ngắt-nối ngẫu nhiên (T-46), gửi trùng tin nhắn (T-31)
-│   │       └── seed_codes.txt      # mã trụ ảo có TIỀN TỐ RIÊNG, tách khỏi dữ liệu thật (T-55 NFR)
+│   │   └── ocpp_simulator/         # PHẦN MỀM giả lập trụ sạc OCPP
 │   │
-│   └── tests/
-│       ├── unit/                   # test hàm thuần (frame_codec, energy_calc, segment_split...)
-│       ├── integration/            # test qua DB thật (theo mẫu T-27, T-29)
-│       ├── ocpp_scenarios/         # test tích hợp dùng dev_tools/ocpp_simulator (T-46) — chạy trong CI
-│       └── billing_truth_table/    # ĐÁP ÁN TÍNH TAY — S-32, lưu riêng, có tên người tính + ngày, KHÔNG sinh bằng mã
+│   └── tests/                      # Unit test/ Integration test riêng cho Backend
+│       ├── conftest.py             # Fixtures dùng chung cho pytest
+│       └── unit/                   # Các script test theo mức độ unit
 │
-├── alembic/                        # migrations — đặt tên theo mẫu T-01: snake_case, khoá chính id, created_at/updated_at
-│   └── versions/
-├── requirements.txt
-├── Dockerfile
-└── pytest.ini
+├── alembic/                        # Công cụ migration Database (thay đổi schema)
+├── alembic.ini                     # Cấu hình alembic
+├── csms.db                         # Database SQLite
+├── requirements.txt                # Khai báo thư viện Python
+├── seed_data.py                    # Script mồi dữ liệu ban đầu
+├── pytest.ini                      # Cấu hình pytest
+└── Dockerfile                      # Cấu hình build Docker cho backend
 ```
 
-### Giới hạn cứng cho `hardware/` (backend — chặn "file rác" khi vide code)
+### Giới hạn cứng cho `backend/`
 
 | Quy tắc | Giá trị | Vì sao |
 | --- | --- | --- |
-| Độ dài tối đa 1 file | **~250 dòng** (handler OCPP: ~150 dòng) | Một handler chỉ xử lý một action — T-16 |
-| Số hàm/class public tối đa mỗi file | 1 handler, hoặc 1 service class | Đúng mẫu "cấu trúc file là mẫu cho handler sau" |
-| Nơi được đọc `os.environ` | chỉ `config.py` | NFR lặp lại nhiều lần: "bí mật nạp từ biến môi trường" |
-| Nơi được viết điều kiện lọc sở hữu | chỉ `services/ownership.py` | T-07: "một hàm duy nhất, không chép tay vào từng truy vấn" |
-| Nơi được ghi audit log | chỉ qua `core/logging.py` hoặc hàm `ghi_nhat_ky` dùng chung | T-57 |
-| File cấm tạo | `utils.py`, `helpers.py`, `common.py` chung chung | "Rác" thường bắt đầu từ các file này — mọi hàm phải có nhà rõ ràng theo bảng trên |
-| Simulator (`dev_tools/ocpp_simulator/`) | không được import bất cứ gì từ `app/` và ngược lại | Simulator giả lập **phía client**, phải độc lập với code server để test khách quan |
+| Nơi được đọc biến môi trường | chỉ `app/config.py` | Quản lý cấu hình tập trung, dễ theo dõi bảo mật. |
+| Phân tách Layer | `routers` gọi vào `services` hoặc tương tác qua DB, không phơi bày logic nghiệp vụ phức tạp trực tiếp tại Router. | Giữ Codebase gọn gàng, tái sử dụng, dễ test. |
+| Simulator (`dev_tools/`) | không được import bất cứ logic trực tiếp nào từ `app/` | Simulator đóng vai trò thiết bị độc lập (Client) gọi lên Server để test khách quan. |
 
 ---
 
-## 3. `giaodien/` (frontend) — chi tiết
+## 3. `frontend/` (frontend) — chi tiết
 
-Không dùng React/Vue (backlog không yêu cầu SPA phức tạp, chỉ cần hoạt động ở
-360px — T-24, T-48). Dùng HTML render từ backend (Jinja2, do FastAPI phục vụ) +
-CSS thuần + JS thuần cho phần realtime (SSE — T-25).
+Không dùng framework SPA cồng kềnh. Sử dụng HTML render từ backend thông qua `pages.py` (Jinja2) kết hợp CSS và Vanilla JS.
 
 ```
-giaodien/
-├── templates/                      # Jinja2 — khớp với routers/ tương ứng trong hardware/app/routers/
-│   ├── base.html                   # layout gốc — MỌI trang khác extends từ đây, không copy <head>
+frontend/
+├── templates/                      # Chứa các file HTML (Jinja2)
+│   ├── base.html                   # Layout gốc — MỌI trang khác extends từ đây
 │   ├── auth/
-│   │   └── login.html              # T-05 — bố cục form MẪU cho mọi form sau
+│   │   └── login.html              # Màn hình đăng nhập
 │   ├── stations/
-│   │   ├── list.html               # T-09
-│   │   └── form.html               # dùng lại bố cục form của login.html
+│   │   ├── list.html               # Trang danh sách trạm sạc
+│   │   └── form.html               # Trang thêm/sửa trạm sạc
 │   ├── monitoring/
-│   │   └── grid.html               # T-24 — lưới trạm/trụ/đầu nối
+│   │   └── grid.html               # Lưới giám sát trạng thái realtime
 │   ├── sessions/
-│   │   ├── my_session.html         # T-48 — màn hình tài xế, MẪU cho các màn hình E-11 sau
-│   │   └── anomaly_list.html       # T-54
-│   └── wallet/
-│       └── wallet.html             # S-40
+│   │   ├── my_session.html         # Màn hình phiên sạc hiện tại của tài xế
+│   │   └── anomaly_list.html       # Danh sách bất thường/cảnh báo
+│   └── wallet/                     # Các view quản lý ví
 │
 ├── static/
-│   ├── css/
-│   │   ├── base.css                 # biến màu, spacing, typography DÙNG CHUNG — mọi trang import file này trước
-│   │   ├── components.css           # form, nút, bảng, thẻ trạng thái — TÁI SỬ DỤNG, không viết CSS riêng lặp lại mỗi trang
-│   │   └── pages/                   # CSS đặc thù từng trang (ít, chỉ khi thật sự cần)
+│   ├── css/                        # Style dùng chung hoặc riêng cho view
 │   └── js/
-│       ├── api_client.js            # MỌI lời gọi API đi qua đây — không rải fetch(...) khắp nơi
-│       ├── sse_client.js            # kết nối SSE dùng chung (T-25) — mọi trang cần realtime import file này
-│       ├── form_guard.js            # chặn bấm lưu 2 lần (yêu cầu lặp lại ở nhiều task: T-09, T-11...)
-│       └── pages/                   # JS đặc thù từng trang, đặt tên trùng tên template
-└── README.md                        # quy ước class CSS, cách thêm trang mới
+│       ├── api_client.js           # Module tập trung fetch API (Không rải rác fetch)
+│       ├── sse_client.js           # Kết nối Server-Sent Events (Realtime)
+│       ├── form_guard.js           # Validate form cơ bản, chống double-submit
+│       └── pages/                  # Script thao tác DOM gắn với TỪNG TRANG cụ thể
+│           ├── anomaly_list.js
+│           ├── monitoring_grid.js
+│           ├── my_session.js
+│           ├── stations_form.js
+│           ├── stations_list.js
+│           └── wallet.js
 ```
 
-### Giới hạn cứng cho `giaodien/`
+### Giới hạn cứng cho `frontend/`
 
 | Quy tắc | Giá trị |
 | --- | --- |
-| Trạng thái phân biệt | luôn nhãn chữ + màu, không chỉ màu (T-24 NFR — người mù màu) |
-| Bề rộng tối thiểu phải chạy đúng | 360px (NFR của E-11 lặp lại nhiều lần) |
-| CSS trùng lặp | cấm — nếu style xuất hiện ở ≥2 trang, chuyển vào `components.css` |
-| JS logic nghiệp vụ | cấm viết trong `<script>` inline trong `.html` — luôn tách file `.js` riêng |
-| Gọi API | luôn qua `static/js/api_client.js`, không rải `fetch(...)` khắp nơi |
+| JS logic nghiệp vụ | CẤM viết trong `<script>` inline bên trong `.html`. Luôn tách file `.js` riêng và lưu vào `static/js/pages/`. |
+| Gọi API | Luôn thông qua hàm của `static/js/api_client.js`, nghiêm cấm gọi `fetch(...)` tự do. |
+| Component/Logic lặp lại | Tái sử dụng/viết gộp tại `base.html` hoặc đưa logic chung ra khỏi thư mục `pages/`. |
 
 ---
 
 ## 4. Quy tắc "không tạo file rác" khi vide code
 
-1. **Trước khi tạo file mới**: tra bảng ở mục 2/3 xem đã có "nhà" cho nó chưa.
-   Nếu AI sinh code có ý định tạo file ngoài cây trên → dừng lại, hỏi lại thay
-   vì tự bịa thư mục.
-2. **Không tạo phiên bản song song**: cấm `xxx_new.py`, `xxx_v2.html`,
-   `test_old.py`. Sửa trực tiếp file cũ, dùng git để giữ lịch sử.
-3. **Không tạo script một lần rồi bỏ quên**: nếu là script debug tạm, đặt trong
-   `hardware/scripts/` (tạo khi cần) và xoá sau khi dùng xong trước khi merge.
-4. **1 migration = 1 thay đổi schema rõ ràng**, đặt tên theo mẫu T-01
-   (`snake_case`, mô tả ngắn, có thể lùi được).
-5. **Mọi file mới phải xuất hiện trong PR đi kèm lý do** — khớp với DoD: *"Code
-   review đã duyệt bởi ít nhất một thành viên khác"*.
-6. **Không thêm code phần cứng/nhúng dưới bất kỳ hình thức nào** — đây là dự án
-   web 100%; mọi thứ mô phỏng "trụ sạc" chỉ là script Python trong
-   `hardware/app/dev_tools/ocpp_simulator/`.
+1. **Trước khi tạo file mới**: Tra cứu cấu trúc ở mục 2/3 xem đã có thư mục thích hợp chưa. Nếu AI dự định sinh code ngoài cấu trúc này → Yêu cầu dừng và hỏi lại thay vì tự phịa thư mục.
+2. **Không tạo phiên bản song song**: Nghiêm cấm tạo `xxx_new.py`, `xxx_v2.html`, `test_old.py`. Chỉ sửa trực tiếp file và dựa vào Git để theo dõi lịch sử.
+3. **Mọi thay đổi CSDL**: Bắt buộc tạo qua file Migration của Alembic (trong `alembic/`), không thay đổi model trực tiếp mà không có file migration.
+4. **Không tạo script dùng 1 lần rồi quên**: Các đoạn test debug ngắn không được đẩy (commit) lên nhánh chính.
+5. **Code giả lập vs Code nghiệp vụ**: Hệ thống này phục vụ quản lý web. Toàn bộ logic giao tiếp thiết bị thực tế đã được chuyển thành code phần mềm giả lập tại `dev_tools/ocpp_simulator/`. Tuyệt đối không thêm/tưởng tượng ra các file phần cứng C/C++.

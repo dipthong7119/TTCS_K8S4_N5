@@ -18,6 +18,10 @@ from app.routers.auth import router as auth_router
 from app.routers.charge_points import router as charge_points_router
 from app.routers.pages import router as pages_router
 from app.routers.stations import router as stations_router
+from app.routers.ocpp import router as ocpp_router
+from app.routers.monitoring import router as monitoring_router
+from app.routers.remote import router as remote_router
+
 
 
 @asynccontextmanager
@@ -32,7 +36,17 @@ async def lifespan(app: FastAPI):
         cwd=str(backend_dir),
         check=True,
     )
+
+    # T-26: Start background job
+    import asyncio
+    from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+    bg_task = asyncio.create_task(check_offline_charge_points())
+    cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
+
     yield
+
+    bg_task.cancel()
+    cleanup_task.cancel()
 
 
 app = FastAPI(
@@ -68,6 +82,10 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 app.include_router(auth_router, prefix="/api")
 app.include_router(stations_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
+app.include_router(monitoring_router, prefix="/api/monitoring")
+app.include_router(ocpp_router)
+app.include_router(remote_router, prefix="/api")
+
 app.include_router(pages_router)
 
 # -- Health check -------------------------------------------------------------

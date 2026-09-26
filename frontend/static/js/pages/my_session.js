@@ -146,7 +146,7 @@
     document.getElementById('session-detail-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('is-hidden'); });
 
     // SSE for active session update
-    SseClient.connect('/monitoring/sse');
+    SseClient.connect('/api/monitoring/sse');
     SseClient.on('session_update', () => loadSessions());
   });
 })();
