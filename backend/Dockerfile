@@ -10,15 +10,19 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy file requirements và cài đặt trước (tận dụng Docker layer cache)
-COPY requirements.txt .
+COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy mã nguồn ứng dụng
-COPY app/ ./app/
+COPY backend/app/ ./app/
 
 # Copy cấu hình Alembic và thư mục migrations
-COPY alembic.ini .
-COPY alembic/ ./alembic/
+COPY backend/alembic.ini .
+COPY backend/alembic/ ./alembic/
+
+# Templates and static files are part of the built image, so staging does not
+# depend on a frontend directory existing on the deployment host.
+COPY frontend/ ./frontend/
 
 # Mở port
 EXPOSE 8000

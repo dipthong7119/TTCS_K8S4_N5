@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
+
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
-from app.services.ocpp_parser import pack_call_result, pack_call_error
+from app.services.ocpp_parser import pack_call_error, pack_call_result
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
     
     try:
         msg_type, msg_id, action, payload_or_err, err_desc, err_details = parse_message(raw_msg)
-    except ValueError as e:
+    except (TypeError, ValueError) as e:
         err_msg = str(e)
         if "JSON format" in err_msg or "must be a JSON array" in err_msg or "not a valid string" in err_msg:
             return pack_call_error("", "FormationViolation", err_msg)
@@ -57,8 +59,8 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
         return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
     # T-30: Check idempotency
+
     from app.models.ocpp_message import OcppMessage
-    import json
 
     existing_msg = db.query(OcppMessage).filter(OcppMessage.msg_id == msg_id).first()
     if existing_msg:
@@ -221,7 +223,7 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
                 "last_seen_at": p.last_seen_at.isoformat() if p.last_seen_at else None,
                 "connectors": conn_list
             })
-        notify_status_change(station.id, cp_data)
+        notify_status_change(station.id, cp_data, station.owner_id)
 
     return pack_call_result(msg_id, {})
 
@@ -249,4 +251,3 @@ def handle_authorize(db: Session, charge_point_code: str, msg_id: str, payload: 
         id_tag_info["expiryDate"] = tag.expiry_date.isoformat() + "Z"
 
     return pack_call_result(msg_id, {"idTagInfo": id_tag_info})
-

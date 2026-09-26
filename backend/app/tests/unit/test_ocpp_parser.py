@@ -1,6 +1,14 @@
-import pytest
 import json
-from app.services.ocpp_parser import parse_message, pack_call, pack_call_result, pack_call_error
+
+import pytest
+
+from app.services.ocpp_parser import (
+    pack_call,
+    pack_call_error,
+    pack_call_result,
+    parse_message,
+)
+
 
 def test_parse_valid_call():
     raw = json.dumps([2, "12345", "BootNotification", {"chargePointVendor": "Vendor"}])

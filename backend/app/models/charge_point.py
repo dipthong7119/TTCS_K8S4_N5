@@ -30,7 +30,9 @@ class ChargePoint(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     station = relationship("Station", back_populates="charge_points")
-    connectors = relationship("Connector", back_populates="charge_point")
+    connectors = relationship(
+        "Connector", back_populates="charge_point", cascade="all, delete-orphan"
+    )
 
 
 class Connector(Base):
@@ -42,8 +44,8 @@ class Connector(Base):
     charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False)
     # Khop voi connectorId trong tin nhan OCPP, bat dau tu 1 (T-10 NFR)
     connector_id = Column(Integer, nullable=False)
-    # unavailable | available | charging | faulted
-    status = Column(String(20), default="unavailable", nullable=False)
+    # unknown is the initial state until the charge point reports StatusNotification.
+    status = Column(String(20), default="unknown", server_default="unknown", nullable=False)
     error_code = Column(String(50), default="NoError", nullable=False)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

@@ -1,14 +1,15 @@
 import json
-from typing import Tuple, Dict, Any, List, Union
+from typing import Any
+
 
 class OCPPError(Exception):
-    def __init__(self, error_code: str, description: str, details: dict = None):
+    def __init__(self, error_code: str, description: str, details: dict | None = None):
         self.error_code = error_code
         self.description = description
         self.details = details or {}
         super().__init__(f"{error_code}: {description}")
 
-def parse_message(raw_msg: str) -> Tuple[int, str, Union[str, Dict[str, Any], None], Union[Dict[str, Any], str, None], Union[str, None], Union[Dict[str, Any], None]]:
+def parse_message(raw_msg: str) -> tuple[int, str, str | dict[str, Any] | None, dict[str, Any] | str | None, str | None, dict[str, Any] | None]:
     """
     Phân tích khung tin nhắn OCPP 1.6J.
     Trả về tuple chứa:
@@ -25,7 +26,7 @@ def parse_message(raw_msg: str) -> Tuple[int, str, Union[str, Dict[str, Any], No
         raise ValueError("Invalid JSON format")
 
     if not isinstance(data, list):
-        raise ValueError("Message must be a JSON array")
+        raise ValueError("Message must be a JSON array")  # noqa: TRY004
 
     if len(data) < 3:
         raise ValueError("Message too short")
@@ -73,7 +74,11 @@ def pack_call_result(msg_id: str, payload: dict) -> str:
     """Đóng gói khung CALLRESULT"""
     return json.dumps([3, str(msg_id), payload])
 
-def pack_call_error(msg_id: str, error_code: str, error_description: str, error_details: dict = None) -> str:
+def pack_call_error(
+    msg_id: str,
+    error_code: str,
+    error_description: str,
+    error_details: dict | None = None,
+) -> str:
     """Đóng gói khung CALLERROR"""
     return json.dumps([4, str(msg_id), str(error_code), str(error_description), error_details or {}])
-

@@ -31,4 +31,6 @@ class Station(Base):
     __table_args__ = (Index("ix_stations_owner_id", "owner_id"),)
 
     owner = relationship("User", back_populates="stations")
-    charge_points = relationship("ChargePoint", back_populates="station")
+    charge_points = relationship(
+        "ChargePoint", back_populates="station", cascade="all, delete-orphan"
+    )

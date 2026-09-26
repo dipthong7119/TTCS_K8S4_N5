@@ -9,6 +9,7 @@
   let _stations = [];
   let _page = 1;
   const PAGE_SIZE = 10;
+  const canManageStations = document.getElementById('stations-page')?.dataset.canManageStations === 'true';
 
   // ── Labels & classes trạng thái (khớp schema stations: active/inactive/maintenance) ──
   const STATUS_LABELS = {
@@ -108,6 +109,7 @@
           <td class="td-date">${fmtDate(s.created_at)}</td>
           <td class="text-right">
             <div class="station-row-actions">
+              ${canManageStations ? `
               <a href="/stations/${s.id}/edit"
                  class="btn btn--ghost btn--icon-sm"
                  aria-label="Sửa trạm ${escHtml(s.name)}">
@@ -130,6 +132,7 @@
                   <path d="M9 6V4h6v2"/>
                 </svg>
               </button>
+              ` : '<span aria-label="Chỉ xem">Chỉ xem</span>'}
             </div>
           </td>
         </tr>`;

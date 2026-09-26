@@ -1,100 +1,170 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from app.core.deps import CurrentUser
+from app.database import get_db
+from app.models.charge_point import ChargePoint
+from app.services.ownership import get_station_for_user
 
 router = APIRouter()
 
 # Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
-frontend_dir = Path("/app/frontend")
-templates = Jinja2Templates(directory=str(frontend_dir / "templates"))
+docker_frontend_dir = Path("/app/frontend")
+if docker_frontend_dir.exists():
+    _templates_dir = docker_frontend_dir / "templates"
+else:
+    _templates_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
 
-def _user():
-    """Default user context cho sidebar — sẽ được thay bằng auth thật sau"""
-    return {"name": "Người dùng", "role": "Chủ trạm", "initials": "ND"}
+templates = Jinja2Templates(directory=str(_templates_dir))
+
+ROLE_LABELS = {
+    "driver": "Tài xế",
+    "station_owner": "Chủ trạm",
+    "operator": "Vận hành viên",
+    "accountant": "Kế toán",
+    "admin": "Quản trị viên",
+}
+
+
+def _require_any_role(current_user, *allowed_roles: str) -> list[str]:
+    roles = [role.name for role in current_user.roles]
+    if not set(roles).intersection(allowed_roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền truy cập")
+    return roles
+
+
+def _page_context(request: Request, current_user, **extra):
+    roles = [role.name for role in current_user.roles]
+    display_roles = [ROLE_LABELS.get(role, role) for role in roles]
+    name_parts = current_user.full_name.split()
+    initials = "".join(part[0] for part in name_parts[:2]).upper()
+    return {
+        "request": request,
+        "current_user": {
+            "id": current_user.id,
+            "name": current_user.full_name,
+            "role": ", ".join(display_roles),
+            "roles": roles,
+            "initials": initials or "?",
+        },
+        **extra,
+    }
+
 
 @router.get("/")
 async def root():
-    """Redirect trang chủ tới /login"""
+    """Redirect trang chủ tới trang đăng nhập."""
     return RedirectResponse(url="/login", status_code=302)
+
 
 @router.get("/login")
 async def login_page(request: Request):
-    """Trang đăng nhập (standalone template, không extends base.html)"""
+    """Trang đăng nhập độc lập."""
     return templates.TemplateResponse(request, "auth/login.html", {"request": request})
+
 
 @router.get("/logout")
 async def logout_get(request: Request):
-    """GET /logout — redirect về login (để handle trường hợp người dùng truy cập trực tiếp)"""
     return RedirectResponse(url="/login", status_code=302)
+
 
 @router.post("/auth/logout")
 async def logout_post(request: Request):
-    """POST /auth/logout — từ form trong base.html, sau khi logout về trang login"""
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
+
 @router.get("/monitoring")
-async def monitoring_page(request: Request):
-    """Trang giám sát thời gian thực"""
-    return templates.TemplateResponse(request, "monitoring/grid.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def monitoring_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator", "station_owner")
+    return templates.TemplateResponse(
+        request, "monitoring/grid.html", _page_context(request, current_user)
+    )
+
 
 @router.get("/stations")
-async def stations_page(request: Request):
-    """Trang danh sách trạm"""
-    return templates.TemplateResponse(request, "stations/list.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def stations_page(request: Request, current_user: CurrentUser):
+    roles = _require_any_role(current_user, "admin", "station_owner", "operator")
+    return templates.TemplateResponse(
+        request,
+        "stations/list.html",
+        _page_context(
+            request,
+            current_user,
+            can_manage_stations=bool({"admin", "station_owner"}.intersection(roles)),
+        ),
+    )
+
 
 @router.get("/stations/new")
-async def new_station_page(request: Request):
-    """Trang tạo mới trạm"""
-    return templates.TemplateResponse(request, "stations/form.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def new_station_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "station_owner")
+    return templates.TemplateResponse(
+        request,
+        "stations/form.html",
+        _page_context(request, current_user, can_manage_stations=True),
+    )
+
 
 @router.get("/stations/{station_id}/edit")
-async def edit_station_page(request: Request, station_id: int):
-    """Trang sửa trạm"""
-    return templates.TemplateResponse(request, "stations/form.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def edit_station_page(
+    request: Request,
+    station_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    roles = _require_any_role(current_user, "station_owner", "admin")
+    station = get_station_for_user(db, station_id, current_user.id, roles, "edit_page")
+    charge_points = (
+        db.query(ChargePoint)
+        .filter(ChargePoint.station_id == station.id)
+        .order_by(ChargePoint.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "stations/form.html",
+        _page_context(
+            request,
+            current_user,
+            station=station,
+            charge_points=charge_points,
+            can_manage_stations=True,
+        ),
+    )
+
 
 @router.get("/sessions")
-async def sessions_page(request: Request):
-    """Trang lịch sử sạc (mặc định là lịch sử cá nhân)"""
-    return templates.TemplateResponse(request, "sessions/my_session.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def sessions_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator", "accountant")
+    return templates.TemplateResponse(
+        request, "sessions/my_session.html", _page_context(request, current_user)
+    )
+
 
 @router.get("/sessions/mine")
-async def my_sessions_page(request: Request):
-    """Trang lịch sử sạc của tôi"""
-    return templates.TemplateResponse(request, "sessions/my_session.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def my_sessions_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "driver")
+    return templates.TemplateResponse(
+        request, "sessions/my_session.html", _page_context(request, current_user)
+    )
+
 
 @router.get("/sessions/anomalies")
-async def anomalies_page(request: Request):
-    """Trang phiên bất thường"""
-    return templates.TemplateResponse(request, "sessions/anomaly_list.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def anomalies_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "sessions/anomaly_list.html", _page_context(request, current_user)
+    )
+
 
 @router.get("/wallet")
-async def wallet_page(request: Request):
-    """Trang ví điện tử"""
-    return templates.TemplateResponse(request, "wallet/wallet.html", {
-        "request": request,
-        "current_user": _user()
-    })
+async def wallet_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "accountant", "driver")
+    return templates.TemplateResponse(
+        request, "wallet/wallet.html", _page_context(request, current_user)
+    )

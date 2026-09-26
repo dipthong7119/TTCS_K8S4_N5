@@ -46,6 +46,7 @@
     <nav class="sidebar__nav" aria-label="Menu">
       <div class="sidebar__section-label">Tổng quan</div>
 
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'station_owner' in current_user.roles %}
       <a href="/monitoring" id="nav-monitoring"
          class="sidebar__link {% if active_page == 'monitoring' %}is-active{% endif %}"
          aria-current="{% if active_page == 'monitoring' %}page{% endif %}">
@@ -55,9 +56,11 @@
         </svg>
         Giám sát thời gian thực
       </a>
+      {% endif %}
 
       <div class="sidebar__section-label">Quản lý</div>
 
+      {% if 'admin' in current_user.roles or 'station_owner' in current_user.roles or 'operator' in current_user.roles %}
       <a href="/stations" id="nav-stations"
          class="sidebar__link {% if active_page == 'stations' %}is-active{% endif %}"
          aria-current="{% if active_page == 'stations' %}page{% endif %}">
@@ -67,7 +70,9 @@
         </svg>
         Trạm sạc
       </a>
+      {% endif %}
 
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'accountant' in current_user.roles %}
       <a href="/sessions" id="nav-sessions"
          class="sidebar__link {% if active_page == 'sessions' %}is-active{% endif %}"
          aria-current="{% if active_page == 'sessions' %}page{% endif %}">
@@ -76,7 +81,9 @@
         </svg>
         Phiên sạc
       </a>
+      {% endif %}
 
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
       <a href="/sessions/anomalies" id="nav-anomalies"
          class="sidebar__link {% if active_page == 'anomalies' %}is-active{% endif %}"
          aria-current="{% if active_page == 'anomalies' %}page{% endif %}">
@@ -87,9 +94,11 @@
         Bất thường
         <span class="sidebar__badge" id="anomaly-count" aria-label="Số phiên bất thường">3</span>
       </a>
+      {% endif %}
 
       <div class="sidebar__section-label">Tài khoản</div>
 
+      {% if 'admin' in current_user.roles or 'accountant' in current_user.roles or 'driver' in current_user.roles %}
       <a href="/wallet" id="nav-wallet"
          class="sidebar__link {% if active_page == 'wallet' %}is-active{% endif %}"
          aria-current="{% if active_page == 'wallet' %}page{% endif %}">
@@ -99,7 +108,9 @@
         </svg>
         Ví của tôi
       </a>
+      {% endif %}
 
+      {% if 'admin' in current_user.roles or 'driver' in current_user.roles %}
       <a href="/sessions/mine" id="nav-my-sessions"
          class="sidebar__link {% if active_page == 'my-sessions' %}is-active{% endif %}"
          aria-current="{% if active_page == 'my-sessions' %}page{% endif %}">
@@ -109,9 +120,11 @@
         </svg>
         Lịch sử sạc của tôi
       </a>
+      {% endif %}
 
       <div class="sidebar__section-label">Hệ thống</div>
 
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
       <a href="/audit" id="nav-audit"
          class="sidebar__link {% if active_page == 'audit' %}is-active{% endif %}"
          aria-current="{% if active_page == 'audit' %}page{% endif %}">
@@ -123,6 +136,7 @@
         </svg>
         Nhật ký kiểm tra
       </a>
+      {% endif %}
     </nav>
 
     <!-- User footer -->

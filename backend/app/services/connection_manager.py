@@ -1,4 +1,9 @@
+import logging
+
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
+
 
 class ConnectionManager:
     def __init__(self):
@@ -14,7 +19,7 @@ class ConnectionManager:
                 # Đề bài: kết nối cũ bị đóng
                 await old_ws.close(code=1000, reason="New connection opened")
             except Exception:
-                pass
+                logger.debug("Could not close the previous charge point websocket", exc_info=True)
         self.active_connections[charge_point_code] = websocket
 
     def disconnect(self, charge_point_code: str, websocket: WebSocket):

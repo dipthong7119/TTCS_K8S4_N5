@@ -38,7 +38,7 @@ const ApiClient = (() => {
         if (Array.isArray(errMsg)) {
           errMsg = errMsg.map(e => `${e.loc ? e.loc.join('.') : ''}: ${e.msg}`).join(', ');
         }
-        throw { status: res.status, message: errMsg };
+        throw { status: res.status, message: errMsg, detail: data?.detail };
       }
       return data;
     } catch (err) {
@@ -66,9 +66,9 @@ const ApiClient = (() => {
     deleteStation: (id)          => _request('DELETE', `/stations/${id}`),
 
     // --- Charge Points ---
-    listChargePoints:    (stationId)   => _request('GET', `/stations/${stationId}/charge-points`),
+    listChargePoints:    (stationId)   => _request('GET', `/charge-points?station_id=${encodeURIComponent(stationId)}`),
     createChargePoint:   (body)        => _request('POST', '/charge-points', body),
-    updateChargePoint:   (id, body)    => _request('PUT',  `/charge-points/${id}`, body),
+    updateChargePoint:   (id, body)    => _request('PATCH', `/charge-points/${id}`, body),
     deleteChargePoint:   (id)          => _request('DELETE', `/charge-points/${id}`),
     // Kiểm tra mã trụ có trùng không (T-11) — server trả 200 nếu OK, 409 nếu đã tồn tại
     checkChargePointCode: (code)       => _request('GET', `/charge-points/check-code?code=${encodeURIComponent(code)}`),

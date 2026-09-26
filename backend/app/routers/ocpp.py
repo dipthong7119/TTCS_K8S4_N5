@@ -1,9 +1,11 @@
 import logging
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
-from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.connection_manager import manager
+from app.services.ocpp_handlers import handle_ocpp_message
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

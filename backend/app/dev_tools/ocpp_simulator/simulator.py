@@ -19,8 +19,8 @@ import uuid
 from datetime import datetime, timezone
 
 # OCPP 1.6J message formats (mang trong module riêng — T-14)
-# CALL:      [2, message_id, action, transactionId, data]
-# CALLRESULT: [3, message_id, request_id, data]
+# CALL:      [2, unique_id, action, payload]
+# CALLRESULT: [3, unique_id, payload]
 # CALLError:  [4, message_id, error_code, error_description, error_details]
 
 VENDOR = "TestVendor"
@@ -30,19 +30,19 @@ FIRMWARE = "1.0.0"
 
 def make_call(action: str, data: dict | None = None) -> list:
     """Tạo khung CALL [2, message_id, action, data]"""
-    msg_id = uuid.uuid4().int & 0x7FFFFF  # 23-bit positive int
+    msg_id = uuid.uuid4().hex
     payload = data or {}
     return [2, msg_id, action, payload]
 
 
-def make_callresult(request_id: int, data: dict) -> list:
-    """Tạo khung CALLRESULT [3, message_id, request_id, data]"""
-    return [3, request_id, request_id, data]
+def make_callresult(request_id: str, data: dict) -> list:
+    """Tạo khung CALLRESULT OCPP 1.6J: [3, unique_id, payload]."""
+    return [3, str(request_id), data]
 
 
-def make_calleerror(request_id: int, error_code: str, description: str = "") -> list:
+def make_calleerror(request_id: str, error_code: str, description: str = "") -> list:
     """Tạo khung CALLError [4, message_id, error_code, description, details]"""
-    return [4, request_id, error_code, description, []]
+    return [4, str(request_id), error_code, description, {}]
 
 
 class SimpleSimulator:
@@ -56,106 +56,134 @@ class SimpleSimulator:
         self.connected = False
         self.session_id = str(uuid.uuid4())
         self.last_heartbeat = time.time()
+        self._pending_calls: dict[str, asyncio.Future] = {}
+        self._receiver_task: asyncio.Task | None = None
 
     async def connect(self):
         """Kết nối WebSocket đến server."""
         import websockets
-        async with websockets.connect(self.uri) as ws:
+        async with websockets.connect(self.uri, subprotocols=["ocpp1.6"]) as ws:
             self.ws = ws
             self.connected = True
             print(f"[Simulator] Connected to {self.uri}")
-            await self._run_loop()
+            self._receiver_task = asyncio.create_task(self._receive_loop())
+            try:
+                await self._run_loop()
+            finally:
+                self.connected = False
+                if not self._receiver_task.done():
+                    self._receiver_task.cancel()
+                    await asyncio.gather(self._receiver_task, return_exceptions=True)
+
+    async def _call(self, action: str, payload: dict | None = None, timeout: float = 5.0) -> dict:
+        """Send a CALL and return only its matching CALLRESULT payload."""
+        call = make_call(action, payload)
+        response_future = asyncio.get_running_loop().create_future()
+        self._pending_calls[call[1]] = response_future
+        try:
+            await self.ws.send(json.dumps(call))
+            return await asyncio.wait_for(response_future, timeout=timeout)
+        finally:
+            self._pending_calls.pop(call[1], None)
+
+    async def _receive_loop(self) -> None:
+        """Resolve correlated results and answer the minimal server Reset call."""
+        import websockets
+
+        try:
+            async for message in self.ws:
+                data = json.loads(message)
+                if not isinstance(data, list) or len(data) < 3:
+                    continue
+                if data[0] == 3:
+                    future = self._pending_calls.get(str(data[1]))
+                    if future and not future.done():
+                        future.set_result(data[2])
+                elif data[0] == 4:
+                    future = self._pending_calls.get(str(data[1]))
+                    if future and not future.done():
+                        future.set_exception(RuntimeError(f"OCPP {data[2]}: {data[3]}"))
+                elif data[0] == 2:
+                    _, message_id, action, _payload = data
+                    if action == "Reset":
+                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
+        except websockets.ConnectionClosed:
+            self.connected = False
+        except Exception as exc:
+            self.connected = False
+            for future in self._pending_calls.values():
+                if not future.done():
+                    future.set_exception(exc)
+            raise
 
     async def _run_loop(self):
         """Vòng lặp chính: gửi BootNotification, rồi Heartbeat định kỳ."""
-        # 1. Gửi BootNotification khi kết nối
-        boot = make_call("BootNotification", {
+        boot_result = await self._call("BootNotification", {
             "chargePointVendor": VENDOR,
             "chargePointModel": MODEL,
-            "chargePointFirmwareVersion": FIRMWARE,
+            "firmwareVersion": FIRMWARE,
         })
-        await self.ws.send(json.dumps(boot))
-        print(f"[Simulator] Sent BootNotification: {boot}")
+        if boot_result.get("status") != "Accepted":
+            raise RuntimeError(f"BootNotification rejected: {boot_result}")
+        heartbeat_interval = max(1, int(boot_result.get("interval", 10)))
+        await self._call("StatusNotification", {
+            "connectorId": 0,
+            "errorCode": "NoError",
+            "status": "Available",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+        print(f"[Simulator] Boot accepted, interval={heartbeat_interval}s")
 
-        # 2. Nhận phản hồi BootNotification (lắng nghe)
-        async def wait_for_boot():
-            async for message in self.ws:
-                data = json.loads(message)
-                if data[1] == "BootNotification" and data[2] == "Accepted":
-                    interval = data[3].get("interval", 10)
-                    print(f"[Simulator] Boot accepted, interval={interval}s")
-                    return interval
-                # Quay lại nếu không phải response cho BootNotification
-                # (dù code thực tế phức tạp hơn, đây là spike đơn giản)
-
-        # Chạy song song: đợi boot + gửi heartbeat
-        boot_task = asyncio.create_task(wait_for_boot())
-
-        # 3. Gửi Heartbeat mỗi 10 giây
-        heartbeat_interval = 10
         while self.connected:
-            try:
-                await asyncio.sleep(heartbeat_interval)
-                now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                heartbeat = make_call("Heartbeat")
-                await self.ws.send(json.dumps(heartbeat))
-                print(f"[Simulator] Sent Heartbeat at {now_utc}")
-            except Exception as e:
-                print(f"[Simulator] Heartbeat error: {e}")
-                break
-
-        # Đợi boot task hoàn thành
-        try:
-            await asyncio.wait_for(boot_task, timeout=5.0)
-        except asyncio.TimeoutError:
-            print("[Simulator] Boot notification timeout")
+            await asyncio.sleep(heartbeat_interval)
+            await self._call("Heartbeat")
+            self.last_heartbeat = time.time()
 
     async def send_meter_values(self, timestamp: str | None = None):
         """Gửi MeterValues."""
         if not self.connected:
             return
         now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z") if timestamp is None else timestamp
-        meter = make_call("MeterValues", {
+        payload = {
+            "connectorId": 1,
+            "transactionId": 1,
             "meterValue": [{
-                "context": "System",
-                "type": "Import",
-                "unit": "Wh",
-                "value": 1500  # ví dụ: 1.5 kWh
+                "timestamp": now_utc,
+                "sampledValue": [{
+                    "value": "1.5",
+                    "measurand": "Energy.Active.Import.Register",
+                    "unit": "kWh",
+                }],
             }],
-            "timestamp": now_utc,
-        })
-        await self.ws.send(json.dumps(meter))
+        }
+        await self._call("MeterValues", payload)
         print(f"[Simulator] Sent MeterValues at {now_utc}")
 
     async def start_transaction(self, id_tag: str = "TEST-USER") -> dict | None:
         """Gửi StartTransaction."""
         if not self.connected:
             return None
-        tx_id = uuid.uuid4().int & 0x7FFFFF
-        start = make_call("StartTransaction", {
+        result = await self._call("StartTransaction", {
             "idTag": id_tag,
             "connectorId": 1,
             "meterStart": 0,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         })
-        await self.ws.send(json.dumps(start))
         print("[Simulator] Sent StartTransaction")
-        # Đợi response (simplified)
-        await asyncio.sleep(0.5)
-        return {"transactionId": tx_id, "idTagInfo": {"status": "Accepted"}}
+        return result
 
     async def stop_transaction(self, transaction_id: int, meter_stop: int = 5000) -> dict | None:
         """Gửi StopTransaction."""
         if not self.connected:
             return None
-        stop = make_call("StopTransaction", {
+        result = await self._call("StopTransaction", {
             "transactionId": transaction_id,
             "meterStop": meter_stop,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "reason": "EVDisconnected",
         })
-        await self.ws.send(json.dumps(stop))
         print("[Simulator] Sent StopTransaction")
-        await asyncio.sleep(0.5)
-        return {"transactionId": transaction_id, "meterStop": meter_stop,
-                "idTagInfo": {"status": "Accepted"}, "kWh": 5.0}
+        return result
 
 
 async def run_simulator(code: str = "TEST-01", host: str = "localhost", port: int = 8000):

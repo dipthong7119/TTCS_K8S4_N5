@@ -10,10 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # -- Request ---
 class StationCreate(BaseModel):
-    name: str = Field(..., max_length=255, example="Trạm sạc Quận 1")
-    address: str = Field(..., example="123 Đường Chính, Phường A, Quận 1")
-    latitude: float | None = Field(None, ge=-90, le=90, example=10.762622)
-    longitude: float | None = Field(None, ge=-180, le=180, example=106.660172)
+    name: str = Field(..., max_length=255, json_schema_extra={"example": "Trạm sạc Quận 1"})
+    address: str = Field(..., json_schema_extra={"example": "123 Đường Chính, Phường A, Quận 1"})
+    latitude: float | None = Field(None, ge=-90, le=90, json_schema_extra={"example": 10.762622})
+    longitude: float | None = Field(None, ge=-180, le=180, json_schema_extra={"example": 106.660172})
     status: str = Field("active", pattern="^(active|inactive|maintenance)$")
 
 

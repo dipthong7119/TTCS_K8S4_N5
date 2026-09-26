@@ -3,12 +3,13 @@ routers/charge_points.py -- Thêm trụ/đầu nối (S-05, T-10, T-11)
 Tham chieu: SPRINT_1.md T-10, T-11, 02_CODING_STANDARDS.md
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint, Connector
 from app.models.station import Station
@@ -17,8 +18,9 @@ from app.schemas.charge_point import (
     ChargePointResponse,
     ChargePointUpdate,
 )
+from app.services.ownership import filter_by_owner, get_station_for_user
 
-router = APIRouter(prefix="/charge-points", tags=["charge_points"])
+router = APIRouter(prefix="/charge-points", tags=["charge_points"], dependencies=[Depends(deny_unannotated_route)])
 
 
 def _get_station_owner_role(db: Session, station_id: int) -> str | None:
@@ -30,7 +32,7 @@ def _get_station_owner_role(db: Session, station_id: int) -> str | None:
     return [r.name for r in station.owner.roles]
 
 
-@router.post("", response_model=ChargePointResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ChargePointResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role("station_owner", "admin"))])
 async def create_charge_point(
     body: ChargePointCreate,
     current_user: CurrentUser,
@@ -46,6 +48,7 @@ async def create_charge_point(
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
 
     role_names = [r.name for r in current_user.roles]
+    get_station_for_user(db, body.station_id, current_user.id, role_names, "add_charge_point")
     if "station_owner" not in role_names and "admin" not in role_names:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -68,32 +71,41 @@ async def create_charge_point(
         model=body.model,
         firmware_version=body.firmware_version,
         status="offline",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+        updated_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(cp)
-    db.flush()  # để lấy cp.id
+    try:
+        db.flush()  # để lấy cp.id
 
-    # Tạo connectors
-    for i in range(1, body.connector_count + 1):
-        connector = Connector(
-            charge_point_id=cp.id,
-            connector_id=i,
-            status="unavailable",
-            error_code="NoError",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-        )
-        db.add(connector)
+        # Tạo connectors
+        now = datetime.now(UTC).replace(tzinfo=None)
+        for i in range(1, body.connector_count + 1):
+            connector = Connector(
+                charge_point_id=cp.id,
+                connector_id=i,
+                status="unknown",
+                error_code="NoError",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(connector)
 
-    db.commit()
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Mã trụ '{body.code}' đã tồn tại hoặc dữ liệu trụ bị xung đột",
+        ) from exc
+
     db.refresh(cp)
     # Load connectors
     cp.connectors = db.query(Connector).filter(Connector.charge_point_id == cp.id).all()
     return cp
 
 
-@router.get("", response_model=list[ChargePointResponse])
+@router.get("", response_model=list[ChargePointResponse], dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
 async def list_charge_points(
     current_user: CurrentUser,
     station_id: int | None = Query(None, description="Lọc theo trạm"),
@@ -102,7 +114,9 @@ async def list_charge_points(
     """Danh sách trụ. Chủ trạm chỉ thấy trụ của trạm mình."""
     q = db.query(ChargePoint).options(joinedload(ChargePoint.station))
 
-    if station_id:
+    role_names = [r.name for r in current_user.roles]
+    if station_id is not None:
+        get_station_for_user(db, station_id, current_user.id, role_names, "list_charge_points")
         q = q.filter(ChargePoint.station_id == station_id)
     else:
         # Lọc theo sở hữu nếu không phải admin
@@ -110,9 +124,8 @@ async def list_charge_points(
         if "admin" not in role_names:
             # Join với stations để lọc
             from app.models.station import Station
-            q = q.join(Station).filter(
-                Station.owner_id == current_user.id
-            )
+            q = q.join(Station)
+            q = filter_by_owner(q, current_user.id, role_names)
 
     q = q.order_by(ChargePoint.created_at.desc())
     items = q.all()
@@ -124,7 +137,7 @@ async def list_charge_points(
     return items
 
 
-@router.get("/{cp_id}", response_model=ChargePointResponse)
+@router.get("/{cp_id:int}", response_model=ChargePointResponse, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
 async def get_charge_point(
     cp_id: int,
     current_user: CurrentUser,
@@ -137,7 +150,8 @@ async def get_charge_point(
 
     # Kiểm tra quyền sở hữu
     role_names = [r.name for r in current_user.roles]
-    if "admin" not in role_names:
+    get_station_for_user(db, cp.station_id, current_user.id, role_names, "view_charge_point")
+    if "admin" not in role_names and "operator" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
             raise HTTPException(
@@ -149,7 +163,7 @@ async def get_charge_point(
     return cp
 
 
-@router.patch("/{cp_id}", response_model=ChargePointResponse)
+@router.patch("/{cp_id}", response_model=ChargePointResponse, dependencies=[Depends(require_role("station_owner", "admin"))])
 async def update_charge_point(
     cp_id: int,
     body: ChargePointUpdate,
@@ -162,6 +176,7 @@ async def update_charge_point(
         raise HTTPException(status_code=404, detail="Không tìm thấy trụ")
 
     role_names = [r.name for r in current_user.roles]
+    get_station_for_user(db, cp.station_id, current_user.id, role_names, "update_charge_point")
     if "admin" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
@@ -178,14 +193,14 @@ async def update_charge_point(
         cp.firmware_version = body.firmware_version
     if body.status is not None:
         cp.status = body.status
-    cp.updated_at = datetime.utcnow()
+    cp.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
     db.refresh(cp)
     return cp
 
 
-@router.delete("/{cp_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{cp_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("station_owner", "admin"))])
 async def delete_charge_point(
     cp_id: int,
     current_user: CurrentUser,
@@ -197,6 +212,7 @@ async def delete_charge_point(
         raise HTTPException(status_code=404, detail="Không tìm thấy trụ")
 
     role_names = [r.name for r in current_user.roles]
+    get_station_for_user(db, cp.station_id, current_user.id, role_names, "delete_charge_point")
     if "admin" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
@@ -209,7 +225,7 @@ async def delete_charge_point(
     db.commit()
 
 
-@router.get("/check-code", status_code=200)
+@router.get("/check-code", status_code=200, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
 async def check_code(
     current_user: CurrentUser,
     code: str = Query(..., description="Mã trụ cần kiểm tra"),

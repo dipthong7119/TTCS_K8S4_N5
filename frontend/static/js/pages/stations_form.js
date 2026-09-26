@@ -32,8 +32,9 @@
 
   // ── Xử lý lỗi validation từ server (Pydantic → FastAPI 422) ──
   function handleServerErrors(err) {
-    if (err.status === 422 && Array.isArray(err.message?.detail)) {
-      err.message.detail.forEach(e => {
+    if (err.message === 'validation') return;
+    if (err.status === 422 && Array.isArray(err.detail)) {
+      err.detail.forEach(e => {
         const field = e.loc?.[e.loc.length - 1];
         if (field) showFieldError(field, e.msg);
       });
@@ -179,8 +180,8 @@
         if (err.status === 409) {
           codeError.textContent = 'Mã trụ đã tồn tại trong hệ thống';
           document.getElementById('cp-code').focus();
-        } else if (err.status === 422 && Array.isArray(err.message?.detail)) {
-          err.message.detail.forEach(e => {
+        } else if (err.status === 422 && Array.isArray(err.detail)) {
+          err.detail.forEach(e => {
             const field = e.loc?.[e.loc.length - 1];
             if (field === 'code') codeError.textContent = e.msg;
           });

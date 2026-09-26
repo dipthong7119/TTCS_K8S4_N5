@@ -2,9 +2,10 @@ version: '3.8'
 
 services:
   app:
+    image: ${CSMS_IMAGE:-csms-app:local}
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: csms_app
     ports:
       - "8000:8000"
@@ -13,10 +14,10 @@ services:
       # Lưu ý: file backend/csms.db phải TỒN TẠI trên host trước khi mount
       # (nếu chưa có: chạy 'cd backend && alembic upgrade head' một lần trên local)
       - ./backend/csms.db:/app/csms.db
-      # Mount frontend: sửa HTML/CSS/JS trên host là thấy ngay trong container, không cần rebuild
+      # Mount frontend for local editing; the production image also contains this directory.
       - ./frontend:/app/frontend
     env_file:
-      - backend/.env
+      - .env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

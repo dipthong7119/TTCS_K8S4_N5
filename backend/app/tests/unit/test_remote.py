@@ -1,14 +1,16 @@
+from unittest import mock
+
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from app.services.connection_manager import manager
-import unittest.mock as mock
-from app.database import Base, get_db
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from app.models.user import User
+
 from app.core.deps import get_current_user
+from app.database import Base, get_db
+from app.main import app
+from app.models.user import User
+from app.services.connection_manager import manager
 
 engine_test = create_engine(
     "sqlite:///:memory:", 
@@ -80,13 +82,5 @@ def test_reset_online():
 @pytest.fixture(scope="function", autouse=True)
 def apply_override():
     app.dependency_overrides[get_db] = override_get_db
-    try:
-        main_app.dependency_overrides[get_db] = override_get_db
-    except:
-        pass
     yield
     app.dependency_overrides.clear()
-    try:
-        main_app.dependency_overrides.clear()
-    except:
-        pass

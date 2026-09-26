@@ -35,7 +35,8 @@ const FormGuard = (() => {
         await onSubmit(data, form);
       } catch (err) {
         // Hiển thị lỗi tại ô nhập hoặc alert chung
-        _showError(form, err);
+        if (typeof opts.onError === 'function') opts.onError(err, form);
+        else _showError(form, err);
       } finally {
         _setLoading(btn, false, origText);
       }

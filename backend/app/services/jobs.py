@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
 
@@ -51,7 +52,7 @@ async def check_offline_charge_points():
                                     "last_seen_at": p.last_seen_at.isoformat() if p.last_seen_at else None,
                                     "connectors": conn_list
                                 })
-                            notify_status_change(station.id, cp_data)
+                            notify_status_change(station.id, cp_data, station.owner_id)
 
         except Exception as e:
             logger.error(f"Lỗi job check_offline_charge_points: {e}")

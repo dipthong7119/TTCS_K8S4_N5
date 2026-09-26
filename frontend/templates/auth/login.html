@@ -170,10 +170,21 @@
     document.getElementById('login-form'),
     async (data) => {
       alertBox.style.display = 'none';
-      await ApiClient.login(data.email, data.password);
-      // Chuyển trang theo tham số ?next= hoặc mặc định /monitoring
+      const login = await ApiClient.login(data.email, data.password);
       const params = new URLSearchParams(window.location.search);
-      window.location.href = params.get('next') || '/monitoring';
+      const requestedNext = params.get('next');
+      let safeNext = null;
+      if (requestedNext && requestedNext.startsWith('/') && !requestedNext.startsWith('//')) {
+        try {
+          const parsedNext = new URL(requestedNext, window.location.origin);
+          if (parsedNext.origin === window.location.origin) {
+            safeNext = `${parsedNext.pathname}${parsedNext.search}${parsedNext.hash}`;
+          }
+        } catch (_) {
+          safeNext = null;
+        }
+      }
+      window.location.assign(safeNext || login.redirect_to || '/monitoring');
     },
     { loadingText: 'Đang đăng nhập...' }
   );

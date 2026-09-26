@@ -1,13 +1,15 @@
-import pytest
 import asyncio
-from datetime import datetime, timezone, timedelta
-from app.services.jobs import cleanup_old_ocpp_messages
-from app.database import Base, engine, SessionLocal
+from datetime import datetime, timedelta, timezone
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from app.database import Base
 from app.models.ocpp_message import OcppMessage
-from app.models.connector_error import ConnectorError
+from app.services.jobs import cleanup_old_ocpp_messages
+
 
 @pytest.fixture(scope="function")
 def db_session(monkeypatch):
@@ -54,10 +56,10 @@ async def test_cleanup_old_ocpp_messages(db_session):
 
 def test_idempotency(db_session):
     # Call handle_ocpp_message twice with same msg_id
-    from app.services.ocpp_handlers import handle_ocpp_message
-    from app.services.ocpp_parser import pack_call
     from app.models.charge_point import ChargePoint
     from app.models.station import Station
+    from app.services.ocpp_handlers import handle_ocpp_message
+    from app.services.ocpp_parser import pack_call
     
     st = Station(id=1, name="S", owner_id=1, status="active")
     cp = ChargePoint(code="CP01", station_id=1, status="offline")

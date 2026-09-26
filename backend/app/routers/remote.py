@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.services.connection_manager import manager
-from app.services.ocpp_parser import pack_call
-from app.core.deps import require_role
-from typing import Dict
 import uuid
 
-router = APIRouter()
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.core.deps import deny_unannotated_route, require_role
+from app.services.connection_manager import manager
+from app.services.ocpp_parser import pack_call
+
+router = APIRouter(dependencies=[Depends(deny_unannotated_route)])
 
 @router.post("/charge_points/{code}/reset")
 async def reset_charge_point(
     code: str,
-    payload: Dict,
+    payload: dict,
     current_user=Depends(require_role("admin", "operator"))
 ):
     """
@@ -36,4 +37,3 @@ async def reset_charge_point(
     # Thực tế có thể thiết lập hàng đợi để chờ CALLRESULT, nhưng T-34 yêu cầu
     # "Khớp CALLRESULT", có thể ta ghi log hoặc xử lý ở ocpp_handlers.py.
     return {"message": "Lệnh Reset đã được gửi", "msg_id": msg_id}
-

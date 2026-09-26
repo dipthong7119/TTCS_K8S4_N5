@@ -1,15 +1,16 @@
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from app.database import Base, get_db
-from app.models.user import User
-from app.models.station import Station
-from app.models.charge_point import ChargePoint
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-import asyncio
-from starlette.websockets import WebSocketDisconnect
+
+from app.database import Base, get_db
+from app.main import app
+from app.models.charge_point import ChargePoint
+from app.models.station import Station
+from app.models.user import User
 
 engine_test = create_engine(
     "sqlite:///:memory:", 
@@ -27,6 +28,7 @@ def override_get_db():
 
 
 import app.routers.ocpp as ocpp_router_mod
+
 ocpp_router_mod.SessionLocal = SessionLocalTest
 
 client = TestClient(app)
@@ -48,8 +50,9 @@ def test_duplicate_connection():
     # Unfortunately, starlette TestClient's websocket_connect is synchronous blocking.
     # It's hard to open two websockets concurrently in the same test thread.
     # But we can unit test ConnectionManager directly.
+    from unittest import mock
+
     from app.services.connection_manager import ConnectionManager
-    import unittest.mock as mock
     
     manager = ConnectionManager()
     
@@ -74,13 +77,5 @@ def test_duplicate_connection():
 @pytest.fixture(scope="function", autouse=True)
 def apply_override():
     app.dependency_overrides[get_db] = override_get_db
-    try:
-        main_app.dependency_overrides[get_db] = override_get_db
-    except:
-        pass
     yield
     app.dependency_overrides.clear()
-    try:
-        main_app.dependency_overrides.clear()
-    except:
-        pass

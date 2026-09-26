@@ -17,3 +17,4 @@ class LoginResponse(BaseModel):
     email: str
     full_name: str
     roles: list[str]
+    redirect_to: str

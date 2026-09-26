@@ -15,11 +15,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" id="stations-page" data-can-manage-stations="{{ 'true' if can_manage_stations else 'false' }}">
   <div class="page-header__info">
     <h1 class="page-header__title">Trạm sạc</h1>
     <p class="page-header__subtitle">Quản lý toàn bộ trạm và trụ sạc của bạn</p>
   </div>
+  {% if can_manage_stations %}
   <a href="/stations/new" class="btn btn--primary" id="btn-add-station">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -27,6 +28,7 @@
     </svg>
     Thêm trạm mới
   </a>
+  {% endif %}
 </div>
 
 <!-- Thẻ thống kê -->

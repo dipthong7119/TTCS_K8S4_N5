@@ -1,17 +1,22 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from app.services.ocpp_handlers import handle_ocpp_message
-from app.services.ocpp_parser import pack_call, pack_call_result, pack_call_error, parse_message
-from datetime import datetime, timezone, timedelta
-from app.models.user import User
-from app.models.charge_point import ChargePoint, Connector
-from app.models.station import Station
-from app.models.connector_error import ConnectorError
-from app.models.ocpp_message import OcppMessage
-from app.models.id_tag import IdTag
-from app.database import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from app.database import Base
+from app.models.charge_point import ChargePoint, Connector
+from app.models.connector_error import ConnectorError
+from app.models.id_tag import IdTag
+from app.models.station import Station
+from app.models.user import User
+from app.services.ocpp_handlers import handle_ocpp_message
+from app.services.ocpp_parser import (
+    pack_call,
+    parse_message,
+)
+
 
 @pytest.fixture(scope="function")
 def db_session():
@@ -150,13 +155,12 @@ def test_handle_status_notification_unregistered_connector(db_session):
         "errorCode": "NoError"
     })
     
-    resp = handle_ocpp_message(db_session, "CP001", raw_msg)
+    handle_ocpp_message(db_session, "CP001", raw_msg)
     
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
     conn = db_session.query(Connector).filter_by(charge_point_id=cp.id, connector_id=99).first()
     assert conn is None
 
-from app.models.id_tag import IdTag
 
 def test_handle_authorize(db_session):
     now = datetime.now(timezone.utc)

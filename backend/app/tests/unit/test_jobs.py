@@ -1,15 +1,16 @@
-import pytest
 import asyncio
-from datetime import datetime, timezone, timedelta
-from app.services.jobs import check_offline_charge_points
-from app.database import Base, engine, SessionLocal
+from datetime import datetime, timedelta, timezone
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from app.models.user import User
-from app.models.station import Station
+
+from app.database import Base
 from app.models.charge_point import ChargePoint
-from app.models.connector_error import ConnectorError
+from app.models.station import Station
+from app.services.jobs import check_offline_charge_points
+
 
 @pytest.fixture(scope="function")
 def db_session(monkeypatch):

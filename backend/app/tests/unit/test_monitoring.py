@@ -1,13 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from app.models.user import User
-from app.models.station import Station
-from app.models.charge_point import ChargePoint, Connector
-from app.database import Base, get_db
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db
+from app.main import app
+from app.models.charge_point import ChargePoint, Connector
+from app.models.station import Station
+from app.models.user import User
 
 engine_test = create_engine(
     "sqlite:///:memory:", 

@@ -97,9 +97,9 @@ cd backend && uvicorn app.main:app --reload --port 8000
 | Kế toán | `accountant@csms.local` | `Accountant@2024!` | Xem báo cáo, lịch sử phiên |
 | Tài xế | `driver@csms.local` | `Driver@2024!` | Xem lịch sử sạc của cá nhân |
 
-> **Seed tài khoản**: Các tài khoản này sẽ được tạo tự động trong sprint tiếp theo
-> khi task **T-05** (form đăng nhập + tạo phiên) hoàn thành.
-> Hiện tại bảng `roles` đã có sẵn 5 vai trò sau migration.
+> **Seed tài khoản**: Migration `0004_seed_demo_users` tạo sẵn năm tài khoản demo
+> gắn với năm vai trò cho môi trường phát triển/demo. Không dùng tài khoản demo
+> trên production.
 
 ---
 
@@ -115,6 +115,10 @@ cd backend && uvicorn app.main:app --reload --port 8000
 | `stations` | `0002_create_stations` | Trạm sạc, liên kết chủ sở hữu, toạ độ GPS |
 | `charge_points` | `0003_create_charge_points` | Trụ sạc, `code` UNIQUE + INDEX cho OCPP |
 | `connectors` | `0003_create_charge_points` | Đầu nối, `connector_id` khớp OCPP (bắt đầu từ 1) |
+| `login_ip_attempts` | `9f2c6a1b7d40` | Bộ đếm khóa đăng nhập theo IP, tách khỏi tài khoản người dùng |
+
+Đầu nối mới bắt đầu ở trạng thái `unknown` cho tới khi nhận `StatusNotification`.
+Đăng nhập trả trang chính theo vai trò; chủ trạm chỉ nhận danh sách dữ liệu thuộc sở hữu của mình.
 
 ### Làm việc với Alembic
 

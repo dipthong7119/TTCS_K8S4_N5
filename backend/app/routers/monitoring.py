@@ -1,24 +1,23 @@
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session, joinedload
-from typing import List
-from sse_starlette.sse import EventSourceResponse
 import asyncio
 
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session, joinedload
+from sse_starlette.sse import EventSourceResponse
+
+from app.core.deps import deny_unannotated_route, require_role
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
-from app.models.user import User
+from app.models.charge_point import ChargePoint
 from app.models.station import Station
-from app.models.charge_point import ChargePoint, Connector
+from app.models.user import User
 from app.services.ownership import filter_by_owner
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(deny_unannotated_route)])
 
 # T-25: Kênh đẩy trạng thái xuống trình duyệt
 # Chúng ta sẽ giữ một danh sách các kết nối chờ
-import queue
 sse_clients = []
 
-def notify_status_change(station_id: int, charge_points_data: list):
+def notify_status_change(station_id: int, charge_points_data: list, owner_id: int | None = None):
     """
     Hàm này dùng để đẩy sự kiện xuống các client khi trạng thái thay đổi.
     charge_points_data là dữ liệu charge_points đã được cập nhật.
@@ -28,17 +27,24 @@ def notify_status_change(station_id: int, charge_points_data: list):
         "station_id": station_id,
         "charge_points": charge_points_data
     })
-    for q in sse_clients:
-        try:
-            q.put_nowait({"event": "status_update", "data": data})
-        except Exception:
-            pass
+    for subscriber in sse_clients:
+        if subscriber["global_access"] or subscriber["owner_id"] == owner_id:
+            subscriber["queue"].put_nowait({"event": "status_update", "data": data})
 
-@router.get("/sse")
-async def monitoring_sse(request: Request):
+@router.get("/sse", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+async def monitoring_sse(
+    request: Request,
+    current_user: User = Depends(require_role("admin", "station_owner", "operator")),
+):
     """T-25: SSE endpoint"""
     q = asyncio.Queue()
-    sse_clients.append(q)
+    roles = [role.name for role in current_user.roles]
+    subscriber = {
+        "queue": q,
+        "owner_id": current_user.id,
+        "global_access": bool({"admin", "operator"}.intersection(roles)),
+    }
+    sse_clients.append(subscriber)
     
     async def event_generator():
         try:
@@ -52,8 +58,8 @@ async def monitoring_sse(request: Request):
                 except asyncio.TimeoutError:
                     yield {"event": "heartbeat", "data": "ping"}
         finally:
-            if q in sse_clients:
-                sse_clients.remove(q)
+            if subscriber in sse_clients:
+                sse_clients.remove(subscriber)
                 
     return EventSourceResponse(event_generator())
 
@@ -108,4 +114,3 @@ async def get_monitoring_tree(
         })
         
     return result
-

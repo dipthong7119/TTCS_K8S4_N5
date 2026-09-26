@@ -1,26 +1,37 @@
-import requests
+from fastapi.testclient import TestClient
 
-def test_login_10_times():
-    url = "http://localhost:8000/api/auth/login"
-    data = {
-        "email": "admin@csms.local",
-        "password": "Admin@2024!"
-    }
-    
-    success_count = 0
-    for i in range(10):
-        try:
-            resp = requests.post(url, json=data)
-            if resp.status_code == 200:
-                success_count += 1
-            else:
-                print(f"Failed at {i+1}. Status: {resp.status_code}, Resp: {resp.text}")
-        except Exception as e:
-            print(f"Error at {i+1}: {e}")
-            
-    print(f"Success {success_count}/10 times.")
-    if success_count != 10:
-        raise Exception("Login failed!")
+from app.core.security import hash_password
+from app.database import get_db
+from app.main import app
+from app.models.user import Role, User
 
-if __name__ == "__main__":
-    test_login_10_times()
+
+def test_login_10_times(db_session) -> None:
+    role = db_session.query(Role).filter(Role.name == "admin").first()
+    if role is None:
+        role = Role(name="admin")
+        db_session.add(role)
+    user = User(
+        email="loop-test@example.com",
+        password_hash=hash_password("ValidPassword123!"),
+        full_name="Loop Test",
+        roles=[role],
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+    try:
+        for _ in range(10):
+            response = client.post(
+                "/api/auth/login",
+                json={"email": user.email, "password": "ValidPassword123!"},
+            )
+            assert response.status_code == 200, response.text
+    finally:
+        client.close()
+        app.dependency_overrides.pop(get_db, None)

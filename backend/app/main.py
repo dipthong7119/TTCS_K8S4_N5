@@ -16,12 +16,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.routers.auth import router as auth_router
 from app.routers.charge_points import router as charge_points_router
-from app.routers.pages import router as pages_router
-from app.routers.stations import router as stations_router
-from app.routers.ocpp import router as ocpp_router
 from app.routers.monitoring import router as monitoring_router
+from app.routers.ocpp import router as ocpp_router
+from app.routers.pages import router as pages_router
 from app.routers.remote import router as remote_router
-
+from app.routers.stations import router as stations_router
 
 
 @asynccontextmanager
@@ -39,6 +38,7 @@ async def lifespan(app: FastAPI):
 
     # T-26: Start background job
     import asyncio
+
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
@@ -69,13 +69,17 @@ app.add_middleware(
 
 # -- Static files (CSS, JS, ảnh) -------------------------------------------
 # Volume mount: ./frontend:/app/frontend (từ docker-compose.yml)
-frontend_dir = Path("/app/frontend")
+docker_frontend_dir = Path("/app/frontend")
 
-if frontend_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
+if docker_frontend_dir.exists():
+    frontend_dir = docker_frontend_dir
+else:
+    frontend_dir = Path(__file__).parent.parent.parent / "frontend"
+
+app.mount("/static", StaticFiles(directory=str(frontend_dir / "static")), name="static")
 
 # -- Templates (Jinja2) -------------------------------------------------------
-_templates_dir = frontend_dir / "templates" if frontend_dir.exists() else Path(__file__).parent
+_templates_dir = frontend_dir / "templates"
 templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------

@@ -1,13 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app as main_app
-from app.database import Base, get_db
-from app.models.user import User
-from app.models.station import Station
-from app.models.charge_point import ChargePoint
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db
+from app.main import app as main_app
+from app.models.charge_point import ChargePoint
+from app.models.station import Station
+from app.models.user import User
 
 engine_test = create_engine(
     "sqlite:///:memory:", 
@@ -24,6 +25,7 @@ def override_get_db():
         db.close()
 
 import app.routers.ocpp as ocpp_router_mod
+
 ocpp_router_mod.SessionLocal = SessionLocalTest
 
 client = TestClient(main_app)
@@ -66,14 +68,18 @@ def test_websocket_accepts_valid_cp():
 
 def test_websocket_rejects_invalid_cp():
     from starlette.websockets import WebSocketDisconnect
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect("/ocpp/CP_INVALID", subprotocols=["ocpp1.6"]) as websocket:
-            websocket.receive_text()
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/ocpp/CP_INVALID", subprotocols=["ocpp1.6"]) as websocket,
+    ):
+        websocket.receive_text()
     assert exc.value.code == 1008
 
 def test_websocket_rejects_unsupported_protocol():
     from starlette.websockets import WebSocketDisconnect
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.5"]) as websocket:
-            websocket.receive_text()
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.5"]) as websocket,
+    ):
+        websocket.receive_text()
     assert exc.value.code == 1002
