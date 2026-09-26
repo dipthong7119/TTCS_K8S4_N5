@@ -2,13 +2,14 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.routing import APIRouter
+from fastapi.testclient import TestClient
+
 from app.models.charge_point import ChargePoint
 from app.models.station import Station
 from app.routers.monitoring import notify_status_change, sse_clients
 from app.routers.stations import router as stations_router
-from fastapi import FastAPI
-from fastapi.routing import APIRouter
-from fastapi.testclient import TestClient
 
 PASSWORD = "ValidPassword123!"
 

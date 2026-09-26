@@ -1,12 +1,13 @@
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
-from app.config import settings
-from app.core.security import verify_password
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+
+from alembic import command
+from app.config import settings
+from app.core.security import verify_password
 
 
 @pytest.fixture
