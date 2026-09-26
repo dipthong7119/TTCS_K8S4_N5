@@ -12,7 +12,7 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 
 | Vai trò | Thành viên |
 |---|---|
-| Srcum Master | Trịnh Thanh Tùng |
+| Scrum Master | Trịnh Thanh Tùng |
 | Backend Developer | Ngô Quang Tùng, Nguyễn Lâm Tùng, Hoàng Văn Tân |
 | Frontend Developer | Phạm Văn Tuấn, Vy Hoàng Tú, Đặng Ngọc Đại |
 | Tester | Tạ Như Vinh, Hoàng Văn Đức |
@@ -60,26 +60,7 @@ curl http://localhost:8000/health
 ### Chạy tại local (không dùng Docker)
 
 ```bash
-# 1. Tạo môi trường ảo
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-# 2. Cài thư viện
-pip install -r backend/requirements.txt
-
-# 3. Chạy migration để tạo DB
-cd backend
-alembic upgrade head
-cd ..
-
-# 4. Khởi chạy server
-python run.py
-# hoặc
-cd backend && uvicorn app.main:app --reload --port 8000
+.\run.ps1
 ```
 
 ---
