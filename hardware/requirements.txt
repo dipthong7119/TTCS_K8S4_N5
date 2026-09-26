@@ -1,0 +1,10 @@
+# Hardware module — CSMS Nền tảng vận hành trạm sạc xe điện
+# Nhóm: TTCS_K8S4_N5 | Sprint 1
+
+# Phụ thuộc bắt buộc
+websockets>=11.0
+httpx>=0.25.0
+
+# Test
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
