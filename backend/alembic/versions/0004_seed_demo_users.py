@@ -50,44 +50,60 @@ _DEMO_USERS = [
 
 def upgrade() -> None:
     conn = op.get_bind()
+    users = sa.table(
+        "users",
+        sa.column("id", sa.Integer),
+        sa.column("email", sa.String),
+        sa.column("password_hash", sa.String),
+        sa.column("full_name", sa.String),
+        sa.column("is_active", sa.Boolean),
+        sa.column("failed_login_count", sa.Integer),
+    )
+    roles = sa.table("roles", sa.column("id", sa.Integer), sa.column("name", sa.String))
+    user_roles = sa.table(
+        "user_roles", sa.column("user_id", sa.Integer), sa.column("role_id", sa.Integer)
+    )
 
     for u in _DEMO_USERS:
-        # Idempotent: bo qua neu email da ton tai
-        exists = conn.execute(
-            sa.text("SELECT id FROM users WHERE email = :e"),
-            {"e": u["email"]},
-        ).fetchone()
-        if exists:
-            continue
-
-        # Chen user
-        result = conn.execute(
-            sa.text(
-                "INSERT INTO users (email, password_hash, full_name, is_active, failed_login_count) "
-                "VALUES (:email, :pw, :name, 1, 0)"
-            ),
-            {"email": u["email"], "pw": u["password_hash"], "name": u["full_name"]},
-        )
-        user_id = result.lastrowid
-
-        # Lay role_id
-        role_row = conn.execute(
-            sa.text("SELECT id FROM roles WHERE name = :r"),
-            {"r": u["role"]},
-        ).fetchone()
-        if role_row:
+        user_id = conn.execute(
+            sa.select(users.c.id).where(users.c.email == u["email"])
+        ).scalar_one_or_none()
+        if user_id is None:
             conn.execute(
-                sa.text("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (:u, :r)"),
-                {"u": user_id, "r": role_row[0]},
+                users.insert().values(
+                    email=u["email"],
+                    password_hash=u["password_hash"],
+                    full_name=u["full_name"],
+                    is_active=True,
+                    failed_login_count=0,
+                )
             )
+            user_id = conn.execute(
+                sa.select(users.c.id).where(users.c.email == u["email"])
+            ).scalar_one()
+
+        role_id = conn.execute(
+            sa.select(roles.c.id).where(roles.c.name == u["role"])
+        ).scalar_one_or_none()
+        if role_id is None:
+            continue
+        assigned = conn.execute(
+            sa.select(user_roles.c.user_id).where(
+                user_roles.c.user_id == user_id, user_roles.c.role_id == role_id
+            )
+        ).first()
+        if assigned is None:
+            conn.execute(user_roles.insert().values(user_id=user_id, role_id=role_id))
 
 
 def downgrade() -> None:
     conn = op.get_bind()
+    users = sa.table("users", sa.column("id", sa.Integer), sa.column("email", sa.String))
+    user_roles = sa.table("user_roles", sa.column("user_id", sa.Integer))
     for u in _DEMO_USERS:
-        row = conn.execute(
-            sa.text("SELECT id FROM users WHERE email = :e"), {"e": u["email"]}
-        ).fetchone()
-        if row:
-            conn.execute(sa.text("DELETE FROM user_roles WHERE user_id = :id"), {"id": row[0]})
-            conn.execute(sa.text("DELETE FROM users WHERE id = :id"), {"id": row[0]})
+        user_id = conn.execute(
+            sa.select(users.c.id).where(users.c.email == u["email"])
+        ).scalar_one_or_none()
+        if user_id is not None:
+            conn.execute(user_roles.delete().where(user_roles.c.user_id == user_id))
+            conn.execute(users.delete().where(users.c.id == user_id))

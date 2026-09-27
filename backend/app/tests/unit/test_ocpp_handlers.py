@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -10,7 +10,7 @@ from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
 from app.models.id_tag import IdTag
 from app.models.station import Station
-from app.models.user import User
+from app.models.user import Role, User
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import (
     pack_call,
@@ -31,6 +31,7 @@ def db_session():
     
     # Tao dummy user, station and charge point
     user = User(id=1, email="test@test.com", password_hash="123", full_name="Test User")
+    user.roles = [Role(name="driver")]
     station = Station(id=1, name="Test Station", owner_id=1, status="active")
     cp = ChargePoint(id=1, code="CP001", station_id=1, status="offline")
     db.add(user)
@@ -65,7 +66,7 @@ def test_handle_boot_notification(db_session):
     assert cp.firmware_version == "1.0"
     assert cp.last_seen_at is not None
 
-def test_handle_boot_notification_inactive_station(db_session):
+def test_handle_boot_notification_paused_station_still_accepts_connection(db_session):
     station = db_session.query(Station).first()
     station.status = "inactive"
     db_session.commit()
@@ -74,19 +75,37 @@ def test_handle_boot_notification_inactive_station(db_session):
     resp = handle_ocpp_message(db_session, "CP001", raw_msg)
     
     msg_type, msg_id, _, payload, _, _ = parse_message(resp)
-    assert payload["status"] == "Rejected"
+    assert payload["status"] == "Accepted"
     
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
-    assert cp.status == "offline" # Giữ nguyên
+    assert cp.status == "online"
+
+
+def test_handle_boot_notification_locked_station_is_rejected(db_session):
+    station = db_session.query(Station).first()
+    station.status = "locked"
+    db_session.commit()
+
+    response = handle_ocpp_message(
+        db_session, "CP001", pack_call("msg_locked", "BootNotification", {})
+    )
+
+    assert parse_message(response)[3]["status"] == "Rejected"
+    assert db_session.query(ChargePoint).filter_by(code="CP001").one().status == "offline"
 
 def test_handle_heartbeat(db_session):
+    from datetime import UTC, datetime
+
+    before = datetime.now(UTC)
     raw_msg = pack_call("msg3", "Heartbeat", {})
     resp = handle_ocpp_message(db_session, "CP001", raw_msg)
+    after = datetime.now(UTC)
     
     msg_type, msg_id, _, payload, _, _ = parse_message(resp)
     assert msg_type == 3
     assert msg_id == "msg3"
-    assert "currentTime" in payload
+    current_time = datetime.fromisoformat(payload["currentTime"].replace("Z", "+00:00"))
+    assert before.timestamp() - 1 <= current_time.timestamp() <= after.timestamp() + 1
     
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
     assert cp.last_seen_at is not None
@@ -148,18 +167,21 @@ def test_handle_status_notification_error(db_session):
     assert err.error_code == "InternalError"
     assert err.info == "Something broke"
 
-def test_handle_status_notification_unregistered_connector(db_session):
+def test_handle_status_notification_unregistered_connector(db_session, caplog):
     raw_msg = pack_call("msg7", "StatusNotification", {
         "connectorId": 99,
         "status": "Available",
         "errorCode": "NoError"
     })
     
-    handle_ocpp_message(db_session, "CP001", raw_msg)
+    with caplog.at_level("WARNING", logger="app.services.ocpp_handlers"):
+        handle_ocpp_message(db_session, "CP001", raw_msg)
     
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
     conn = db_session.query(Connector).filter_by(charge_point_id=cp.id, connector_id=99).first()
     assert conn is None
+    assert "CP001" in caplog.text
+    assert "99" in caplog.text
 
 
 def test_handle_authorize(db_session):
@@ -194,3 +216,27 @@ def test_handle_authorize(db_session):
     resp4 = handle_ocpp_message(db_session, "CP001", raw4)
     msg_type, msg_id, _, payload, _, _ = parse_message(resp4)
     assert payload["idTagInfo"]["status"] == "Invalid"
+
+
+def test_last_seen_uses_server_clock_when_device_timestamp_is_skewed(db_session):
+    charge_point = db_session.query(ChargePoint).filter_by(code="CP001").one()
+    device_time = datetime.now(timezone.utc) + timedelta(hours=5)
+
+    response = handle_ocpp_message(
+        db_session,
+        charge_point.code,
+        pack_call(
+            "clock-skew",
+            "Heartbeat",
+            {"timestamp": device_time.isoformat()},
+        ),
+    )
+
+    database_now = db_session.query(func.current_timestamp()).scalar()
+    if database_now.tzinfo is None:
+        database_now = database_now.replace(tzinfo=timezone.utc)
+    db_session.refresh(charge_point)
+    last_seen = charge_point.last_seen_at.replace(tzinfo=timezone.utc)
+
+    assert parse_message(response)[0] == 3
+    assert abs((database_now - last_seen).total_seconds()) < 2

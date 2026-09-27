@@ -24,6 +24,8 @@ class ChargePoint(Base):
     firmware_version = Column(String(100), nullable=True)
     # online | offline
     status = Column(String(20), default="offline", nullable=False)
+    # Last overall OCPP status reported on connectorId=0.
+    ocpp_status = Column(String(50), nullable=True)
     last_seen_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -44,8 +46,10 @@ class Connector(Base):
     charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False)
     # Khop voi connectorId trong tin nhan OCPP, bat dau tu 1 (T-10 NFR)
     connector_id = Column(Integer, nullable=False)
-    # unknown is the initial state until the charge point reports StatusNotification.
-    status = Column(String(20), default="unknown", server_default="unknown", nullable=False)
+    # T-10: a new connector starts unavailable until the charge point reports its status.
+    status = Column(String(20), default="unavailable", server_default="unavailable", nullable=False)
+    # Preserve the exact OCPP status separately from the internal UI status.
+    ocpp_status = Column(String(50), nullable=True)
     error_code = Column(String(50), default="NoError", nullable=False)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

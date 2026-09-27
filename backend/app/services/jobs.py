@@ -1,77 +1,100 @@
+"""Idempotent OCPP background maintenance jobs (T-26, T-31)."""
+
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func, text
+from sqlalchemy.orm import joinedload
+
+from app.config import settings
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
+from app.models.station import Station
+from app.services.ocpp_status import station_status_payload
 
 logger = logging.getLogger(__name__)
 
+
+def _stale_cutoff(db):
+    timeout = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS * settings.OCPP_HEARTBEAT_MULTIPLIER
+    if db.get_bind().dialect.name == "sqlite":
+        return func.datetime(func.current_timestamp(), f"-{timeout} seconds")
+    return func.current_timestamp() - text(f"INTERVAL '{timeout} seconds'")
+
+
+def expire_stale_charge_points_once(db) -> int:
+    """Persist stale state and clear connector status; repeated runs are no-ops."""
+    stale_points = (
+        db.query(ChargePoint)
+        .filter(
+            ChargePoint.status == "online",
+            (ChargePoint.last_seen_at.is_(None)) | (ChargePoint.last_seen_at < _stale_cutoff(db)),
+        )
+        .all()
+    )
+    if not stale_points:
+        return 0
+
+    station_ids = {point.station_id for point in stale_points}
+    for point in stale_points:
+        point.status = "offline"
+        for connector in point.connectors:
+            connector.status = "unknown"
+        logger.info("Charge point marked offline after missed heartbeats: %s", point.code)
+    db.commit()
+
+    from app.routers.monitoring import notify_status_change
+
+    stations = (
+        db.query(Station)
+        .options(joinedload(Station.charge_points).joinedload(ChargePoint.connectors))
+        .filter(Station.id.in_(station_ids))
+        .all()
+    )
+    for station in stations:
+        snapshot = station_status_payload(station)
+        notify_status_change(station.id, snapshot["charge_points"], station.owner_id)
+    return len(stale_points)
+
+
 async def check_offline_charge_points():
-    """T-26: Job nền quét last_seen_at quá hai chu kỳ (ví dụ: > 10 phút) và đổi trạng thái"""
     while True:
         try:
             with SessionLocal() as db:
-                # Ngưỡng: last_seen_at cách đây hơn 10 phút (2 chu kỳ của 300s)
-                threshold = datetime.now(timezone.utc) - timedelta(minutes=10)
-                offline_cps = db.query(ChargePoint).filter(
-                    ChargePoint.status == "online",
-                    (ChargePoint.last_seen_at == None) | (ChargePoint.last_seen_at < threshold)
-                ).all()
+                expire_stale_charge_points_once(db)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Offline charge point check failed")
+        await asyncio.sleep(settings.OCPP_JOB_POLL_SECONDS)
 
-                if offline_cps:
-                    for cp in offline_cps:
-                        cp.status = "offline"
-                        logger.info(f"Đánh dấu trụ {cp.code} là ngoại tuyến do quá hạn nhịp tim.")
 
-                    db.commit()
+def cleanup_old_ocpp_messages_once(db) -> int:
+    from app.models.ocpp_message import OcppMessage
 
-                    from app.routers.monitoring import notify_status_change
-                    for cp in offline_cps:
-                        db.refresh(cp)
-                        station = cp.station
-                        if station:
-                            cp_data = []
-                            for p in station.charge_points:
-                                conn_list = []
-                                for cn in p.connectors:
-                                    conn_list.append({
-                                        "id": cn.id,
-                                        "connector_id": cn.connector_id,
-                                        "status": cn.status,
-                                        "error_code": cn.error_code,
-                                        "updated_at": cn.updated_at.isoformat()
-                                    })
-                                cp_data.append({
-                                    "id": p.id,
-                                    "code": p.code,
-                                    "status": p.status,
-                                    "vendor": p.vendor,
-                                    "model": p.model,
-                                    "firmware_version": p.firmware_version,
-                                    "last_seen_at": p.last_seen_at.isoformat() if p.last_seen_at else None,
-                                    "connectors": conn_list
-                                })
-                            notify_status_change(station.id, cp_data, station.owner_id)
+    retention = settings.OCPP_MESSAGE_RETENTION_DAYS
+    if db.get_bind().dialect.name == "sqlite":
+        cutoff = func.datetime(func.current_timestamp(), f"-{retention} days")
+    else:
+        cutoff = func.current_timestamp() - text(f"INTERVAL '{retention} days'")
+    deleted = (
+        db.query(OcppMessage)
+        .filter(OcppMessage.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return deleted
 
-        except Exception as e:
-            logger.error(f"Lỗi job check_offline_charge_points: {e}")
-
-        await asyncio.sleep(60)
 
 async def cleanup_old_ocpp_messages():
-    """T-31: Job dọn bản ghi cũ hơn 7 ngày"""
     while True:
         try:
-            from app.models.ocpp_message import OcppMessage
             with SessionLocal() as db:
-                threshold = datetime.now(timezone.utc) - timedelta(days=7)
-                deleted = db.query(OcppMessage).filter(OcppMessage.created_at < threshold).delete()
-                db.commit()
-                if deleted > 0:
-                    logger.info(f"Đã xoá {deleted} bản ghi ocpp_messages cũ hơn 7 ngày.")
-        except Exception as e:
-            logger.error(f"Lỗi job cleanup_old_ocpp_messages: {e}")
-
-        # Chạy mỗi giờ
+                deleted = cleanup_old_ocpp_messages_once(db)
+                if deleted:
+                    logger.info("Removed %s expired OCPP idempotency records", deleted)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("OCPP message cleanup failed")
         await asyncio.sleep(3600)

@@ -99,7 +99,7 @@
         cpCodeCheck.style.color = 'var(--color-text-muted)';
         try {
           // Gọi API kiểm tra mã — server trả 200 nếu có thể dùng, 409 nếu trùng
-          await ApiClient.get(`/charge-points/check-code?code=${encodeURIComponent(code)}`);
+          await ApiClient.checkChargePointCode(code);
           cpCodeCheck.textContent = '✓ Mã trụ hợp lệ';
           cpCodeCheck.style.color = 'var(--color-online)';
           cpCodeInput.classList.remove('is-error');
@@ -194,4 +194,25 @@
       }
     });
   }
+
+  // ── Xóa trụ theo yêu cầu S-05; máy chủ vẫn kiểm tra quyền sở hữu ──
+  document.querySelectorAll('[data-cp-delete-id]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const cpId = button.dataset.cpDeleteId;
+      const row = button.closest('tr');
+      const code = row?.querySelector('.code-tag')?.textContent?.trim() || 'trụ này';
+      if (!window.confirm(`Bạn có chắc muốn xóa ${code}?`)) return;
+
+      button.disabled = true;
+      try {
+        await ApiClient.deleteChargePoint(cpId);
+        showToast('Đã xóa trụ sạc', 'success');
+        row?.remove();
+        if (!document.querySelector('#cp-tbody tr')) window.location.reload();
+      } catch (error) {
+        showToast(error.message || 'Không xóa được trụ sạc', 'error');
+        button.disabled = false;
+      }
+    });
+  });
 })();

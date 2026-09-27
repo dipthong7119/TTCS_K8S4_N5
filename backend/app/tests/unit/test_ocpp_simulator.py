@@ -55,3 +55,36 @@ def test_simulator_waits_for_matching_callresult() -> None:
         "transactionId": 42,
         "idTagInfo": {"status": "Accepted"},
     }
+
+
+def test_simulator_acknowledges_reset_and_requests_reconnect() -> None:
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = iter(
+                [json.dumps([2, "reset-1", "Reset", {"type": "Soft"}])]
+            )
+            self.sent = []
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self.messages)
+            except StopIteration:
+                raise StopAsyncIteration from None
+
+        async def send(self, message):
+            self.sent.append(json.loads(message))
+
+    async def scenario():
+        simulator = SimpleSimulator()
+        simulator.ws = FakeWebSocket()
+        await simulator._receive_loop()
+        return simulator
+
+    simulator = asyncio.run(scenario())
+
+    assert simulator.ws.sent == [[3, "reset-1", {"status": "Accepted"}]]
+    assert simulator._reboot_requested is True
+    assert simulator._disconnect_event.is_set()

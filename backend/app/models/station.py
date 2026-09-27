@@ -20,7 +20,7 @@ class Station(Base):
     address = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    # active | inactive | maintenance
+    # active | inactive | maintenance | locked (administrative OCPP boot block)
     status = Column(String(20), default="active", nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
 

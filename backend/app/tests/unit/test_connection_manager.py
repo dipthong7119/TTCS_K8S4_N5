@@ -46,7 +46,7 @@ def setup_db():
     yield
     Base.metadata.drop_all(bind=engine_test)
 
-def test_duplicate_connection():
+def test_duplicate_connection(caplog):
     # Unfortunately, starlette TestClient's websocket_connect is synchronous blocking.
     # It's hard to open two websockets concurrently in the same test thread.
     # But we can unit test ConnectionManager directly.
@@ -63,11 +63,15 @@ def test_duplicate_connection():
         await manager.connect("CP01", ws1)
         assert manager.active_connections["CP01"] == ws1
         
-        await manager.connect("CP01", ws2)
+        with caplog.at_level("INFO", logger="app.services.connection_manager"):
+            await manager.connect("CP01", ws2)
         assert manager.active_connections["CP01"] == ws2
         
         # ws1 should be closed
         ws1.close.assert_called_once_with(code=1000, reason="New connection opened")
+        assert "code=CP01" in caplog.text
+        assert f"old_connection_id={id(ws1)}" in caplog.text
+        assert f"new_connection_id={id(ws2)}" in caplog.text
         
         manager.disconnect("CP01", ws2)
         assert "CP01" not in manager.active_connections

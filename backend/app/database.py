@@ -5,10 +5,8 @@ from .config import settings
 
 # Do dùng SQLite nên cần thêm check_same_thread=False
 # (để FastAPI có thể sử dụng DB trên nhiều thread)
-engine = create_engine(
-    settings.DATABASE_URL, 
-    connect_args={"check_same_thread": False}
-)
+connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(settings.DATABASE_URL, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -1,13 +1,12 @@
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
-
 from alembic import command
+from alembic.config import Config
 from app.config import settings
 from app.core.security import verify_password
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 
 @pytest.fixture
@@ -55,6 +54,36 @@ def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
         roles = connection.execute(text("SELECT name FROM roles ORDER BY name")).scalars().all()
 
     assert roles == ["accountant", "admin", "driver", "operator", "station_owner"]
+
+
+def test_new_connector_default_matches_sprint_one_schema(migrated_database) -> None:
+    _, engine = migrated_database
+    status_column = next(
+        column for column in inspect(engine).get_columns("connectors") if column["name"] == "status"
+    )
+
+    assert status_column["default"].strip("'\"") == "unavailable"
+
+
+def test_id_tag_code_is_unique(migrated_database) -> None:
+    _, engine = migrated_database
+    with engine.connect() as connection:
+        driver_id = connection.execute(
+            text(
+                "SELECT users.id FROM users "
+                "JOIN user_roles ON user_roles.user_id = users.id "
+                "JOIN roles ON roles.id = user_roles.role_id "
+                "WHERE roles.name = 'driver' ORDER BY users.id LIMIT 1"
+            )
+        ).scalar_one()
+
+    insert_tag = text(
+        "INSERT INTO id_tags (id_tag, user_id, is_blocked) "
+        "VALUES ('UNIQUE-TAG-TEST', :user_id, FALSE)"
+    )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert_tag, {"user_id": driver_id})
+        connection.execute(insert_tag, {"user_id": driver_id})
 
 
 def test_users_email_is_unique(migrated_database) -> None:

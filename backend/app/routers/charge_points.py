@@ -84,7 +84,7 @@ async def create_charge_point(
             connector = Connector(
                 charge_point_id=cp.id,
                 connector_id=i,
-                status="unknown",
+                status="unavailable",
                 error_code="NoError",
                 created_at=now,
                 updated_at=now,

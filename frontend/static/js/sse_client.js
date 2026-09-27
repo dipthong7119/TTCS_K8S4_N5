@@ -6,10 +6,6 @@
 const SseClient = (() => {
   let _source = null;
   let _listeners = {};
-  let _reconnectTimer = null;
-  let _reconnectDelay = 2000;
-  const MAX_DELAY = 30000;
-
   function connect(url) {
     if (_source && _source.readyState !== EventSource.CLOSED) {
       _source.close();
@@ -17,18 +13,12 @@ const SseClient = (() => {
     _source = new EventSource(url, { withCredentials: true });
 
     _source.onopen = () => {
-      _reconnectDelay = 2000;
       _emit('_connected', null);
     };
 
     _source.onerror = (e) => {
       _emit('_error', e);
-      // Auto-reconnect with exponential back-off
-      clearTimeout(_reconnectTimer);
-      _reconnectTimer = setTimeout(() => {
-        _reconnectDelay = Math.min(_reconnectDelay * 1.5, MAX_DELAY);
-        connect(url);
-      }, _reconnectDelay);
+      // EventSource owns reconnection and Last-Event-ID handling.
     };
 
     _source.onmessage = (e) => {
@@ -49,7 +39,6 @@ const SseClient = (() => {
   }
 
   function disconnect() {
-    clearTimeout(_reconnectTimer);
     if (_source) { _source.close(); _source = null; }
     _emit('_disconnected', null);
   }

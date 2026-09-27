@@ -121,9 +121,14 @@
             <option value="active"       {% if station.status == 'active' %}selected{% endif %}>Hoạt động</option>
             <option value="inactive"     {% if station.status == 'inactive' %}selected{% endif %}>Tạm dừng</option>
             <option value="maintenance"  {% if station.status == 'maintenance' %}selected{% endif %}>Bảo trì</option>
+            {% if can_lock_stations %}
+            <option value="locked"       {% if station.status == 'locked' %}selected{% endif %}>Bị quản trị khóa</option>
+            {% elif station.status == 'locked' %}
+            <option value="locked" selected disabled>Bị quản trị khóa</option>
+            {% endif %}
           </select>
           <p class="form-hint" id="status-hint">
-            Trạng thái ảnh hưởng đến hiển thị trên trang giám sát
+            Trạm tạm dừng vẫn kết nối để báo trạng thái. Chỉ quản trị viên được khóa hoặc mở khóa trạm.
           </p>
         </div>
         {% endif %}
@@ -295,6 +300,7 @@
                   aria-describedby="cp-connectors-hint">
             <option value="1">1 đầu nối</option>
             <option value="2" selected>2 đầu nối</option>
+            <option value="3">3 đầu nối</option>
             <option value="4">4 đầu nối</option>
           </select>
           <p class="form-hint" id="cp-connectors-hint">

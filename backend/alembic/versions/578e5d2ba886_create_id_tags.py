@@ -26,7 +26,7 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("id_tag", sa.String(50), nullable=False),
             sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-            sa.Column("is_blocked", sa.Boolean(), server_default="0", nullable=False),
+            sa.Column("is_blocked", sa.Boolean(), server_default=sa.false(), nullable=False),
             sa.Column("expiry_date", sa.DateTime(), nullable=True),
             sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),

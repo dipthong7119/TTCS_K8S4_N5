@@ -1,6 +1,20 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: csms_db
+    environment:
+      POSTGRES_DB: ${CSMS_DB_NAME:-csms}
+      POSTGRES_USER: ${CSMS_DB_USER:-csms}
+      POSTGRES_PASSWORD: ${CSMS_DB_PASSWORD:-csms}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CSMS_DB_USER:-csms} -d ${CSMS_DB_NAME:-csms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     image: ${CSMS_IMAGE:-csms-app:local}
     build:
@@ -9,18 +23,22 @@ services:
     container_name: csms_app
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
-      # Mount file SQLite từ backend/ ra host để dữ liệu không bị mất khi xoá container
-      # Lưu ý: file backend/csms.db phải TỒN TẠI trên host trước khi mount
-      # (nếu chưa có: chạy 'cd backend && alembic upgrade head' một lần trên local)
-      - ./backend/csms.db:/app/csms.db
       # Mount frontend for local editing; the production image also contains this directory.
       - ./frontend:/app/frontend
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${CSMS_DB_USER:-csms}:${CSMS_DB_PASSWORD:-csms}@db:5432/${CSMS_DB_NAME:-csms}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  postgres_data:

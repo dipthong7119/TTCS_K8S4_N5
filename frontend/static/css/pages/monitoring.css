@@ -1,8 +1,9 @@
 ﻿/* pages/monitoring.css */
 .monitoring-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: var(--space-4);
+  align-items: start;
 }
 .monitoring-grid.list-view {
   grid-template-columns: 1fr;
@@ -16,17 +17,29 @@
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+.station-card:hover { box-shadow: var(--shadow-md); }
+.station-card__open {
+  display: block;
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.station-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-.station-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.station-card__open:hover { background: var(--color-surface-alt); }
+.station-card__open:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
-.station-card__header {
-  padding: var(--space-4) var(--space-5);
-  display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid var(--color-border);
+.station-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
-.station-card__name { font-weight: 700; font-size: var(--font-size-base); }
+.station-card__name { display: block; font-weight: 700; font-size: var(--font-size-base); }
 .station-card__addr { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: 2px; }
 
 .station-card__body { padding: var(--space-4) var(--space-5); }
@@ -34,19 +47,38 @@
 /* Connector grid inside station card */
 .cp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: var(--space-3);
 }
 .cp-tile {
-  border: 1.5px solid var(--color-border);
+  min-width: 0;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-3);
   background: var(--color-surface-alt);
-  transition: border-color var(--transition-fast);
 }
-.cp-tile:hover { border-color: var(--color-border-strong); }
-.cp-tile__code { font-size: var(--font-size-xs); font-weight: 700; font-family: monospace; color: var(--color-text-secondary); margin-bottom: var(--space-2); }
-.cp-tile__badge { }
+.cp-tile__header, .detail-point__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.cp-tile__code { min-width: 0; overflow-wrap: anywhere; font-size: var(--font-size-xs); font-weight: 700; font-family: monospace; color: var(--color-text-secondary); }
+.connector-list { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.connector-status { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.connector-status__number, .muted-text, .detail-point__meta, .cp-tile__last-seen, .detail-address {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+.cp-tile__last-seen { margin: var(--space-2) 0 0; }
+.monitoring-empty { grid-column: 1 / -1; }
+.detail-address { margin: 0 0 var(--space-4); }
+.detail-points { display: grid; gap: var(--space-3); }
+.detail-point { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-alt); }
+.detail-point__meta { margin: var(--space-2) 0 0; }
+.reset-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.reset-controls label { flex-basis: 100%; color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.reset-controls .form-select { width: auto; min-width: 115px; }
 
 /* SSE indicator */
 .sse-indicator {
@@ -118,4 +150,11 @@
   align-items: center; justify-content: center;
   padding: var(--space-16);
   grid-column: 1/-1;
+}
+
+@media (max-width: 600px) {
+  .monitoring-grid { grid-template-columns: 1fr; }
+  .station-card__open, .station-card__body { padding: var(--space-3); }
+  .drawer__body { padding: var(--space-4); }
+  .reset-controls { align-items: stretch; }
 }

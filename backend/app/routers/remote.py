@@ -1,39 +1,85 @@
-import uuid
+"""Remote charge point commands (S-16, T-34, T-35)."""
+
+import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-from app.core.deps import deny_unannotated_route, require_role
+from app.config import settings
+from app.core.deps import CurrentUser, deny_unannotated_route, require_role
+from app.database import get_db
+from app.models.charge_point import ChargePoint
+from app.schemas.remote import ResetRequest
 from app.services.connection_manager import manager
-from app.services.ocpp_parser import pack_call
+from app.services.ocpp_handlers import publish_charge_point_status
+from app.services.ocpp_parser import OCPPError
+from app.services.ocpp_status import is_charge_point_stale
 
 router = APIRouter(dependencies=[Depends(deny_unannotated_route)])
+logger = logging.getLogger(__name__)
 
-@router.post("/charge_points/{code}/reset")
+
+@router.post(
+    "/charge_points/{code}/reset",
+    dependencies=[Depends(require_role("admin", "operator"))],
+)
 async def reset_charge_point(
     code: str,
-    payload: dict,
-    current_user=Depends(require_role("admin", "operator"))
+    payload: ResetRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
 ):
-    """
-    T-34, T-35: Gửi lệnh Reset xuống trụ sạc
-    """
-    if code not in manager.active_connections:
+    point = db.query(ChargePoint).filter(ChargePoint.code == code).first()
+    if point is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy trụ sạc")
+    if (
+        code not in manager.active_connections
+        or point.status != "online"
+        or is_charge_point_stale(point.last_seen_at)
+    ):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Trụ sạc đang ngoại tuyến, không thể gửi lệnh."
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Trụ sạc đang ngoại tuyến, không thể gửi lệnh.",
         )
-    
-    # payload: {"type": "Soft" | "Hard"}
-    reset_type = payload.get("type", "Soft")
-    
-    msg_id = str(uuid.uuid4().int & 0x7FFFFF)
-    raw_msg = pack_call(msg_id, "Reset", {"type": reset_type})
-    
-    # Gửi lệnh
-    await manager.send_to(code, raw_msg)
-    
-    # Theo thiết kế OCPP, chúng ta sẽ nhận được CALLRESULT.
-    # Trong phiên bản đơn giản này, ta coi lệnh đã được gửi đi thành công.
-    # Thực tế có thể thiết lập hàng đợi để chờ CALLRESULT, nhưng T-34 yêu cầu
-    # "Khớp CALLRESULT", có thể ta ghi log hoặc xử lý ở ocpp_handlers.py.
-    return {"message": "Lệnh Reset đã được gửi", "msg_id": msg_id}
+
+    logger.info(
+        "Operator requested charge point reset: actor_id=%s charge_point=%s reset_type=%s",
+        current_user.id,
+        code,
+        payload.type,
+    )
+    try:
+        result = await manager.send_call(
+            code,
+            "Reset",
+            {"type": payload.type},
+            timeout=settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Trụ không phản hồi lệnh Reset trong thời gian chờ.",
+        ) from exc
+    except ConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Trụ sạc đã ngắt kết nối trước khi nhận lệnh.",
+        ) from exc
+    except OCPPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Trụ từ chối lệnh Reset.",
+        ) from exc
+
+    if result.get("status") != "Accepted":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Trụ không chấp nhận lệnh Reset.",
+        )
+    point.status = "offline"
+    for connector in point.connectors:
+        connector.status = "unknown"
+    db.commit()
+    publish_charge_point_status(db, point.id)
+    return {"status": "Accepted", "message": "Trụ đã chấp nhận lệnh Reset."}

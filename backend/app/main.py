@@ -3,6 +3,7 @@ main.py -- Khởi tạo FastAPI app, mount router, quản lý vòng đời ứng
 Tham chiếu: SPRINT_1.md S-01 T-01, 01_CODEBASE_MAP.md
 """
 
+import asyncio
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -37,7 +38,6 @@ async def lifespan(app: FastAPI):
     )
 
     # T-26: Start background job
-    import asyncio
 
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
     bg_task = asyncio.create_task(check_offline_charge_points())
@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
 
     bg_task.cancel()
     cleanup_task.cancel()
+    await asyncio.gather(bg_task, cleanup_task, return_exceptions=True)
 
 
 app = FastAPI(

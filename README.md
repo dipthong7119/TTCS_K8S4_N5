@@ -1,9 +1,10 @@
 # CSMS — Nền tảng vận hành trạm sạc xe điện
 
-> **Nhóm**: TTCS_K8S4_N5 | **Sprint hiện tại**: Sprint 1
+> **Nhóm**: TTCS_K8S4_N5 | **Sprint hiện tại**: Sprint 2
 
 Hệ thống quản lý trạm sạc xe điện (Charging Station Management System) xây dựng bằng
-**FastAPI** (backend) + **HTML/CSS/JS thuần** (frontend) + **SQLite** (database phát triển).
+**FastAPI** (backend) + **HTML/CSS/JS thuần** (frontend) + PostgreSQL trong Docker
+hoặc SQLite khi chạy trực tiếp trên Windows.
 Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không phải thiết bị phần cứng thật.
 
 ---
@@ -29,57 +30,63 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 | Docker | 24+ |
 | Docker Compose | 2.20+ |
 
-### Chạy bằng Docker (khuyến nghị)
+Docker Compose chạy FastAPI cùng PostgreSQL 15 và lưu dữ liệu trong volume riêng.
+`run.ps1` chạy trực tiếp trên Windows với SQLite tại `backend/csms.db`. Hai cách
+dùng chung cổng `8000`, vì vậy chỉ chạy một cách tại một thời điểm.
 
-```bash
-# 1. Clone dự án
-git clone <url_repo>
-cd TTCS_K8S4_N5
+### Chạy bằng Docker
 
-# 2. Tạo file cấu hình từ mẫu
-cp .env.example .env
+PowerShell:
 
-# 3. Tạo sẵn file database rỗng (QUAN TRỌNG: để Docker không tạo nhầm thành thư mục khi mount volume)
-# Trên Windows PowerShell:
-New-Item -ItemType File -Path backend/csms.db -Force
-# Trên macOS / Linux:
-touch backend/csms.db
-
-# 4. Build và khởi chạy
-docker compose up --build -d
-
-# 5. Kiểm tra trạng thái
-curl http://localhost:8000/health
+```powershell
+Copy-Item .env.example .env   # chỉ cần lần đầu
+docker compose up --build
 ```
 
-> **Lưu ý**: Khi container khởi động, Alembic tự động chạy `upgrade head`
-> để tạo toàn bộ bảng và seed dữ liệu — **không cần chạy migration thủ công**.
+Mở `http://localhost:8000/login`. Dừng bằng `Ctrl+C`; chạy nền thì dùng
+`docker compose up --build -d`, và dừng bằng `docker compose down`. Lệnh `down`
+giữ nguyên dữ liệu PostgreSQL trong volume `postgres_data`.
+Docker Desktop/Engine phải đang chạy trước khi gọi Compose. Ứng dụng chờ PostgreSQL
+sẵn sàng rồi tự chạy Alembic trước khi mở cổng HTTP.
 
-Ứng dụng sẽ chạy tại: **http://localhost:8000**
+### Chạy bằng `run.ps1` trên Windows
 
-### Chạy tại local (không dùng Docker)
+```powershell
+.\run.ps1
+```
 
-```bash
-# 1. Tạo môi trường ảo
-python -m venv .venv
+Lần đầu script tạo `.venv`, cài thư viện, lấy `.env` từ `.env.example` nếu chưa có,
+chạy Alembic rồi khởi động server. Tắt bằng `Ctrl+C`; ứng dụng thoát gọn không in
+traceback `KeyboardInterrupt`.
 
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
+Không chép thư mục `.venv` giữa các máy vì virtualenv lưu đường dẫn Python của máy
+tạo ra nó. Nếu `.venv` được chép hoặc Python gốc không còn ở đúng đường dẫn,
+`run.ps1` sẽ phát hiện và tạo lại môi trường bằng `py -3` (Python Launcher).
+Máy cần Python 3.11 trở lên và kết nối Internet để cài các thư viện ở lần chạy đầu.
+Không cần chạy `Activate.ps1` hoặc `deactivate`; cứ chạy `.\run.ps1`, kể cả khi
+VS Code đã tự kích hoạt và terminal đang hiện `(.venv)`. Đây chỉ là trạng thái của
+terminal; `run.ps1` tự gọi Python trong `.venv`. Sau `Ctrl+C`, terminal giữ nguyên
+trạng thái hiện tại, bạn có thể chạy lại `.\run.ps1` mà không cần `deactivate`.
+Nếu muốn VS Code ngừng tự kích hoạt môi trường cho terminal, đổi thiết lập người
+dùng `python-envs.terminal.autoActivationType` thành `off` rồi mở terminal mới;
+thiết lập này có thể ảnh hưởng các dự án khác trong VS Code.
 
-# 2. Cài thư viện
-pip install -r backend/requirements.txt
+Khi dùng macOS/Linux hoặc muốn chạy thủ công, cài `backend/requirements.txt`, chạy
+`alembic upgrade head` trong `backend/`, rồi chạy `python run.py` từ thư mục gốc.
 
-# 3. Chạy migration để tạo DB
-cd backend
-alembic upgrade head
-cd ..
+### Chạy thủ công trên Windows (tùy chọn)
 
-# 4. Khởi chạy server
-python run.py
-# hoặc
-cd backend && uvicorn app.main:app --reload --port 8000
+```powershell
+# Chỉ cần lệnh này nếu .venv chưa có; nếu .venv chép từ máy khác, thêm --clear
+py -3 -m venv .venv
+# py -3 -m venv --clear .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+
+Push-Location backend
+..\.venv\Scripts\python.exe -m alembic upgrade head
+Pop-Location
+
+.\.venv\Scripts\python.exe run.py
 ```
 
 ---
@@ -101,11 +108,14 @@ cd backend && uvicorn app.main:app --reload --port 8000
 > gắn với năm vai trò cho môi trường phát triển/demo. Không dùng tài khoản demo
 > trên production.
 
+Tài khoản tài xế demo được cấp thẻ giả lập `DEMO-DRIVER-<ID người dùng>` khi chạy
+migration; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVER-0005`.
+
 ---
 
 ## 🗄️ Cơ sở dữ liệu
 
-### Các bảng hiện có (Sprint 1)
+### Các bảng hiện có
 
 | Bảng | Migration | Mô tả |
 |---|---|---|
@@ -116,9 +126,14 @@ cd backend && uvicorn app.main:app --reload --port 8000
 | `charge_points` | `0003_create_charge_points` | Trụ sạc, `code` UNIQUE + INDEX cho OCPP |
 | `connectors` | `0003_create_charge_points` | Đầu nối, `connector_id` khớp OCPP (bắt đầu từ 1) |
 | `login_ip_attempts` | `9f2c6a1b7d40` | Bộ đếm khóa đăng nhập theo IP, tách khỏi tài khoản người dùng |
+| `connector_errors` | `8b30b78eea0a` | Nhật ký lỗi đầu nối, chỉ ghi thêm |
+| `ocpp_messages` | `3c710c686e60`, `a6d2f891c104` | Chống xử lý trùng theo cặp mã trụ/mã tin nhắn |
+| `id_tags` | `578e5d2ba886`, `c7aa03e59214` | Thẻ giả lập liên kết với tài xế, có trạng thái khoá và hạn dùng |
 
-Đầu nối mới bắt đầu ở trạng thái `unknown` cho tới khi nhận `StatusNotification`.
+Đầu nối mới bắt đầu ở trạng thái `unavailable` cho tới khi nhận `StatusNotification`.
 Đăng nhập trả trang chính theo vai trò; chủ trạm chỉ nhận danh sách dữ liệu thuộc sở hữu của mình.
+Một tiến trình ứng dụng quản lý các kết nối OCPP trong bộ nhớ; chạy nhiều worker/replica
+cần chuyển bộ quản lý kết nối sang thành phần dùng chung trước khi triển khai.
 
 ### Làm việc với Alembic
 
@@ -197,12 +212,19 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | Biến | Mặc định | Mô tả |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./csms.db` | Chuỗi kết nối DB |
+| `CSMS_DB_NAME` | `csms` | Tên database PostgreSQL dùng bởi Docker Compose |
+| `CSMS_DB_USER` | `csms` | Tài khoản PostgreSQL dùng bởi Docker Compose |
+| `CSMS_DB_PASSWORD` | `csms` | Mật khẩu PostgreSQL dùng bởi Docker Compose; đổi trước khi triển khai |
 | `SECRET_KEY` | *(phải đổi)* | Khoá ký session/JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Thời gian hết hạn token |
 | `APP_ENV` | `development` | Môi trường (`development`/`production`) |
 | `LOG_LEVEL` | `INFO` | Mức độ log |
 | `MAX_LOGIN_ATTEMPTS` | `5` | Số lần sai tối đa trước khi khoá |
 | `LOCKOUT_DURATION_MINUTES` | `15` | Thời gian khoá tài khoản (phút) |
+| `OCPP_HEARTBEAT_INTERVAL_SECONDS` | `300` | Chu kỳ nhịp tim gửi cho trụ |
+| `OCPP_HEARTBEAT_MULTIPLIER` | `2` | Số chu kỳ trước khi coi là ngoại tuyến |
+| `OCPP_MESSAGE_RETENTION_DAYS` | `7` | Thời gian lưu khóa chống trùng OCPP |
+| `OCPP_REMOTE_CALL_TIMEOUT_SECONDS` | `30` | Thời gian chờ câu trả lời lệnh Reset |
 
 ---
 

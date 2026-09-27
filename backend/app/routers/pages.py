@@ -80,9 +80,15 @@ async def logout_post(request: Request):
 
 @router.get("/monitoring")
 async def monitoring_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "admin", "operator", "station_owner")
+    roles = _require_any_role(current_user, "admin", "operator", "station_owner")
     return templates.TemplateResponse(
-        request, "monitoring/grid.html", _page_context(request, current_user)
+        request,
+        "monitoring/grid.html",
+        _page_context(
+            request,
+            current_user,
+            can_reset=bool({"admin", "operator"}.intersection(roles)),
+        ),
     )
 
 
@@ -96,6 +102,7 @@ async def stations_page(request: Request, current_user: CurrentUser):
             request,
             current_user,
             can_manage_stations=bool({"admin", "station_owner"}.intersection(roles)),
+            can_lock_stations="admin" in roles,
         ),
     )
 
@@ -106,7 +113,12 @@ async def new_station_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request,
         "stations/form.html",
-        _page_context(request, current_user, can_manage_stations=True),
+        _page_context(
+            request,
+            current_user,
+            can_manage_stations=True,
+            can_lock_stations="admin" in [role.name for role in current_user.roles],
+        ),
     )
 
 
@@ -134,6 +146,7 @@ async def edit_station_page(
             station=station,
             charge_points=charge_points,
             can_manage_stations=True,
+            can_lock_stations="admin" in roles,
         ),
     )
 

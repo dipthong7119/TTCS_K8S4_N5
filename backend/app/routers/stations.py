@@ -96,6 +96,11 @@ async def create_station(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ chủ trạm mới được tạo trạm",
         )
+    if body.status == "locked" and "admin" not in role_names:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ quản trị viên mới được khóa trạm",
+        )
 
     now = datetime.now(UTC).replace(tzinfo=None)
     station = Station(
@@ -131,6 +136,16 @@ async def update_station(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Không có quyền sửa trạm này",
+        )
+
+    if (
+        body.status is not None
+        and "admin" not in role_names
+        and (body.status == "locked" or station.status == "locked")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ quản trị viên mới được khóa hoặc mở khóa trạm",
         )
 
     if body.name is not None:

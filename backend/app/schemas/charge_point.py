@@ -40,6 +40,7 @@ class ConnectorResponse(BaseModel):
     connector_id: int
     status: str
     error_code: str
+    ocpp_status: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -55,6 +56,7 @@ class ChargePointResponse(BaseModel):
     firmware_version: str | None
     status: str
     last_seen_at: datetime | None
+    ocpp_status: str | None = None
     created_at: datetime
     updated_at: datetime
     connectors: list[ConnectorResponse] = []

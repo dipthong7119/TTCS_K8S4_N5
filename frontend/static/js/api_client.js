@@ -75,6 +75,7 @@ const ApiClient = (() => {
 
     // --- Monitoring ---
     getMonitoringTree: () => _request('GET', '/monitoring/tree'),
+    resetChargePoint: (code, type = 'Soft') => _request('POST', `/charge_points/${encodeURIComponent(code)}/reset`, { type }),
 
     // --- Sessions ---
     listMySessions:   (params = {}) => _request('GET', '/sessions/mine?' + new URLSearchParams(params)),

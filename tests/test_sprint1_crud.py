@@ -2,14 +2,13 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
-from fastapi.routing import APIRouter
-from fastapi.testclient import TestClient
-
 from app.models.charge_point import ChargePoint
 from app.models.station import Station
 from app.routers.monitoring import notify_status_change, sse_clients
 from app.routers.stations import router as stations_router
+from fastapi import FastAPI
+from fastapi.routing import APIRouter
+from fastapi.testclient import TestClient
 
 PASSWORD = "ValidPassword123!"
 
@@ -81,7 +80,7 @@ def test_charge_point_create_read_update_delete_ten_times(client, user_factory) 
         assert created_response.status_code == 201, created_response.text
         charge_point = created_response.json()
         assert [item["connector_id"] for item in charge_point["connectors"]] == [1, 2]
-        assert [item["status"] for item in charge_point["connectors"]] == ["unknown", "unknown"]
+        assert [item["status"] for item in charge_point["connectors"]] == ["unavailable", "unavailable"]
 
         duplicate_create = client.post(
             "/api/charge-points",
@@ -125,6 +124,36 @@ def test_station_edit_page_loads_existing_station(client, user_factory) -> None:
     assert f'name="station_id" value="{station_id}"' in response.text
     assert 'value="Prefilled station"' in response.text
     assert "Station address" in response.text
+
+
+def test_only_admin_can_lock_or_unlock_station(client, user_factory) -> None:
+    owner = user_factory(email="lock-owner@example.com", password=PASSWORD)
+    login(client, owner)
+    created = client.post(
+        "/api/stations",
+        json={"name": "Lockable station", "address": "Station address"},
+    )
+    assert created.status_code == 201, created.text
+    station_id = created.json()["id"]
+
+    owner_lock = client.put(f"/api/stations/{station_id}", json={"status": "locked"})
+    assert owner_lock.status_code == 403, owner_lock.text
+
+    client.post("/api/auth/logout")
+    admin = user_factory(email="lock-admin@example.com", password=PASSWORD, role_name="admin")
+    login(client, admin)
+    admin_lock = client.put(f"/api/stations/{station_id}", json={"status": "locked"})
+    assert admin_lock.status_code == 200, admin_lock.text
+    assert admin_lock.json()["status"] == "locked"
+    assert 'value="locked"' in client.get(f"/stations/{station_id}/edit").text
+
+    client.post("/api/auth/logout")
+    login(client, owner)
+    owner_edit = client.get(f"/stations/{station_id}/edit")
+    assert owner_edit.status_code == 200, owner_edit.text
+    assert 'value="locked" selected disabled' in owner_edit.text
+    owner_unlock = client.put(f"/api/stations/{station_id}", json={"status": "active"})
+    assert owner_unlock.status_code == 403, owner_unlock.text
 
 
 def test_owner_cannot_list_charge_points_from_another_owner(client, db_session, user_factory) -> None:

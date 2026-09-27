@@ -11,16 +11,18 @@
   const PAGE_SIZE = 10;
   const canManageStations = document.getElementById('stations-page')?.dataset.canManageStations === 'true';
 
-  // ── Labels & classes trạng thái (khớp schema stations: active/inactive/maintenance) ──
+  // ── Labels & classes trạng thái ──
   const STATUS_LABELS = {
     active:      'Hoạt động',
     inactive:    'Tạm dừng',
     maintenance: 'Bảo trì',
+    locked:      'Bị quản trị khóa',
   };
   const STATUS_CLASS = {
     active:      'badge--online',
     inactive:    'badge--offline',
     maintenance: 'badge--warning',
+    locked:      'badge--offline',
   };
 
   // ── Tải danh sách trạm từ API ──

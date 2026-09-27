@@ -58,22 +58,30 @@ class SimpleSimulator:
         self.last_heartbeat = time.time()
         self._pending_calls: dict[str, asyncio.Future] = {}
         self._receiver_task: asyncio.Task | None = None
+        self._reboot_requested = False
+        self._disconnect_event = asyncio.Event()
 
     async def connect(self):
         """Kết nối WebSocket đến server."""
         import websockets
-        async with websockets.connect(self.uri, subprotocols=["ocpp1.6"]) as ws:
-            self.ws = ws
-            self.connected = True
-            print(f"[Simulator] Connected to {self.uri}")
-            self._receiver_task = asyncio.create_task(self._receive_loop())
-            try:
-                await self._run_loop()
-            finally:
-                self.connected = False
-                if not self._receiver_task.done():
-                    self._receiver_task.cancel()
+        while True:
+            self._disconnect_event.clear()
+            self._reboot_requested = False
+            async with websockets.connect(self.uri, subprotocols=["ocpp1.6"]) as ws:
+                self.ws = ws
+                self.connected = True
+                print(f"[Simulator] Connected to {self.uri}")
+                self._receiver_task = asyncio.create_task(self._receive_loop())
+                try:
+                    await self._run_loop()
+                finally:
+                    self.connected = False
+                    if not self._receiver_task.done():
+                        self._receiver_task.cancel()
                     await asyncio.gather(self._receiver_task, return_exceptions=True)
+            if not self._reboot_requested:
+                return
+            await asyncio.sleep(1)
 
     async def _call(self, action: str, payload: dict | None = None, timeout: float = 5.0) -> dict:
         """Send a CALL and return only its matching CALLRESULT payload."""
@@ -107,10 +115,15 @@ class SimpleSimulator:
                     _, message_id, action, _payload = data
                     if action == "Reset":
                         await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
+                        self._reboot_requested = True
+                        self._disconnect_event.set()
+                        return
         except websockets.ConnectionClosed:
             self.connected = False
+            self._disconnect_event.set()
         except Exception as exc:
             self.connected = False
+            self._disconnect_event.set()
             for future in self._pending_calls.values():
                 if not future.done():
                     future.set_exception(exc)
@@ -132,10 +145,22 @@ class SimpleSimulator:
             "status": "Available",
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         })
+        await self._call("StatusNotification", {
+            "connectorId": 1,
+            "errorCode": "NoError",
+            "status": "Available",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
         print(f"[Simulator] Boot accepted, interval={heartbeat_interval}s")
 
         while self.connected:
-            await asyncio.sleep(heartbeat_interval)
+            try:
+                await asyncio.wait_for(self._disconnect_event.wait(), timeout=heartbeat_interval)
+                return
+            except asyncio.TimeoutError:
+                pass
+            if not self.connected:
+                return
             await self._call("Heartbeat")
             self.last_heartbeat = time.time()
 

@@ -43,7 +43,7 @@
     <div class="stat-card__sub">trụ đang quản lý</div>
   </div>
   <div class="stat-card stat-card--green">
-    <div class="stat-card__label">Đang sạc</div>
+    <div class="stat-card__label">Đầu nối bận</div>
     <div class="stat-card__value" id="mon-charging">—</div>
     <div class="stat-card__sub">đầu nối hoạt động</div>
   </div>
@@ -69,11 +69,13 @@
   </div>
   <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;" aria-label="Lọc trạng thái">
     <option value="">Tất cả trạng thái</option>
-    <option value="available">Sẵn sàng</option>
-    <option value="charging">Đang sạc</option>
+    <option value="online">Trực tuyến</option>
     <option value="offline">Ngoại tuyến</option>
-    <option value="fault">Lỗi</option>
-    <option value="finishing">Kết thúc</option>
+    <option value="rảnh">Sẵn sàng</option>
+    <option value="bận">Đang bận</option>
+    <option value="đặt chỗ">Đã đặt chỗ</option>
+    <option value="lỗi">Lỗi</option>
+    <option value="unknown">Chưa rõ</option>
   </select>
   <div class="view-toggle" role="group" aria-label="Chế độ xem">
     <button class="view-toggle__btn is-active" id="view-grid" type="button" aria-pressed="true" title="Xem dạng lưới">
@@ -92,7 +94,7 @@
 </div>
 
 <!-- Grid container -->
-<div id="monitoring-grid" class="monitoring-grid" aria-label="Lưới trạm sạc" aria-live="polite">
+<div id="monitoring-grid" class="monitoring-grid" data-can-reset="{{ 'true' if can_reset else 'false' }}" aria-label="Lưới trạm sạc" aria-live="polite">
   <!-- Filled by JS from SSE or API -->
   <div class="loading-state" id="mon-loading">
     <div class="spinner spinner--lg" aria-hidden="true"></div>

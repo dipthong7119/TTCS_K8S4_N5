@@ -15,7 +15,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header" id="stations-page" data-can-manage-stations="{{ 'true' if can_manage_stations else 'false' }}">
+<div class="page-header" id="stations-page" data-can-manage-stations="{{ 'true' if can_manage_stations else 'false' }}"
+     data-can-lock-stations="{{ 'true' if can_lock_stations else 'false' }}">
   <div class="page-header__info">
     <h1 class="page-header__title">Trạm sạc</h1>
     <p class="page-header__subtitle">Quản lý toàn bộ trạm và trụ sạc của bạn</p>
@@ -94,6 +95,7 @@
         <option value="active">Hoạt động</option>
         <option value="inactive">Tạm dừng</option>
         <option value="maintenance">Bảo trì</option>
+        {% if can_lock_stations %}<option value="locked">Bị quản trị khóa</option>{% endif %}
       </select>
       <button class="btn btn--secondary btn--sm" id="btn-refresh" type="button"
               aria-label="Làm mới danh sách">

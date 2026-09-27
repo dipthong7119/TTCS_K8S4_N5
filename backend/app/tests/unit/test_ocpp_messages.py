@@ -67,8 +67,19 @@ def test_idempotency(db_session):
     db_session.commit()
     
     raw = pack_call("dup1", "Heartbeat", {})
-    resp1 = handle_ocpp_message(db_session, "CP01", raw)
-    resp2 = handle_ocpp_message(db_session, "CP01", raw)
-    
-    assert resp1 == resp2
-    assert db_session.query(OcppMessage).filter_by(msg_id="dup1").count() == 1
+    first_response = handle_ocpp_message(db_session, "CP01", raw)
+    engine = db_session.get_bind()
+    db_session.close()
+
+    # Simulate a process/session restart: the cached response must be read from
+    # the database and remain stable across five deliveries.
+    restarted_session = sessionmaker(bind=engine)()
+    try:
+        replayed = [
+            handle_ocpp_message(restarted_session, "CP01", raw)
+            for _ in range(5)
+        ]
+        assert all(response == first_response for response in replayed)
+        assert restarted_session.query(OcppMessage).filter_by(msg_id="dup1").count() == 1
+    finally:
+        restarted_session.close()
