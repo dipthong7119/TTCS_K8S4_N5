@@ -9,7 +9,7 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 
 ---
 
-## 👥 Thành viên nhóm
+## Thành viên nhóm
 
 | Vai trò | Thành viên |
 |---|---|
@@ -20,7 +20,7 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 
 ---
 
-## 🚀 Khởi chạy nhanh
+## Khởi chạy nhanh
 
 ### Yêu cầu môi trường
 
@@ -55,6 +55,7 @@ sẵn sàng rồi tự chạy Alembic trước khi mở cổng HTTP.
 .\run.ps1
 ```
 
+<<<<<<< HEAD
 Lần đầu script tạo `.venv`, cài thư viện, lấy `.env` từ `.env.example` nếu chưa có,
 chạy Alembic rồi khởi động server. Tắt bằng `Ctrl+C`; ứng dụng thoát gọn không in
 traceback `KeyboardInterrupt`.
@@ -87,13 +88,17 @@ Push-Location backend
 Pop-Location
 
 .\.venv\Scripts\python.exe run.py
+=======
+```bash
+.\run.ps1
+>>>>>>> 3787f4df84a36d0ca7d5adca9aaaa7805c5b1943
 ```
 
 ---
 
-## 🔑 Tài khoản đăng nhập demo
+## Tài khoản đăng nhập demo
 
-> ⚠️ Các tài khoản dưới đây dùng cho môi trường **phát triển / demo** cục bộ.
+> Các tài khoản dưới đây dùng cho môi trường **phát triển / demo** cục bộ.
 > **Không dùng trên môi trường production.**
 
 | Vai trò | Email | Mật khẩu | Quyền truy cập |
@@ -123,7 +128,7 @@ mình; tài xế chỉ xem phiên của mình. Nhật ký kiểm toán chỉ dà
 
 ---
 
-## 🗄️ Cơ sở dữ liệu
+## Cơ sở dữ liệu
 
 ### Các bảng hiện có
 
@@ -178,7 +183,7 @@ alembic downgrade base
 
 ---
 
-## 📁 Cấu trúc thư mục
+## Cấu trúc thư mục
 
 ```
 TTCS_K8S4_N5/
@@ -222,7 +227,7 @@ TTCS_K8S4_N5/
 
 ---
 
-## 🌿 Biến môi trường
+## Biến môi trường
 
 Tất cả biến được định nghĩa trong `backend/app/config.py` — **không rải `os.environ` khắp nơi**.
 
@@ -247,7 +252,7 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 
 ---
 
-## ⚙️ CI/CD & Deploy
+## CI/CD & Deploy
 
 Pipeline GitHub Actions gồm 2 workflow:
 
@@ -268,7 +273,7 @@ Pipeline GitHub Actions gồm 2 workflow:
 
 ---
 
-## 📐 Quy tắc làm việc nhóm
+## Quy tắc làm việc nhóm
 
 1. **Trước khi tạo file mới** — tra `prompts/01_CODEBASE_MAP.md` xem file đó thuộc thư mục nào.
 2. **Không hardcode bí mật** — mọi key/password đọc qua `config.py` từ biến môi trường.
