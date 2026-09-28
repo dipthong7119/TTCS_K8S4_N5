@@ -21,3 +21,16 @@
 .active-session-banner__right { text-align: right; }
 .active-session-banner__kwh   { font-size: var(--font-size-xl); font-weight: 800; letter-spacing: -.02em; }
 .active-session-banner__duration { font-size: var(--font-size-sm); opacity: .8; }
+
+.audit-filters { align-items: end; gap: var(--space-3); margin-bottom: var(--space-4); }
+.audit-filter { display: grid; gap: 6px; min-width: 160px; color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 600; }
+.audit-filter .form-input { min-width: 160px; }
+.audit-pagination { display: flex; align-items: center; justify-content: space-between; }
+.audit-subtext { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.audit-nowrap { white-space: nowrap; }
+.audit-details { min-width: 220px; max-width: 420px; overflow-wrap: anywhere; color: var(--color-text-secondary); font-family: monospace; font-size: var(--font-size-xs); }
+
+@media (max-width: 720px) {
+  .audit-filters { align-items: stretch; }
+  .audit-filter, .audit-filter .form-input { width: 100%; }
+}

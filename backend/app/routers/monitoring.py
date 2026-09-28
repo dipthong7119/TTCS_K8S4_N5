@@ -38,15 +38,39 @@ def notify_status_change(station_id: int, charge_points_data: list, owner_id: in
                 continue
 
 
-@router.get("/sse", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+def notify_session_change(user_id: int | None, owner_id: int | None, session_id: int) -> None:
+    event = {"event": "session_update", "data": json.dumps({"session_id": session_id})}
+    for subscriber in tuple(sse_clients):
+        if (
+            subscriber["global_access"]
+            or (owner_id is not None and subscriber["owner_id"] == owner_id)
+            or (user_id is not None and subscriber["driver_id"] == user_id)
+        ):
+            queue = subscriber["queue"]
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                continue
+
+
+@router.get(
+    "/sse",
+    dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))],
+)
 async def monitoring_sse(
     request: Request,
-    current_user: User = Depends(require_role("admin", "station_owner", "operator")),
+    current_user: User = Depends(require_role("admin", "station_owner", "operator", "driver")),
 ):
     roles = [role.name for role in current_user.roles]
     subscriber = {
         "queue": asyncio.Queue(maxsize=SSE_QUEUE_LIMIT),
-        "owner_id": current_user.id,
+        "owner_id": current_user.id if "station_owner" in roles else None,
+        "driver_id": current_user.id if "driver" in roles else None,
         "global_access": bool({"admin", "operator"}.intersection(roles)),
     }
     sse_clients.append(subscriber)

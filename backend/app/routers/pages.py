@@ -153,17 +153,37 @@ async def edit_station_page(
 
 @router.get("/sessions")
 async def sessions_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "admin", "operator", "accountant")
+    roles = _require_any_role(current_user, "admin", "operator", "accountant", "station_owner")
     return templates.TemplateResponse(
-        request, "sessions/my_session.html", _page_context(request, current_user)
+        request,
+        "sessions/my_session.html",
+        _page_context(
+            request,
+            current_user,
+            is_global_sessions=True,
+            show_driver_column=True,
+            can_view_all_sessions=bool({"admin", "operator", "accountant"}.intersection(roles)),
+            can_subscribe_sessions=bool({"admin", "operator", "station_owner", "driver"}.intersection(roles)),
+            can_remote_stop=bool({"admin", "operator"}.intersection(roles)),
+        ),
     )
 
 
 @router.get("/sessions/mine")
 async def my_sessions_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "admin", "driver")
+    _require_any_role(current_user, "driver")
     return templates.TemplateResponse(
-        request, "sessions/my_session.html", _page_context(request, current_user)
+        request,
+        "sessions/my_session.html",
+        _page_context(
+            request,
+            current_user,
+            is_global_sessions=False,
+            show_driver_column=False,
+            can_view_all_sessions=False,
+            can_subscribe_sessions=True,
+            can_remote_stop=False,
+        ),
     )
 
 
@@ -172,6 +192,14 @@ async def anomalies_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "operator")
     return templates.TemplateResponse(
         request, "sessions/anomaly_list.html", _page_context(request, current_user)
+    )
+
+
+@router.get("/audit")
+async def audit_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "sessions/audit.html", _page_context(request, current_user)
     )
 
 

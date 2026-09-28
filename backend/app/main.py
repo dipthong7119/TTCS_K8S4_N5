@@ -15,12 +15,14 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
+from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.charge_points import router as charge_points_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
 from app.routers.remote import router as remote_router
+from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
 
 
@@ -36,6 +38,13 @@ async def lifespan(app: FastAPI):
         cwd=str(backend_dir),
         check=True,
     )
+
+    if settings.APP_ENV == "development":
+        subprocess.run(
+            [sys.executable, "seed_data.py"],
+            cwd=str(backend_dir),
+            check=True,
+        )
 
     # T-26: Start background job
 
@@ -90,6 +99,8 @@ app.include_router(charge_points_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api/monitoring")
 app.include_router(ocpp_router)
 app.include_router(remote_router, prefix="/api")
+app.include_router(sessions_router, prefix="/api")
+app.include_router(audit_router, prefix="/api")
 
 app.include_router(pages_router)
 

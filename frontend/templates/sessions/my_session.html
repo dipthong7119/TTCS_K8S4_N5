@@ -1,13 +1,13 @@
 ﻿{% extends "base.html" %}
-{% set active_page = "my-sessions" %}
+{% set active_page = "sessions" if is_global_sessions else "my-sessions" %}
 
-{% block title %}Lịch sử sạc của tôi{% endblock %}
+{% block title %}{{ 'Danh sách phiên sạc' if is_global_sessions else 'Lịch sử sạc của tôi' }}{% endblock %}
 {% block meta_description %}Xem toàn bộ lịch sử phiên sạc xe điện của bạn{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
 <span class="sep" aria-hidden="true">/</span>
-<span aria-current="page">Lịch sử sạc</span>
+<span aria-current="page">{{ 'Phiên sạc' if is_global_sessions else 'Lịch sử sạc của tôi' }}</span>
 {% endblock %}
 
 {% block extra_css %}
@@ -15,10 +15,13 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" id="sessions-page" data-scope="{{ 'all' if is_global_sessions else 'mine' }}" data-column-count="{{ 8 + (1 if show_driver_column else 0) + (1 if can_remote_stop else 0) }}" data-live-updates="{{ 'true' if can_subscribe_sessions else 'false' }}" data-can-remote-stop="{{ 'true' if can_remote_stop else 'false' }}">
   <div class="page-header__info">
-    <h1 class="page-header__title">Lịch sử sạc của tôi</h1>
-    <p class="page-header__subtitle">Xem chi tiết từng phiên sạc và mức tiêu thụ điện</p>
+    <h1 class="page-header__title">{{ 'Danh sách phiên sạc' if is_global_sessions else 'Lịch sử sạc của tôi' }}</h1>
+    <p class="page-header__subtitle">
+      {% if can_view_all_sessions %}Theo dõi phiên sạc trên toàn hệ thống.{% elif is_global_sessions %}Theo dõi phiên sạc tại các trạm bạn sở hữu.{% else %}Xem các phiên sạc gắn với tài khoản tài xế của bạn.{% endif %}
+      Chi phí sẽ hiển thị sau khi hệ thống có cấu hình biểu giá.
+    </p>
   </div>
 </div>
 
@@ -50,6 +53,7 @@
     <option value="completed">Hoàn thành</option>
     <option value="active">Đang sạc</option>
     <option value="anomaly">Bất thường</option>
+    <option value="needs_review">Cần xem xét</option>
   </select>
 </div>
 
@@ -68,7 +72,7 @@
   <div class="stat-card stat-card--purple">
     <div class="stat-card__label">Tổng chi</div>
     <div class="stat-card__value" id="s-cost">—</div>
-    <div class="stat-card__sub">VNĐ đã thanh toán</div>
+    <div class="stat-card__sub">chưa có cấu hình biểu giá</div>
   </div>
 </div>
 
@@ -84,16 +88,18 @@
         <tr>
           <th scope="col">Mã phiên</th>
           <th scope="col">Trạm / Trụ</th>
+          {% if show_driver_column %}<th scope="col">Tài xế</th>{% endif %}
           <th scope="col">Bắt đầu</th>
           <th scope="col">Kết thúc</th>
           <th scope="col">Thời gian</th>
           <th scope="col">kWh</th>
           <th scope="col">Chi phí</th>
           <th scope="col">Trạng thái</th>
+          {% if can_remote_stop %}<th scope="col">Thao tác</th>{% endif %}
         </tr>
       </thead>
       <tbody id="sessions-tbody">
-        <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
+        <tr><td colspan="{{ 8 + (1 if show_driver_column else 0) + (1 if can_remote_stop else 0) }}" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
@@ -121,6 +127,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sse_client.js"></script>
 <script src="/static/js/pages/my_session.js"></script>
 {% endblock %}

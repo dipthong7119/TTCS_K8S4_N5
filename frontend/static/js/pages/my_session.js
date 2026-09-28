@@ -8,6 +8,10 @@
   let _page = 1;
   let _activeTimer = null;
   let _activeStart = null;
+  const _pageRoot = document.getElementById('sessions-page');
+  const _isGlobal = _pageRoot?.dataset.scope === 'all';
+  const _columnCount = Number(_pageRoot?.dataset.columnCount || 8);
+  const _canRemoteStop = _pageRoot?.dataset.canRemoteStop === 'true';
 
   function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -17,7 +21,7 @@
   }
 
   function fmtVND(amountInt) {
-    if (amountInt == null) return '—';
+    if (amountInt == null) return 'Chưa tính';
     return new Intl.NumberFormat('vi-VN', { style:'currency', currency:'VND' }).format(amountInt);
   }
 
@@ -32,7 +36,8 @@
     const period = document.getElementById('session-period').value;
     const status = document.getElementById('session-status-filter').value;
     try {
-      const data = await ApiClient.listMySessions({ days: period, status, page: _page, page_size: PAGE_SIZE });
+      const list = _isGlobal ? ApiClient.listAllSessions : ApiClient.listMySessions;
+      const data = await list({ days: period, status, page: _page, page_size: PAGE_SIZE });
       const items = data.items || data;
       renderTable(items);
       renderStats(data);
@@ -40,6 +45,8 @@
       document.getElementById('session-count').textContent = `${data.total || items.length} phiên`;
       checkActiveSession(items);
     } catch (err) {
+      document.getElementById('sessions-tbody').innerHTML = `<tr><td colspan="${_columnCount}" class="text-center">${escHtml(err.message || 'Không tải được phiên sạc')}</td></tr>`;
+      document.getElementById('session-count').textContent = 'Không tải được dữ liệu';
       showToast(err.message || 'Lỗi tải phiên sạc', 'error');
     }
   }
@@ -51,7 +58,8 @@
       banner.style.display = 'flex';
       document.getElementById('active-session-meta').textContent =
         `${active.station_name || ''} / ${active.charge_point_code || ''}`;
-      document.getElementById('active-kwh').textContent = `${(active.kwh || 0).toFixed(3)} kWh`;
+      document.getElementById('active-kwh').textContent = active.live_kwh != null
+        ? `${active.live_kwh.toFixed(3)} kWh` : 'Chưa có số đo';
       _activeStart = new Date(active.started_at);
       startDurationTimer();
     } else {
@@ -70,32 +78,48 @@
     }, 1000);
   }
 
-  const STATUS_LABEL = { completed:'Hoàn thành', active:'Đang sạc', charging:'Đang sạc', anomaly:'Bất thường' };
-  const STATUS_CLASS = { completed:'badge--available', active:'badge--charging', charging:'badge--charging', anomaly:'badge--anomaly' };
+  const STATUS_LABEL = { completed:'Hoàn thành', active:'Đang sạc', charging:'Đang sạc', anomaly:'Bất thường', needs_review:'Cần xem xét' };
+  const STATUS_CLASS = { completed:'badge--available', active:'badge--charging', charging:'badge--charging', anomaly:'badge--anomaly', needs_review:'badge--anomaly' };
 
   function renderTable(sessions) {
     const tbody = document.getElementById('sessions-tbody');
     if (!sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-state__icon">⚡</div><div class="empty-state__title">Chưa có phiên nào</div><div class="empty-state__desc">Các phiên sạc của bạn sẽ xuất hiện ở đây</div></div></td></tr>';
+      tbody.innerHTML = `<tr><td colspan="${_columnCount}"><div class="empty-state"><div class="empty-state__icon">⚡</div><div class="empty-state__title">Chưa có phiên nào</div><div class="empty-state__desc">Dữ liệu phiên sạc sẽ xuất hiện tại đây khi có giao dịch.</div></div></td></tr>`;
       return;
     }
     tbody.innerHTML = sessions.map(s => {
       const durSec = s.duration_seconds;
       const dur = durSec != null ? fmtDuration(durSec) : '—';
       return `<tr style="cursor:pointer;" data-session-id="${s.id}">
-        <td><code style="font-family:monospace;font-size:var(--font-size-xs);background:var(--color-surface-alt);padding:2px 6px;border-radius:4px;">#${s.id}</code></td>
+        <td><code style="font-family:monospace;font-size:var(--font-size-xs);background:var(--color-surface-alt);padding:2px 6px;border-radius:4px;">#${s.id}</code>${s.is_demo ? '<small class="audit-subtext">Dữ liệu mẫu</small>' : ''}</td>
         <td>${escHtml(s.station_name||'—')} / <span style="font-family:monospace;">${escHtml(s.charge_point_code||'—')}</span></td>
+        ${_isGlobal ? `<td>${escHtml(s.driver_name || '—')}</td>` : ''}
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(s.started_at)}</td>
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${s.ended_at ? fmtDatetime(s.ended_at) : '<span style="color:var(--color-charging)">Đang sạc</span>'}</td>
         <td style="font-size:var(--font-size-xs);">${dur}</td>
-        <td style="font-weight:600;">${s.kwh != null ? s.kwh.toFixed(3) : '—'}</td>
+        <td style="font-weight:600;">${s.ended_at ? (s.kwh != null ? s.kwh.toFixed(3) : '—') : (s.live_kwh != null ? s.live_kwh.toFixed(3) : '—')}</td>
         <td>${fmtVND(s.cost_vnd)}</td>
         <td><span class="badge ${STATUS_CLASS[s.status]||'badge--neutral'}">${STATUS_LABEL[s.status]||'Không rõ'}</span></td>
+        ${_canRemoteStop ? `<td>${s.status === 'active' ? (s.remote_stop_requested_at ? '<button class="btn btn--secondary btn--sm" type="button" disabled>Đang chờ trụ</button>' : `<button class="btn btn--danger btn--sm" type="button" data-stop-session="${s.id}">Dừng từ xa</button>`) : '—'}</td>` : ''}
       </tr>`;
     }).join('');
 
     tbody.querySelectorAll('[data-session-id]').forEach(row => {
       row.addEventListener('click', () => openDetail(sessions.find(s => s.id == row.dataset.sessionId)));
+    });
+    tbody.querySelectorAll('[data-stop-session]').forEach(button => {
+      button.addEventListener('click', async event => {
+        event.stopPropagation();
+        if (!window.confirm(`Gửi lệnh dừng phiên #${button.dataset.stopSession} tới trụ?`)) return;
+        button.disabled = true;
+        try {
+          const result = await ApiClient.remoteStop(button.dataset.stopSession);
+          showToast(result.message || 'Đã gửi lệnh dừng, đang chờ trụ xác nhận.', 'success');
+        } catch (err) {
+          showToast(err.message || 'Gửi lệnh dừng thất bại', 'error');
+          button.disabled = false;
+        }
+      });
     });
   }
 
@@ -103,7 +127,7 @@
     document.getElementById('s-total').textContent = data.total || '0';
     document.getElementById('s-kwh').textContent = data.total_kwh != null ? data.total_kwh.toFixed(2) : '—';
     document.getElementById('s-cost').textContent = data.total_cost_vnd != null
-      ? new Intl.NumberFormat('vi-VN').format(data.total_cost_vnd) + ' ₫' : '—';
+      ? new Intl.NumberFormat('vi-VN').format(data.total_cost_vnd) + ' ₫' : 'Chưa tính';
   }
 
   function renderPagination(total) {
@@ -128,10 +152,11 @@
       <dl style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3) var(--space-6);">
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạm</dt><dd>${escHtml(session.station_name||'—')}</dd></div>
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Mã trụ</dt><dd><code style="font-family:monospace;">${escHtml(session.charge_point_code||'—')}</code></dd></div>
+        ${_isGlobal ? `<div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Tài xế</dt><dd>${escHtml(session.driver_name||'—')}</dd></div>` : ''}
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Bắt đầu</dt><dd>${fmtDatetime(session.started_at)}</dd></div>
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Kết thúc</dt><dd>${session.ended_at ? fmtDatetime(session.ended_at) : 'Đang sạc'}</dd></div>
-        <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Điện năng</dt><dd style="font-weight:700;">${session.kwh != null ? session.kwh.toFixed(3) + ' kWh' : '—'}</dd></div>
-        <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Chi phí</dt><dd style="font-weight:700;">${session.cost_vnd != null ? new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(session.cost_vnd) : '—'}</dd></div>
+        <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Điện năng</dt><dd style="font-weight:700;">${session.ended_at ? (session.kwh != null ? session.kwh.toFixed(3) + ' kWh' : '—') : (session.live_kwh != null ? session.live_kwh.toFixed(3) + ' kWh' : 'Chưa có số đo')}</dd></div>
+        <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Chi phí</dt><dd style="font-weight:700;">${session.cost_vnd != null ? new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(session.cost_vnd) : 'Chưa có biểu giá'}</dd></div>
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạng thái</dt><dd><span class="badge ${STATUS_CLASS[session.status]||'badge--neutral'}">${STATUS_LABEL[session.status]||'Không rõ'}</span></dd></div>
         <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Lý do kết thúc</dt><dd>${escHtml(session.stop_reason||'—')}</dd></div>
       </dl>`;
@@ -145,8 +170,9 @@
     document.getElementById('session-modal-close')?.addEventListener('click', () => document.getElementById('session-detail-modal').classList.add('is-hidden'));
     document.getElementById('session-detail-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('is-hidden'); });
 
-    // SSE for active session update
-    SseClient.connect('/api/monitoring/sse');
-    SseClient.on('session_update', () => loadSessions());
+    if (_pageRoot?.dataset.liveUpdates === 'true') {
+      SseClient.connect('/api/monitoring/sse');
+      SseClient.on('session_update', () => loadSessions());
+    }
   });
 })();

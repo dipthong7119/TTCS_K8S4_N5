@@ -111,6 +111,12 @@ Pop-Location
 Tài khoản tài xế demo được cấp thẻ giả lập `DEMO-DRIVER-<ID người dùng>` khi chạy
 migration; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVER-0005`.
 
+Khi `APP_ENV=development`, lần khởi động đầu sẽ tự thêm các trạm/trụ/đầu nối còn
+thiếu và hai phiên lịch sử mẫu cho tài xế. Phiên mẫu được đánh dấu trong giao diện;
+không có chi phí mẫu vì dự án chưa cấu hình biểu giá. Admin, vận hành và kế toán
+xem phiên toàn mạng; chủ trạm chỉ xem phiên thuộc trạm mình; tài xế chỉ xem phiên
+của mình. Nhật ký kiểm toán chỉ dành cho admin và vận hành.
+
 ---
 
 ## 🗄️ Cơ sở dữ liệu
@@ -129,6 +135,10 @@ migration; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVE
 | `connector_errors` | `8b30b78eea0a` | Nhật ký lỗi đầu nối, chỉ ghi thêm |
 | `ocpp_messages` | `3c710c686e60`, `a6d2f891c104` | Chống xử lý trùng theo cặp mã trụ/mã tin nhắn |
 | `id_tags` | `578e5d2ba886`, `c7aa03e59214` | Thẻ giả lập liên kết với tài xế, có trạng thái khoá và hạn dùng |
+| `charging_sessions` | `e81f0a6b2c44` | Giao dịch OCPP bắt đầu/kết thúc, chỉ mục một phiên mở trên mỗi đầu nối |
+| `meter_values` | `e81f0a6b2c44` | Số đo OCPP đã nhận diện, tra cứu theo phiên và thời điểm |
+| `orphan_messages` | `e81f0a6b2c44` | StopTransaction/MeterValues chưa ghép được với phiên để đối chiếu |
+| `audit_logs` | `e81f0a6b2c44` | Nhật ký thao tác chỉ ghi thêm, lọc theo trụ/người/thời gian |
 
 Đầu nối mới bắt đầu ở trạng thái `unavailable` cho tới khi nhận `StatusNotification`.
 Đăng nhập trả trang chính theo vai trò; chủ trạm chỉ nhận danh sách dữ liệu thuộc sở hữu của mình.
@@ -225,6 +235,8 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | `OCPP_HEARTBEAT_MULTIPLIER` | `2` | Số chu kỳ trước khi coi là ngoại tuyến |
 | `OCPP_MESSAGE_RETENTION_DAYS` | `7` | Thời gian lưu khóa chống trùng OCPP |
 | `OCPP_REMOTE_CALL_TIMEOUT_SECONDS` | `30` | Thời gian chờ câu trả lời lệnh Reset |
+| `SESSION_OFFLINE_GRACE_SECONDS` | `21600` | Thời gian trụ ngoại tuyến trước khi phiên thành bất thường (6 giờ) |
+| `REMOTE_STOP_REVIEW_SECONDS` | `120` | Thời gian chờ StopTransaction sau lệnh dừng từ xa |
 
 ---
 

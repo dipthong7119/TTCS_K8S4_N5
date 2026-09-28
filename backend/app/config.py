@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     OCPP_MESSAGE_RETENTION_DAYS: int = 7
     OCPP_JOB_POLL_SECONDS: int = 60
     OCPP_REMOTE_CALL_TIMEOUT_SECONDS: int = 30
+    SESSION_OFFLINE_GRACE_SECONDS: int = 21600
+    REMOTE_STOP_REVIEW_SECONDS: int = 120
 
     model_config = {
         "env_file": str(ENV_FILE),

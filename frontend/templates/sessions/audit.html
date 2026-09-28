@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set active_page = "audit" %}
+
+{% block title %}Nhật ký kiểm toán{% endblock %}
+{% block meta_description %}Tra cứu các thao tác vận hành và sự kiện phiên sạc{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Nhật ký kiểm toán</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header" id="audit-page">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Nhật ký kiểm toán</h1>
+    <p class="page-header__subtitle">Lịch sử chỉ đọc của thao tác Reset trụ sạc và dừng phiên từ xa.</p>
+  </div>
+</div>
+
+<form class="filters-bar audit-filters" id="audit-filters">
+  <label class="audit-filter">
+    <span>Mã trụ</span>
+    <input class="form-input" name="charge_point_code" maxlength="50" placeholder="Ví dụ CP_VINCOM_01" />
+  </label>
+  <label class="audit-filter">
+    <span>Người thực hiện</span>
+    <input class="form-input" name="actor" maxlength="255" placeholder="Tên hoặc email" />
+  </label>
+  <label class="audit-filter">
+    <span>Từ ngày</span>
+    <input class="form-input" type="date" name="date_from" />
+  </label>
+  <label class="audit-filter">
+    <span>Đến ngày</span>
+    <input class="form-input" type="date" name="date_to" />
+  </label>
+  <button class="btn btn--primary" type="submit">Lọc nhật ký</button>
+</form>
+
+<div class="card">
+  <div class="card__header">
+    <div class="card__title">Các sự kiện</div>
+    <span class="tag" id="audit-count">Đang tải...</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table" aria-label="Nhật ký kiểm toán">
+      <thead>
+        <tr>
+          <th scope="col">Thời điểm</th>
+          <th scope="col">Người thực hiện</th>
+          <th scope="col">Thao tác</th>
+          <th scope="col">Đối tượng</th>
+          <th scope="col">Mã trụ</th>
+          <th scope="col">Chi tiết</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody">
+        <tr><td colspan="6" class="text-center">Đang tải nhật ký...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card__footer audit-pagination">
+    <span id="audit-page-label">Trang 1</span>
+    <div class="pagination">
+      <button class="pagination__btn" id="audit-prev" type="button" aria-label="Trang trước">‹</button>
+      <button class="pagination__btn" id="audit-next" type="button" aria-label="Trang sau">›</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/audit.js"></script>
+{% endblock %}

@@ -18,6 +18,12 @@
   const REASON_LABEL = {
     offline: 'Trụ ngoại tuyến', negative_kwh: 'Số đo âm',
     no_stop: 'Không có StopTransaction', orphan: 'Orphan message',
+    concurrent_start: 'Đầu nối nhận phiên mới khi phiên cũ chưa đóng',
+    remote_stop_timeout: 'Trụ chưa gửi StopTransaction sau lệnh dừng',
+    start_blocked: 'Thẻ bị khóa hoặc không được phép',
+    start_invalid: 'Thẻ không hợp lệ',
+    start_expired: 'Thẻ hết hạn',
+    invalid_connector: 'Đầu nối chưa được đăng ký',
   };
 
   async function loadAnomalies() {
@@ -51,13 +57,13 @@
       <tr>
         <td><code style="font-family:monospace;font-size:var(--font-size-xs);background:var(--color-surface-alt);padding:2px 6px;border-radius:4px;">#${item.id}</code></td>
         <td>${escHtml(item.station_name||'—')} / <span style="font-family:monospace;">${escHtml(item.charge_point_code||'—')}</span></td>
-        <td style="font-size:var(--font-size-xs);">${escHtml(item.driver_id||'—')}</td>
+        <td style="font-size:var(--font-size-xs);">${escHtml(item.driver_name||'—')}</td>
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(item.started_at)}</td>
         <td><span class="badge badge--anomaly">${escHtml(REASON_LABEL[item.anomaly_reason]||item.anomaly_reason||'Bất thường')}</span></td>
         <td style="font-weight:600;">${item.kwh != null ? item.kwh.toFixed(3) : '—'}</td>
         <td class="text-right">
           <div style="display:flex;gap:var(--space-2);justify-content:flex-end;">
-            ${item.status === 'active' ? `<button class="btn btn--danger btn--sm" data-stop-id="${item.id}" data-stop-code="${escHtml(item.charge_point_code||'')}" type="button">Dừng từ xa</button>` : ''}
+            ${item.status === 'active' && item.charge_point_status === 'online' ? `<button class="btn btn--danger btn--sm" data-stop-id="${item.id}" data-stop-code="${escHtml(item.charge_point_code||'')}" type="button">Dừng từ xa</button>` : ''}
           </div>
         </td>
       </tr>`).join('');
@@ -101,6 +107,9 @@
     document.getElementById('anomaly-reason').addEventListener('change',  () => { _page = 1; loadAnomalies(); });
     document.getElementById('anomaly-period').addEventListener('change',  () => { _page = 1; loadAnomalies(); });
     document.getElementById('btn-refresh-anomalies')?.addEventListener('click', loadAnomalies);
+
+    SseClient.connect('/api/monitoring/sse');
+    SseClient.on('session_update', loadAnomalies);
 
     document.getElementById('remote-stop-close')?.addEventListener('click', closeRemoteStop);
     document.getElementById('remote-stop-cancel')?.addEventListener('click', closeRemoteStop);

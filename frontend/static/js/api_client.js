@@ -79,10 +79,14 @@ const ApiClient = (() => {
 
     // --- Sessions ---
     listMySessions:   (params = {}) => _request('GET', '/sessions/mine?' + new URLSearchParams(params)),
+    getCurrentSession: ()           => _request('GET', '/sessions/current'),
     listAllSessions:  (params = {}) => _request('GET', '/sessions?' + new URLSearchParams(params)),
     getSession:       (id)          => _request('GET', `/sessions/${id}`),
     remoteStop:       (id)          => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies:    (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
+
+    // --- Audit trail ---
+    listAuditLogs:    (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
 
     // --- Wallet ---
     getWallet:        ()            => _request('GET', '/wallet'),

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
@@ -9,6 +10,7 @@ from sqlalchemy.orm import joinedload
 from app.config import settings
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
+from app.models.charging_session import ChargingSession
 from app.models.station import Station
 from app.services.ocpp_status import station_status_payload
 
@@ -57,11 +59,72 @@ def expire_stale_charge_points_once(db) -> int:
     return len(stale_points)
 
 
+def review_stale_sessions_once(db) -> int:
+    """Mark disconnected or remotely-stopped transactions that missed closure."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    remote_cutoff = now - timedelta(seconds=settings.REMOTE_STOP_REVIEW_SECONDS)
+    offline_cutoff = now - timedelta(seconds=settings.SESSION_OFFLINE_GRACE_SECONDS)
+
+    timed_out_remote = (
+        db.query(ChargingSession)
+        .filter(
+            ChargingSession.status == "active",
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.remote_stop_requested_at.is_not(None),
+            ChargingSession.remote_stop_requested_at <= remote_cutoff,
+        )
+        .all()
+    )
+    changed = []
+    for session in timed_out_remote:
+        session.status = "needs_review"
+        session.anomaly_reason = "remote_stop_timeout"
+        changed.append(session)
+
+    offline_sessions = (
+        db.query(ChargingSession)
+        .join(ChargePoint, ChargingSession.charge_point_id == ChargePoint.id)
+        .filter(
+            ChargingSession.status == "active",
+            ChargingSession.ended_at.is_(None),
+            ChargePoint.status == "offline",
+            func.coalesce(ChargePoint.last_seen_at, ChargePoint.created_at) <= offline_cutoff,
+        )
+        .all()
+    )
+    for session in offline_sessions:
+        session.status = "anomaly"
+        session.anomaly_reason = "offline"
+        changed.append(session)
+
+    if not changed:
+        return 0
+    db.commit()
+
+    from app.routers.monitoring import notify_session_change
+
+    station_owner_ids = {
+        station_id: owner_id
+        for station_id, owner_id in db.query(Station.id, Station.owner_id).filter(
+            Station.id.in_({session.station_id for session in changed if session.station_id is not None})
+        )
+    }
+    for session in changed:
+        notify_session_change(
+            session.user_id,
+            station_owner_ids.get(session.station_id),
+            session.id,
+        )
+    logger.warning("Marked %s charging session(s) for review", len(changed))
+    return len(changed)
+
+
 async def check_offline_charge_points():
     while True:
         try:
             with SessionLocal() as db:
                 expire_stale_charge_points_once(db)
+                review_stale_sessions_once(db)
         except asyncio.CancelledError:
             raise
         except Exception:
