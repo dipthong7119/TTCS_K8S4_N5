@@ -1,6 +1,17 @@
 """Immutable cost breakdown captured when a charging session ends."""
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Index, JSON, String, false
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    false,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 

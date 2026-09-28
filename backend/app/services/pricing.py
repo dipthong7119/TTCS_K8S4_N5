@@ -1,7 +1,8 @@
 """Time-band charging prices using integer VND and cumulative meter readings."""
 
 from datetime import date, datetime, time, timezone
-from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from itertools import pairwise
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEMO_TARIFF_BANDS = (
@@ -95,14 +96,12 @@ def calculate_session_price(
         boundary_minutes.add(int(_band_value(band, "end_minute")))
 
     grouped_segments = {}
-    for (interval_start, wh_start), (interval_end, wh_end) in zip(
-        monotonic_points, monotonic_points[1:]
-    ):
+    for (interval_start, wh_start), (interval_end, wh_end) in pairwise(monotonic_points):
         duration_seconds = Decimal(str((interval_end - interval_start).total_seconds()))
         if duration_seconds <= 0 or wh_end < wh_start:
             continue
         cuts = [interval_start, *_tariff_boundaries(interval_start, interval_end, station_zone, boundary_minutes), interval_end]
-        for segment_start, segment_end in zip(cuts, cuts[1:]):
+        for segment_start, segment_end in pairwise(cuts):
             band = _band_at(segment_start, station_zone, ordered_bands)
             seconds = Decimal(str((segment_end - segment_start).total_seconds()))
             energy_wh = (wh_end - wh_start) * seconds / duration_seconds
@@ -124,7 +123,7 @@ def calculate_session_price(
         energy_wh = item["energy_wh"]
         amount_vnd = int(
             (energy_wh * Decimal(price) / Decimal(1000)).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
+                Decimal(1), rounding=ROUND_HALF_UP
             )
         )
         segments.append(

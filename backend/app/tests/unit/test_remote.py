@@ -59,6 +59,8 @@ def test_reset_offline():
     class MockUser:
         def __init__(self, id, roles):
             self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
             
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
@@ -74,6 +76,8 @@ def test_reset_online(monkeypatch):
     class MockUser:
         def __init__(self, id, roles):
             self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
             
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])

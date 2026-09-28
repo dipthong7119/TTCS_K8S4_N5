@@ -12,7 +12,11 @@ from app.database import get_db
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
-from app.services.wallet import list_driver_wallet_summaries, list_wallet_entries, wallet_totals
+from app.services.wallet import (
+    list_driver_wallet_summaries,
+    list_wallet_entries,
+    wallet_totals,
+)
 
 router = APIRouter(
     prefix="/wallet",

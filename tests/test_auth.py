@@ -2,11 +2,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.models.login_ip_attempt import LoginIPAttempt
 from app.models.user import User
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 WRONG_CREDENTIALS = "email ho\u1eb7c m\u1eadt kh\u1ea9u kh\u00f4ng \u0111\u00fang"
 ACCOUNT_LOCKED = "t\u00e0i kho\u1ea3n t\u1ea1m kho\u00e1 15 ph\u00fat"
