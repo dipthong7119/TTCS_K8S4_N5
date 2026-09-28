@@ -205,7 +205,8 @@ async def audit_page(request: Request, current_user: CurrentUser):
 
 @router.get("/wallet")
 async def wallet_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "admin", "accountant", "driver")
+    roles = _require_any_role(current_user, "admin", "accountant", "driver")
+    template_name = "wallet/admin_drivers.html" if "admin" in roles or "accountant" in roles else "wallet/wallet.html"
     return templates.TemplateResponse(
-        request, "wallet/wallet.html", _page_context(request, current_user)
+        request, template_name, _page_context(request, current_user)
     )

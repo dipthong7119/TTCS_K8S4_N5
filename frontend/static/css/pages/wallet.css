@@ -9,6 +9,13 @@
   .wallet-layout { grid-template-columns: 1fr; }
 }
 .wallet-right { display: flex; flex-direction: column; gap: var(--space-5); }
+.wallet-tariff-note { margin-bottom: var(--space-5); padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.wallet-tariff-note__heading { display: flex; justify-content: space-between; color: var(--color-text-secondary); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: .06em; }
+.wallet-tariff-note__bands { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-3) 0; }
+.wallet-tariff-note__bands span { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); align-items: center; font-size: var(--font-size-sm); }
+.wallet-tariff-note__bands b { font-weight: 500; color: var(--color-text-secondary); }
+.wallet-tariff-note__bands em { color: var(--color-text); font-style: normal; font-weight: 700; }
+.wallet-tariff-note > p { color: var(--color-text-muted); font-size: var(--font-size-xs); }
 
 .wallet-balance-card {
   background: linear-gradient(145deg, hsl(222,47%,14%) 0%, hsl(210,60%,22%) 100%);
@@ -43,25 +50,7 @@
 .wallet-balance-card__amount { font-size: 36px; font-weight: 800; color: white; letter-spacing: -.02em; margin-bottom: var(--space-1); }
 .wallet-balance-card__sub { font-size: var(--font-size-sm); color: hsla(215,25%,75%,.7); }
 .wallet-balance-card__actions { display: flex; gap: var(--space-3); }
-
-/* Top-up quick amount buttons */
-.quick-amounts {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2);
-}
-.quick-amount-btn {
-  padding: 10px;
-  background: var(--color-surface-alt);
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm); font-weight: 600;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-align: center;
-}
-.quick-amount-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-subtle); }
-.quick-amount-btn.is-selected { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+.wallet-topup-note { color: hsla(215,25%,85%,.8); font-size: var(--font-size-xs); margin: 0; flex: 1; }
 
 /* Ledger entry type */
 .ledger-credit { color: var(--color-online); font-weight: 700; }

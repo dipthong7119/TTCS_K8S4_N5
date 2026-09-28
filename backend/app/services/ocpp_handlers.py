@@ -20,6 +20,7 @@ from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
 from app.models.user import User
+from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
@@ -417,6 +418,7 @@ def handle_stop_transaction(db: Session, point: ChargePoint, msg_id: str, payloa
         session.energy_kwh = calculated_kwh
         session.status = "completed"
         session.anomaly_reason = None
+        finalize_session_billing(db, session, _normalize_meter_values(transaction_data, ended_at))
     else:
         session.energy_kwh = None
         session.status = "needs_review"

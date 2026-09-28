@@ -91,7 +91,8 @@ const ApiClient = (() => {
     // --- Wallet ---
     getWallet:        ()            => _request('GET', '/wallet'),
     listLedger:       (params = {}) => _request('GET', '/wallet/ledger?' + new URLSearchParams(params)),
-    topUp:            (amount)      => _request('POST', '/wallet/topup', { amount }),
+    listDriverWallets:(params = {}) => _request('GET', '/wallet/drivers?' + new URLSearchParams(params)),
+    manualTopUp:      (driverId, body) => _request('POST', `/wallet/drivers/${driverId}/topups`, body),
   };
 })();
 

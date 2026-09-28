@@ -11,6 +11,7 @@ from app.config import settings
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
+from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.station import Station
@@ -87,7 +88,8 @@ def _serialize_session(
         "meter_stop_wh": item.meter_stop_wh,
         "kwh": float(item.energy_kwh) if item.energy_kwh is not None else None,
         "live_kwh": live_kwh,
-        "cost_vnd": None,
+        "cost_vnd": item.invoice.total_vnd if item.invoice else None,
+        "invoice_segments": item.invoice.segments if item.invoice else None,
         "status": item.status,
         "stop_reason": item.stop_reason,
         "remote_stop_requested_at": item.remote_stop_requested_at.isoformat() + "Z"
@@ -128,6 +130,11 @@ def _list_sessions(
     total = query.count()
     # SQL SUM over nullable energy values returns None when no sessions have kWh.
     aggregate = query.with_entities(func.sum(ChargingSession.energy_kwh)).scalar()
+    aggregate_cost = (
+        query.outerjoin(ChargingInvoice, ChargingInvoice.session_id == ChargingSession.id)
+        .with_entities(func.coalesce(func.sum(ChargingInvoice.total_vnd), 0))
+        .scalar()
+    )
     rows = (
         query.order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
         .offset((page - 1) * page_size)
@@ -140,7 +147,7 @@ def _list_sessions(
         "page": page,
         "page_size": page_size,
         "total_kwh": float(aggregate) if aggregate is not None else 0.0,
-        "total_cost_vnd": None,
+        "total_cost_vnd": int(aggregate_cost or 0),
     }
 
 

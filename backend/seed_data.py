@@ -8,11 +8,15 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.audit_log import AuditLog
 from app.models.charge_point import ChargePoint, Connector
+from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
 from app.models.connector_error import ConnectorError
 from app.models.id_tag import IdTag
 from app.models.station import Station
+from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import User
+from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.pricing import DEMO_TARIFF_BANDS, DEMO_TARIFF_TIMEZONE, calculate_session_price
 
 SIMULATOR_CODES = tuple(f"SIM-{number:02d}" for number in range(1, 21))
 
@@ -396,6 +400,142 @@ def _ensure_audit_samples(
         counts["audit_logs"] += 1
 
 
+def _ensure_demo_tariffs(db: Session, stations: list[Station], counts: dict[str, int]) -> None:
+    effective_from = datetime(2000, 1, 1)
+    for station in stations:
+        tariff = (
+            db.query(StationTariff)
+            .filter(
+                StationTariff.station_id == station.id,
+                StationTariff.effective_from == effective_from,
+            )
+            .first()
+        )
+        if tariff is not None:
+            continue
+        tariff = StationTariff(
+            station_id=station.id,
+            name="Biểu giá demo",
+            timezone_name=DEMO_TARIFF_TIMEZONE,
+            effective_from=effective_from,
+            is_demo=True,
+        )
+        db.add(tariff)
+        db.flush()
+        db.add_all(
+            [
+                TariffBand(tariff_id=tariff.id, **band)
+                for band in DEMO_TARIFF_BANDS
+            ]
+        )
+        db.flush()
+        counts["tariffs"] += 1
+
+
+def _ensure_demo_wallet(
+    db: Session, driver: User, sessions: list[ChargingSession], counts: dict[str, int]
+) -> None:
+    topups = (
+        {
+            "key": f"demo-topup-opening-{driver.id}",
+            "receipt": f"DEMO-OPEN-{driver.id:04d}",
+            "amount": 500_000,
+            "days_ago": 150,
+        },
+        {
+            "key": f"demo-topup-recent-{driver.id}",
+            "receipt": f"DEMO-RECENT-{driver.id:04d}",
+            "amount": 100_000,
+            "days_ago": 30,
+        },
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for spec in topups:
+        exists = (
+            db.query(WalletLedgerEntry.id)
+            .filter(
+                (WalletLedgerEntry.idempotency_key == spec["key"])
+                | (WalletLedgerEntry.receipt_code == spec["receipt"])
+            )
+            .first()
+        )
+        if exists:
+            continue
+        db.add(
+            WalletLedgerEntry(
+                user_id=driver.id,
+                entry_type="demo_topup",
+                amount_vnd=spec["amount"],
+                idempotency_key=spec["key"],
+                receipt_code=spec["receipt"],
+                description="Nạp thử nghiệm (dữ liệu demo)",
+                created_at=now - timedelta(days=spec["days_ago"]),
+            )
+        )
+        counts["wallet_entries"] += 1
+
+    for session in sessions:
+        if session.status != "completed" or session.ended_at is None or session.meter_stop_wh is None:
+            continue
+        invoice = (
+            db.query(ChargingInvoice)
+            .filter(ChargingInvoice.session_id == session.id)
+            .first()
+        )
+        if invoice is None:
+            tariff = (
+                db.query(StationTariff)
+                .filter(
+                    StationTariff.station_id == session.station_id,
+                    StationTariff.effective_from <= session.started_at,
+                )
+                .order_by(StationTariff.effective_from.desc(), StationTariff.id.desc())
+                .first()
+            )
+            if tariff is None:
+                continue
+            breakdown = calculate_session_price(
+                started_at=session.started_at,
+                ended_at=session.ended_at,
+                meter_start_wh=session.meter_start_wh,
+                meter_stop_wh=session.meter_stop_wh,
+                meter_readings=[],
+                bands=tariff.bands,
+                timezone_name=tariff.timezone_name,
+            )
+            invoice = ChargingInvoice(
+                session_id=session.id,
+                tariff_id=tariff.id,
+                total_vnd=breakdown["total_vnd"],
+                segments=breakdown["segments"],
+                calculation_version="time-band-v1",
+                is_demo=True,
+                created_at=session.ended_at,
+            )
+            db.add(invoice)
+            db.flush()
+            counts["invoices"] += 1
+
+        if session.user_id is None or invoice.total_vnd <= 0:
+            continue
+        idempotency_key = f"session-charge:{session.id}"
+        if db.query(WalletLedgerEntry.id).filter_by(idempotency_key=idempotency_key).first():
+            continue
+        db.add(
+            WalletLedgerEntry(
+                user_id=session.user_id,
+                entry_type="session_charge",
+                amount_vnd=-invoice.total_vnd,
+                idempotency_key=idempotency_key,
+                reference_type="session",
+                reference_id=session.id,
+                description=f"Thanh toán phiên sạc tại {session.station_name}",
+                created_at=session.ended_at,
+            )
+        )
+        counts["wallet_entries"] += 1
+
+
 def seed_data(db: Session | None = None) -> None:
     """Add missing demo rows only; never replace existing user data."""
     if settings.APP_ENV != "development":
@@ -412,6 +552,9 @@ def seed_data(db: Session | None = None) -> None:
         "id_tags": 0,
         "sessions": 0,
         "audit_logs": 0,
+        "tariffs": 0,
+        "invoices": 0,
+        "wallet_entries": 0,
     }
     try:
         owner = db.query(User).filter(User.email == "owner@csms.local").first()
@@ -422,14 +565,18 @@ def seed_data(db: Session | None = None) -> None:
 
         now = datetime.now(UTC).replace(tzinfo=None)
         all_points: dict[str, ChargePoint] = {}
+        all_stations: list[Station] = []
         for station_spec in STATIONS:
             station = _ensure_station(db, owner, station_spec, counts)
+            all_stations.append(station)
             all_points.update(
                 _ensure_charge_points(db, station, station_spec["charge_points"], counts)
             )
 
         active_tag = _ensure_driver_tags(db, driver, counts)
-        _ensure_sessions(db, driver, active_tag, all_points, now, counts)
+        _ensure_demo_tariffs(db, all_stations, counts)
+        sessions = _ensure_sessions(db, driver, active_tag, all_points, now, counts)
+        _ensure_demo_wallet(db, driver, sessions, counts)
         _ensure_audit_samples(db, now, set(all_points), counts)
         db.commit()
         summary = ", ".join(f"{amount} {name}" for name, amount in counts.items() if amount)

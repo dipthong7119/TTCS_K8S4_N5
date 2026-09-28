@@ -20,6 +20,9 @@ COPY backend/app/ ./app/
 COPY backend/alembic.ini .
 COPY backend/alembic/ ./alembic/
 
+# Development startup seeds demo data from the backend root directory.
+COPY backend/seed_data.py ./seed_data.py
+
 # Templates and static files are part of the built image, so staging does not
 # depend on a frontend directory existing on the deployment host.
 COPY frontend/ ./frontend/

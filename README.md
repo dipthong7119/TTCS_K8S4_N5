@@ -109,13 +109,17 @@ Pop-Location
 > trên production.
 
 Tài khoản tài xế demo được cấp thẻ giả lập `DEMO-DRIVER-<ID người dùng>` khi chạy
-migration; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVER-0005`.
+seed; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVER-0005`.
 
 Khi `APP_ENV=development`, lần khởi động đầu sẽ tự thêm các trạm/trụ/đầu nối còn
-thiếu và hai phiên lịch sử mẫu cho tài xế. Phiên mẫu được đánh dấu trong giao diện;
-không có chi phí mẫu vì dự án chưa cấu hình biểu giá. Admin, vận hành và kế toán
-xem phiên toàn mạng; chủ trạm chỉ xem phiên thuộc trạm mình; tài xế chỉ xem phiên
-của mình. Nhật ký kiểm toán chỉ dành cho admin và vận hành.
+thiếu, phiên sạc, biểu giá, hóa đơn và giao dịch ví mẫu cho tài xế. Biểu giá demo
+theo giờ TP.HCM là 3.000 VND/kWh (00:00–06:00, 22:00–24:00), 4.000 VND/kWh
+(06:00–17:00), và 5.000 VND/kWh (17:00–22:00). Hóa đơn lưu bản chụp biểu giá;
+chi phí được chia theo điện năng đo trong từng khung giờ. Giao dịch ví là sổ chỉ ghi
+thêm; admin ghi nhận nạp thủ công kèm mã phiếu thu, kế toán chỉ xem, tài xế xem ví
+của mình. Chưa kết nối cổng thanh toán hoặc áp dụng giá demo để thu tiền thật.
+Admin, vận hành và kế toán xem phiên toàn mạng; chủ trạm chỉ xem phiên thuộc trạm
+mình; tài xế chỉ xem phiên của mình. Nhật ký kiểm toán chỉ dành cho admin và vận hành.
 
 ---
 
@@ -139,6 +143,9 @@ của mình. Nhật ký kiểm toán chỉ dành cho admin và vận hành.
 | `meter_values` | `e81f0a6b2c44` | Số đo OCPP đã nhận diện, tra cứu theo phiên và thời điểm |
 | `orphan_messages` | `e81f0a6b2c44` | StopTransaction/MeterValues chưa ghép được với phiên để đối chiếu |
 | `audit_logs` | `e81f0a6b2c44` | Nhật ký thao tác chỉ ghi thêm, lọc theo trụ/người/thời gian |
+| `station_tariffs`, `tariff_bands` | `20260928_wallet` | Biểu giá theo khung giờ, có thời điểm hiệu lực và múi giờ trạm |
+| `charging_invoices` | `20260928_wallet` | Chi phí và phân bổ kWh theo khung giá, lưu cùng phiên sạc |
+| `wallet_ledger` | `20260928_wallet` | Nạp/chi ví bằng VND nguyên, mã phiếu duy nhất và sổ chỉ ghi thêm |
 
 Đầu nối mới bắt đầu ở trạng thái `unavailable` cho tới khi nhận `StatusNotification`.
 Đăng nhập trả trang chính theo vai trò; chủ trạm chỉ nhận danh sách dữ liệu thuộc sở hữu của mình.

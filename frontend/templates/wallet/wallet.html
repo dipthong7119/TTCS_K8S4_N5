@@ -18,9 +18,19 @@
 <div class="page-header">
   <div class="page-header__info">
     <h1 class="page-header__title">Ví của tôi</h1>
-    <p class="page-header__subtitle">Quản lý số dư và lịch sử giao dịch</p>
+    <p class="page-header__subtitle">Theo dõi số dư, chi phí phiên sạc và lịch sử giao dịch</p>
   </div>
 </div>
+
+<section class="wallet-tariff-note" aria-label="Biểu giá sạc demo">
+  <div class="wallet-tariff-note__heading"><strong>Biểu giá demo</strong><span>VND/kWh</span></div>
+  <div class="wallet-tariff-note__bands">
+    <span><b>00:00–06:00</b> và <b>22:00–24:00</b><em>3.000 ₫</em></span>
+    <span><b>06:00–17:00</b><em>4.000 ₫</em></span>
+    <span><b>17:00–22:00</b><em>5.000 ₫</em></span>
+  </div>
+  <p>Chi phí được phân bổ theo số điện và thời điểm sạc tại TP.HCM, làm tròn từng khung giá. Đây là dữ liệu minh họa, chưa gồm thuế/phí và chưa phải giá bán chính thức.</p>
+</section>
 
 <div class="wallet-layout">
   <!-- Balance card -->
@@ -39,12 +49,7 @@
       <div class="wallet-balance-card__sub" id="wallet-sub">—</div>
     </div>
     <div class="wallet-balance-card__actions">
-      <button class="btn btn--primary" id="btn-topup" type="button" style="flex:1;justify-content:center;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        Nạp tiền
-      </button>
+      <p class="wallet-topup-note">Ví demo được nạp thủ công bởi quản trị viên. Chưa kết nối cổng thanh toán thật.</p>
       <button class="btn btn--secondary" id="btn-refresh-wallet" type="button" aria-label="Làm mới số dư">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -103,48 +108,6 @@
   </div>
 </div>
 
-<!-- Nạp tiền modal -->
-<div class="modal-backdrop is-hidden" id="topup-modal" role="dialog" aria-modal="true" aria-labelledby="topup-modal-title">
-  <div class="modal">
-    <div class="modal__header">
-      <h2 class="modal__title" id="topup-modal-title">Nạp tiền vào ví</h2>
-      <button class="modal__close" id="topup-modal-close" type="button" aria-label="Đóng">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal__body">
-      <form id="topup-form" novalidate>
-        <!-- Quick amounts -->
-        <div class="form-group">
-          <label class="form-label">Chọn số tiền nạp</label>
-          <div class="quick-amounts" role="group" aria-label="Mệnh giá nhanh">
-            <button type="button" class="quick-amount-btn" data-amount="50000">50.000 ₫</button>
-            <button type="button" class="quick-amount-btn" data-amount="100000">100.000 ₫</button>
-            <button type="button" class="quick-amount-btn" data-amount="200000">200.000 ₫</button>
-            <button type="button" class="quick-amount-btn" data-amount="500000">500.000 ₫</button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="topup-amount">Hoặc nhập số tiền (VNĐ) <span class="required" aria-hidden="true">*</span></label>
-          <input
-            id="topup-amount" name="amount" type="number"
-            class="form-input" placeholder="VD: 150000"
-            min="10000" max="10000000" step="1000"
-            required aria-required="true" aria-describedby="topup-amount-error topup-hint"
-          />
-          <p class="form-hint" id="topup-hint">Tối thiểu 10.000 ₫ — Tối đa 10.000.000 ₫</p>
-          <p class="form-error" id="topup-amount-error" data-error="amount" role="alert"></p>
-        </div>
-      </form>
-    </div>
-    <div class="modal__footer">
-      <button class="btn btn--secondary" id="topup-cancel" type="button">Huỷ</button>
-      <button class="btn btn--primary" id="topup-submit" type="button">Tiếp tục thanh toán</button>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 50;
   let _page = 1;
 
   function fmtVND(amountInt) {
@@ -52,10 +52,13 @@
       return;
     }
     tbody.innerHTML = items.map(e => {
-      const isCredit = e.type === 'topup' || e.amount_vnd > 0;
+      const isCredit = e.amount_vnd > 0;
+      const typeLabel = e.type === 'demo_topup' ? 'Nạp demo'
+        : e.type === 'manual_topup' ? 'Nạp thủ công'
+        : e.type === 'session_charge' ? 'Phiên sạc' : 'Điều chỉnh';
       return `<tr>
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(e.created_at)}</td>
-        <td><span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${isCredit ? 'Nạp tiền' : 'Thanh toán'}</span></td>
+        <td><span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${typeLabel}</span></td>
         <td style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">${escHtml(e.description||'—')}</td>
         <td class="text-right ${isCredit ? 'ledger-credit' : 'ledger-debit'}">${isCredit ? '+' : ''}${fmtVND(e.amount_vnd)}</td>
         <td class="text-right" style="color:var(--color-text-secondary);">${fmtVND(e.balance_after_vnd)}</td>
@@ -78,49 +81,11 @@
     }
   }
 
-  // ── Top-up modal ──
-  const topupModal = document.getElementById('topup-modal');
-
-  function openTopup() { topupModal.classList.remove('is-hidden'); }
-  function closeTopup() { topupModal.classList.add('is-hidden'); }
-
   document.addEventListener('DOMContentLoaded', () => {
     loadWallet();
     loadLedger();
 
-    document.getElementById('btn-topup')?.addEventListener('click', openTopup);
     document.getElementById('btn-refresh-wallet')?.addEventListener('click', () => { loadWallet(); loadLedger(); });
-    document.getElementById('topup-modal-close')?.addEventListener('click', closeTopup);
-    document.getElementById('topup-cancel')?.addEventListener('click', closeTopup);
-    topupModal?.addEventListener('click', e => { if (e.target === topupModal) closeTopup(); });
-
     document.getElementById('ledger-period')?.addEventListener('change', () => { _page = 1; loadLedger(); });
-
-    // Quick amount buttons
-    document.querySelectorAll('.quick-amount-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.quick-amount-btn').forEach(b => b.classList.remove('is-selected'));
-        btn.classList.add('is-selected');
-        document.getElementById('topup-amount').value = btn.dataset.amount;
-      });
-    });
-
-    // Top-up submit
-    const topupForm = document.getElementById('topup-form');
-    FormGuard.protect(topupForm, async (data) => {
-      const amount = parseInt(data.amount, 10);
-      if (isNaN(amount) || amount < 10000) throw { message: 'Số tiền tối thiểu là 10.000 ₫' };
-      if (amount > 10000000) throw { message: 'Số tiền tối đa là 10.000.000 ₫' };
-      const result = await ApiClient.topUp(amount);
-      // Redirect to payment gateway
-      if (result.payment_url) {
-        window.location.href = result.payment_url;
-      } else {
-        showToast('Nạp tiền thành công', 'success');
-        closeTopup();
-        loadWallet();
-        loadLedger();
-      }
-    }, { loadingText: 'Đang xử lý...' });
   });
 })();

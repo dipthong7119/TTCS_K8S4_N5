@@ -14,6 +14,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -45,6 +46,8 @@ class ChargingSession(Base):
     demo_key = Column(String(80), nullable=True, unique=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    invoice = relationship("ChargingInvoice", back_populates="session", uselist=False)
 
     __table_args__ = (
         CheckConstraint(
