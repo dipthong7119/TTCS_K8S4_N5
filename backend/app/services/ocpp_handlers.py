@@ -165,7 +165,8 @@ def touch_last_seen(db: Session, charge_point_code: str) -> None:
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
-        return handle_boot_notification(db, point, msg_id, payload)
+        from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification
+        return new_handle_boot_notification(db, point.code, msg_id, payload)
     if action == "Heartbeat":
         from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
         return new_handle_heartbeat(db, point.code, msg_id, payload)
@@ -183,36 +184,7 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
 
-def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    # Đọc 3 trường từ payload — thiếu thì lưu NULL, không từ chối tin nhắn (T-16 NFR)
-    point.vendor = payload.get("chargePointVendor") or None
-    point.model = payload.get("chargePointModel") or None
-    point.firmware_version = payload.get("firmwareVersion") or None
 
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    # Trạm tạm ngừng (inactive/paused) vẫn Accepted để trụ báo trạng thái.
-    # Trạm bị khóa hành chính (locked) mới trả Rejected (S-08 AC2).
-    accepted = station is not None and station.status != "locked"
-    point.status = "online" if accepted else "offline"
-
-    # Log ngắn — không log toàn bộ payload (00_QUY_TAC_AGENT.md §3)
-    logger.info(
-        "BootNotification charge_point=%s vendor=%s model=%s firmware=%s => %s",
-        point.code,
-        point.vendor,
-        point.model,
-        point.firmware_version,
-        "Accepted" if accepted else "Rejected",
-    )
-    return pack_call_result(
-        msg_id,
-        {
-            "currentTime": _utc_timestamp(),
-            # Khoảng nhịp tim đọc từ cấu hình, không ghi cứng (T-17 NFR)
-            "interval": settings.OCPP_HEARTBEAT_INTERVAL_SECONDS,
-            "status": "Accepted" if accepted else "Rejected",
-        },
-    )
 
 
 
