@@ -258,7 +258,7 @@ Pipeline GitHub Actions gồm 2 workflow:
 
 | File | Kích hoạt | Tác vụ |
 |---|---|---|
-| `.github/workflows/ci.yml` | Mọi push / PR | Build, lint (ruff), test (pytest) |
+| `.github/workflows/ci.yml` | Mọi push / PR; có thể chạy thủ công | Lint (ruff), test (pytest), build Docker image |
 | `.github/workflows/deploy.yml` | Merge vào `main` | Deploy lên staging server |
 
 **Secrets cần cấu hình** tại `Settings > Secrets and variables > Actions`:
