@@ -119,6 +119,16 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
             logger.debug("WebSocket was already closed for %s", charge_point_code)
     finally:
         manager.disconnect(charge_point_code, websocket)
+        if manager.active_connections.get(charge_point_code) is None:
+            with SessionLocal() as db:
+                point = db.query(ChargePoint).filter_by(code=charge_point_code).first()
+                if point and point.status != "offline":
+                    point.status = "offline"
+                    for connector in point.connectors:
+                        connector.status = "unknown"
+                    db.commit()
+                    from app.services.ocpp_handlers import publish_charge_point_status
+                    publish_charge_point_status(db, point.id)
 
 
 def _normalize_parsed_message(message):
