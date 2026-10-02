@@ -10,14 +10,39 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Linter (Ruff)
+        run: ruff check app alembic ../tests
+      - name: Run Unit Tests (Pytest)
+        run: pytest app/tests ../tests
+
   deploy-staging:
     runs-on: ubuntu-latest
-    # Yêu cầu job CI (Build, Lint, Test) phải chạy qua trước khi Deploy.
-    # Lưu ý: ở đây demo tách biệt nên không cài requires, tuỳ dự án setup link job.
+    needs: test
+    # Chỉ build/push sau khi lint và toàn bộ test đã qua.
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry (GHCR)
         uses: docker/login-action@v3
@@ -27,13 +52,35 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
-          context: ./hardware
+          context: .
+          file: backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/csms-app:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/csms-app:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/csms-app:latest
+
+      - name: Kiểm tra secrets Staging (bỏ qua nếu chưa cấu hình)
+        id: check-secrets
+        run: |
+          MISSING=()
+          [[ -z "${{ secrets.STAGING_HOST }}" ]]     && MISSING+=("STAGING_HOST")
+          [[ -z "${{ secrets.STAGING_USERNAME }}" ]] && MISSING+=("STAGING_USERNAME")
+          [[ -z "${{ secrets.STAGING_SSH_KEY }}" ]]  && MISSING+=("STAGING_SSH_KEY")
+          [[ -z "${{ secrets.STAGING_SSH_PORT }}" ]] && MISSING+=("STAGING_SSH_PORT")
+          [[ -z "${{ secrets.GHCR_PAT }}" ]]         && MISSING+=("GHCR_PAT")
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "⚠️  Chưa cấu hình secrets: ${MISSING[*]}"
+            echo "   → Bỏ qua bước SSH Deploy (cần cấu hình khi có server staging thật)."
+            echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Deploy to Staging Server via SSH
+        if: steps.check-secrets.outputs.deploy_enabled == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_HOST }}
@@ -50,24 +97,35 @@ jobs:
             echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Pull image mới nhất
-            docker pull ghcr.io/${{ github.repository_owner }}/csms-app:latest
+            NEW_IMAGE=ghcr.io/${{ github.repository_owner }}/csms-app:${{ github.sha }}
+            PREVIOUS_IMAGE=$(docker inspect --format='{{.Config.Image}}' csms_app 2>/dev/null || true)
+            docker pull "$NEW_IMAGE"
             
             # Chạy container lên (tái tạo lại container app)
-            docker-compose up -d --no-deps app
+            CSMS_IMAGE="$NEW_IMAGE" docker-compose up -d --no-deps app
             
             echo "Đợi 10 giây để FastAPI khởi động..."
             sleep 10
             
             # Gọi Health Check
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+            HTTP_STATUS=000
+            for attempt in $(seq 1 15); do
+              HTTP_STATUS=$(curl --max-time 3 -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
+              [ "$HTTP_STATUS" = "200" ] && break
+              sleep 2
+            done
             
-            if [ "$HTTP_STATUS" -ne 200 ]; then
+            if [ "$HTTP_STATUS" != "200" ]; then
               echo "❌ Healthcheck THẤT BẠI (Status: $HTTP_STATUS)!"
               echo "Tiến hành Rollback về phiên bản trước (Down ứng dụng để DevOps xử lý)..."
               # Nếu ứng dụng lỗi, ta dừng container app lại. 
               # Cách an toàn nhất là giữ container cũ (không down) nếu config kiểu blue-green, 
               # nhưng do dùng chung docker-compose.yml, tạm thời ta tắt nó đi để không làm sai dữ liệu.
-              docker-compose stop app
+              if [ -n "$PREVIOUS_IMAGE" ]; then
+                CSMS_IMAGE="$PREVIOUS_IMAGE" docker-compose up -d --no-deps app
+              else
+                echo "No previous container image was available to restore."
+              fi
               exit 1
             fi
             

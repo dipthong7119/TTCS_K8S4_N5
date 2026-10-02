@@ -1,0 +1,24 @@
+# Mã trụ ảo cho K-01 — seed_codes.txt
+# Tiền tố RIÊNG tách khỏi dữ liệu thật (T-55 NFR): dùng "SIM-" để tránh nhầm lẫn
+# với mã trụ thật trong sản phẩm.
+
+SIM-01
+SIM-02
+SIM-03
+SIM-04
+SIM-05
+SIM-06
+SIM-07
+SIM-08
+SIM-09
+SIM-10
+SIM-11
+SIM-12
+SIM-13
+SIM-14
+SIM-15
+SIM-16
+SIM-17
+SIM-18
+SIM-19
+SIM-20

@@ -1,0 +1,11 @@
+*.pyc
+__pycache__/
+.pytest_cache/
+.pytest-*/
+.ruff_cache/
+outputs/sprint2-2026-09-27/*.png
+outputs/sprint2-2026-09-27/*.inspect.ndjson
+.venv/
+.env
+csms.db
+*.output

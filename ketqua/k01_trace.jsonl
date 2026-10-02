@@ -1,0 +1,26 @@
+{"time_utc": "2026-09-26T13:08:58.224Z", "direction": "charge_point_to_csms", "frame": [2, "ecb901e2-c91f-43fe-86d7-d042ee696c98", "BootNotification", {"chargePointModel": "VirtualChargePoint", "chargePointSerialNumber": "S001", "chargePointVendor": "Solidstudio", "firmwareVersion": "1.0.0"}]}
+{"time_utc": "2026-09-26T13:08:58.225Z", "direction": "csms_to_charge_point", "frame": [3, "ecb901e2-c91f-43fe-86d7-d042ee696c98", {"currentTime": "2026-09-26T13:08:58.225Z", "interval": 1, "status": "Accepted"}]}
+{"time_utc": "2026-09-26T13:08:58.225Z", "direction": "charge_point_to_csms", "frame": [2, "2dd67ff7-64a1-42ed-8dad-a7d93487f2e5", "StatusNotification", {"connectorId": 1, "errorCode": "NoError", "status": "Available"}]}
+{"time_utc": "2026-09-26T13:08:58.225Z", "direction": "csms_to_charge_point", "frame": [3, "2dd67ff7-64a1-42ed-8dad-a7d93487f2e5", {}]}
+{"time_utc": "2026-09-26T13:08:59.232Z", "direction": "charge_point_to_csms", "frame": [2, "870ffad9-ec90-4138-aeb9-5c833bd5fa8b", "Heartbeat", {}]}
+{"time_utc": "2026-09-26T13:08:59.232Z", "direction": "csms_to_charge_point", "frame": [3, "870ffad9-ec90-4138-aeb9-5c833bd5fa8b", {"currentTime": "2026-09-26T13:08:59.232Z"}]}
+{"time_utc": "2026-09-26T13:08:59.284Z", "direction": "charge_point_to_csms", "frame": [2, "081dab7a-f3ba-4889-b444-12b0be532d22", "Authorize", {"idTag": "K01-DEMO-TAG"}]}
+{"time_utc": "2026-09-26T13:08:59.284Z", "direction": "csms_to_charge_point", "frame": [3, "081dab7a-f3ba-4889-b444-12b0be532d22", {"idTagInfo": {"status": "Accepted"}}]}
+{"time_utc": "2026-09-26T13:08:59.287Z", "direction": "charge_point_to_csms", "frame": [2, "4f621bf2-f403-46b8-93e9-963ea16c9e80", "StartTransaction", {"connectorId": 1, "idTag": "K01-DEMO-TAG", "meterStart": 0, "timestamp": "2026-09-26T13:08:59.285Z"}]}
+{"time_utc": "2026-09-26T13:08:59.287Z", "direction": "csms_to_charge_point", "frame": [3, "4f621bf2-f403-46b8-93e9-963ea16c9e80", {"transactionId": 51001, "idTagInfo": {"status": "Accepted"}}]}
+{"time_utc": "2026-09-26T13:08:59.308Z", "direction": "charge_point_to_csms", "frame": [2, "33f072bc-0f76-4188-815c-ea9b2950ef97", "MeterValues", {"connectorId": 1, "transactionId": 51001, "meterValue": [{"timestamp": "2026-09-26T13:08:59.287Z", "sampledValue": [{"value": "7.2", "measurand": "Power.Active.Import", "unit": "kW"}, {"value": "0.02", "measurand": "Energy.Active.Import.Register", "unit": "kWh"}]}]}]}
+{"time_utc": "2026-09-26T13:08:59.308Z", "direction": "csms_to_charge_point", "frame": [3, "33f072bc-0f76-4188-815c-ea9b2950ef97", {}]}
+{"time_utc": "2026-09-26T13:08:59.311Z", "direction": "charge_point_to_csms", "frame": [2, "b374d67b-230b-4919-99c0-fe100416af50", "StopTransaction", {"transactionId": 51001, "meterStop": 20, "timestamp": "2026-09-26T13:08:59.308Z", "reason": "EVDisconnected"}]}
+{"time_utc": "2026-09-26T13:08:59.311Z", "direction": "csms_to_charge_point", "frame": [3, "b374d67b-230b-4919-99c0-fe100416af50", {}]}
+{"time_utc": "2026-09-26T13:08:59.311Z", "direction": "csms_to_charge_point", "frame": [2, "5ede0ce4-5942-4a70-9eee-0917a5b3c1b8", "Reset", {"type": "Soft"}]}
+{"time_utc": "2026-09-26T13:08:59.313Z", "direction": "charge_point_to_csms", "frame": [3, "5ede0ce4-5942-4a70-9eee-0917a5b3c1b8", {"status": "Accepted"}]}
+{"time_utc": "2026-09-26T13:09:00.244Z", "direction": "charge_point_to_csms", "frame": [2, "03022f09-c52a-43b5-96c5-2ba61c49b237", "Heartbeat", {}]}
+{"time_utc": "2026-09-26T13:09:00.244Z", "direction": "csms_to_charge_point", "frame": [3, "03022f09-c52a-43b5-96c5-2ba61c49b237", {"currentTime": "2026-09-26T13:09:00.244Z"}]}
+{"time_utc": "2026-09-26T13:09:01.259Z", "direction": "charge_point_to_csms", "frame": [2, "bde7ddb0-996d-4a84-ae6c-d03ffbb60e02", "Heartbeat", {}]}
+{"time_utc": "2026-09-26T13:09:01.259Z", "direction": "csms_to_charge_point", "frame": [3, "bde7ddb0-996d-4a84-ae6c-d03ffbb60e02", {"currentTime": "2026-09-26T13:09:01.259Z"}]}
+{"time_utc": "2026-09-26T13:09:02.272Z", "direction": "charge_point_to_csms", "frame": [2, "d6281141-58d7-4056-b7af-2ee802b0057b", "Heartbeat", {}]}
+{"time_utc": "2026-09-26T13:09:02.272Z", "direction": "csms_to_charge_point", "frame": [3, "d6281141-58d7-4056-b7af-2ee802b0057b", {"currentTime": "2026-09-26T13:09:02.272Z"}]}
+{"time_utc": "2026-09-26T13:09:05.358Z", "direction": "charge_point_to_csms", "frame": [2, "416e58a2-d85d-408f-aa22-0256b373bc58", "BootNotification", {"chargePointModel": "VirtualChargePoint", "chargePointSerialNumber": "S001", "chargePointVendor": "Solidstudio", "firmwareVersion": "1.0.0"}]}
+{"time_utc": "2026-09-26T13:09:05.358Z", "direction": "csms_to_charge_point", "frame": [3, "416e58a2-d85d-408f-aa22-0256b373bc58", {"currentTime": "2026-09-26T13:09:05.358Z", "interval": 1, "status": "Accepted"}]}
+{"time_utc": "2026-09-26T13:09:05.363Z", "direction": "charge_point_to_csms", "frame": [2, "e1139ccc-ac2d-4991-83f2-820606f705f7", "StatusNotification", {"connectorId": 1, "errorCode": "NoError", "status": "Available"}]}
+{"time_utc": "2026-09-26T13:09:05.364Z", "direction": "csms_to_charge_point", "frame": [3, "e1139ccc-ac2d-4991-83f2-820606f705f7", {}]}

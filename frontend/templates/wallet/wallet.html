@@ -1,0 +1,115 @@
+﻿{% extends "base.html" %}
+{% set active_page = "wallet" %}
+
+{% block title %}Ví của tôi{% endblock %}
+{% block meta_description %}Quản lý ví điện tử nạp tiền và xem lịch sử giao dịch{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Ví của tôi</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/wallet.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Ví của tôi</h1>
+    <p class="page-header__subtitle">Theo dõi số dư, chi phí phiên sạc và lịch sử giao dịch</p>
+  </div>
+</div>
+
+<section class="wallet-tariff-note" aria-label="Biểu giá sạc demo">
+  <div class="wallet-tariff-note__heading"><strong>Biểu giá demo</strong><span>VND/kWh</span></div>
+  <div class="wallet-tariff-note__bands">
+    <span><b>00:00–06:00</b> và <b>22:00–24:00</b><em>3.000 ₫</em></span>
+    <span><b>06:00–17:00</b><em>4.000 ₫</em></span>
+    <span><b>17:00–22:00</b><em>5.000 ₫</em></span>
+  </div>
+  <p>Chi phí được phân bổ theo số điện và thời điểm sạc tại TP.HCM, làm tròn từng khung giá. Đây là dữ liệu minh họa, chưa gồm thuế/phí và chưa phải giá bán chính thức.</p>
+</section>
+
+<div class="wallet-layout">
+  <!-- Balance card -->
+  <div class="wallet-balance-card" id="wallet-balance-card" aria-labelledby="wallet-balance-label">
+    <div class="wallet-balance-card__inner">
+      <div class="wallet-balance-card__header">
+        <div class="wallet-balance-card__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
+        </div>
+        <span class="wallet-balance-card__badge">Ví chính</span>
+      </div>
+      <div class="wallet-balance-card__label" id="wallet-balance-label">Số dư hiện tại</div>
+      <div class="wallet-balance-card__amount" id="wallet-amount" aria-live="polite">Đang tải...</div>
+      <div class="wallet-balance-card__sub" id="wallet-sub">—</div>
+    </div>
+    <div class="wallet-balance-card__actions">
+      <p class="wallet-topup-note">Ví demo được nạp thủ công bởi quản trị viên. Chưa kết nối cổng thanh toán thật.</p>
+      <button class="btn btn--secondary" id="btn-refresh-wallet" type="button" aria-label="Làm mới số dư">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right column: summary + ledger -->
+  <div class="wallet-right">
+    <!-- Summary stats -->
+    <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:var(--space-5);">
+      <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Tổng nạp</div>
+        <div class="stat-card__value" id="total-topup">—</div>
+        <div class="stat-card__sub">VNĐ đã nạp</div>
+      </div>
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Tổng chi</div>
+        <div class="stat-card__value" id="total-spent">—</div>
+        <div class="stat-card__sub">VNĐ đã dùng</div>
+      </div>
+    </div>
+
+    <!-- Ledger table -->
+    <div class="card">
+      <div class="card__header">
+        <div class="card__title">Lịch sử giao dịch</div>
+        <select class="form-select" id="ledger-period" style="width:auto;min-width:140px;" aria-label="Khoảng thời gian">
+          <option value="30" selected>30 ngày</option>
+          <option value="90">3 tháng</option>
+          <option value="all">Tất cả</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="ledger-table" aria-label="Lịch sử giao dịch ví">
+          <thead>
+            <tr>
+              <th scope="col">Thời gian</th>
+              <th scope="col">Loại</th>
+              <th scope="col">Mô tả</th>
+              <th scope="col" class="text-right">Số tiền</th>
+              <th scope="col" class="text-right">Số dư sau</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-tbody">
+            <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-muted);">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card__footer">
+        <div class="pagination" id="ledger-pagination" role="navigation" aria-label="Phân trang giao dịch"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/pages/wallet.js"></script>
+{% endblock %}

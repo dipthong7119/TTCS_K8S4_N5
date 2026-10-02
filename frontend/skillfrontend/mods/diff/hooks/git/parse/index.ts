@@ -1,0 +1,11 @@
+export * from './hunk-header'
+export * from './is-body-line'
+export * from './is-whole-answer'
+export * from './is-whole-listing'
+export * from './parse-file-diff.js'
+export * from './parse-numstat.js'
+export * from './parse-shortstat.js'
+export * from './rename-records'
+export * from './shortstat-pattern'
+
+export * as default from '.'

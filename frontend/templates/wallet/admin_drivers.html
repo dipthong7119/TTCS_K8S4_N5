@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% set active_page = "wallet" %}
+
+{% block title %}Ví tài xế{% endblock %}
+{% block meta_description %}Quản lý số dư ví và các khoản thanh toán của tài xế{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a><span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Ví tài xế</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/admin_drivers.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Ví tài xế</h1>
+    <p class="page-header__subtitle">Theo dõi số dư, chi phí phiên sạc và khoản nạp theo phiếu thu.</p>
+  </div>
+  <button class="btn btn--secondary" id="btn-refresh-drivers" type="button">Làm mới</button>
+</div>
+
+<section class="card driver-wallet-card" aria-labelledby="drivers-heading">
+  <div class="card__header driver-wallet-toolbar">
+    <div>
+      <h2 class="card__title" id="drivers-heading">Tài khoản tài xế</h2>
+      <p class="driver-wallet-hint">Số dư và tổng chi được tính từ sổ giao dịch. Mọi khoản nạp cần mã phiếu thu duy nhất.</p>
+    </div>
+    <label class="driver-search">
+      <span class="sr-only">Tìm tài xế</span>
+      <input class="form-input" id="driver-search" type="search" maxlength="120" placeholder="Tìm theo tên hoặc email" autocomplete="off" />
+    </label>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table driver-wallet-table" aria-label="Số dư ví tài xế">
+      <thead><tr>
+        <th scope="col">Tài xế</th>
+        <th scope="col">Trạng thái</th>
+        <th scope="col" class="text-right">Số dư</th>
+        <th scope="col" class="text-right">Tổng chi</th>
+        <th scope="col">Lần sạc gần nhất</th>
+        <th scope="col" class="text-right">Thao tác</th>
+      </tr></thead>
+      <tbody id="driver-wallet-tbody">
+        <tr><td colspan="6" class="driver-table-message">Đang tải danh sách tài xế...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card__footer driver-wallet-footer">
+    <span id="driver-count" aria-live="polite">—</span>
+    <div class="pagination" id="driver-pagination" role="navigation" aria-label="Phân trang tài xế"></div>
+  </div>
+</section>
+
+{% if 'admin' in current_user.roles %}
+<dialog class="topup-dialog" id="topup-dialog" aria-labelledby="topup-title">
+  <form id="topup-form" class="topup-form">
+    <div class="topup-dialog__header">
+      <div><h2 id="topup-title">Nạp ví tài xế</h2><p id="topup-driver-name"></p></div>
+      <button class="btn btn--ghost btn--sm" id="topup-close" type="button" aria-label="Đóng">✕</button>
+    </div>
+    <label class="form-label" for="topup-amount">Số tiền (VND)</label>
+    <input class="form-input" id="topup-amount" name="amount_vnd" type="number" min="10000" max="10000000" step="1000" required />
+    <small class="form-hint">Từ 10.000 đến 10.000.000 VND.</small>
+    <label class="form-label" for="topup-receipt">Mã phiếu thu</label>
+    <input class="form-input" id="topup-receipt" name="receipt_code" type="text" minlength="3" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,79}" autocomplete="off" required />
+    <small class="form-hint">Mã duy nhất để đối soát; chỉ gồm chữ, số, dấu gạch ngang hoặc gạch dưới.</small>
+    <p class="topup-disclaimer">Bản demo ghi nhận khoản nạp thủ công, chưa thu tiền qua cổng thanh toán.</p>
+    <div class="topup-actions">
+      <button class="btn btn--ghost" id="topup-cancel" type="button">Hủy</button>
+      <button class="btn btn--primary" id="topup-submit" type="submit">Ghi nhận nạp tiền</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>window.WalletAdmin = { canTopUp: {{ 'true' if 'admin' in current_user.roles else 'false' }} };</script>
+<script src="/static/js/pages/admin_drivers.js"></script>
+{% endblock %}
