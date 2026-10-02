@@ -5,6 +5,7 @@ Module ánh xạ trạng thái OCPP sang trạng thái nội bộ.
 
 from enum import Enum
 
+
 class InternalStatus(str, Enum):
     IDLE = "rảnh"
     BUSY = "bận"

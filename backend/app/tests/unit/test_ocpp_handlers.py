@@ -161,7 +161,6 @@ def test_handle_status_notification_error(db_session):
     assert conn_db.status == "lỗi"
 
     # Kể từ SCRUM-120, mã lỗi được lưu vào bảng connector_errors thay vì cập nhật đè lên bảng connectors
-    from app.models.connector_error import ConnectorError
     err = db_session.query(ConnectorError).filter_by(connector_id=conn.id).first()
     assert err is not None
     assert err.error_code == "InternalError"

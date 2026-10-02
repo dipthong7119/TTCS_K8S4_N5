@@ -151,10 +151,9 @@ def test_websocket_rejects_unsupported_protocol():
     assert exc.value.code == 1002
 
 def test_websocket_disconnect_publishes_offline_status():
-    from starlette.websockets import WebSocketDisconnect
-    from app.services import connection_manager
-    from app.services.ocpp_handlers import publish_charge_point_status
     import json
+
+    from app.services import connection_manager
     
     with patch("app.services.ocpp_handlers.publish_charge_point_status") as mock_publish:
         with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as ws:

@@ -23,7 +23,6 @@ from app.models.station import Station
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
-
 # ---------------------------------------------------------------------------
 # Fixture: DB in-memory mới cho mỗi test, có 1 station + 1 charge point
 # ---------------------------------------------------------------------------

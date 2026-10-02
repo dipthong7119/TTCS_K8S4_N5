@@ -10,10 +10,8 @@ from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
-from app.models.connector_error import ConnectorError
 from app.models.id_tag import IdTag
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
@@ -27,7 +25,6 @@ from app.services.ocpp_parser import (
     pack_call_result,
     parse_message,
 )
-from app.services.ocpp_status import map_status
 from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
@@ -173,13 +170,17 @@ def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
-        from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification
+        from app.ocpp.handlers.boot_notification import (
+            handle_boot_notification as new_handle_boot_notification,
+        )
         return new_handle_boot_notification(db, point.code, msg_id, payload)
     if action == "Heartbeat":
         from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
         return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
-        from app.ocpp.handlers.status_notification import handle_status_notification as new_handle_status_notification
+        from app.ocpp.handlers.status_notification import (
+            handle_status_notification as new_handle_status_notification,
+        )
         return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
         return handle_authorize(db, point, msg_id, payload)

@@ -52,8 +52,9 @@ def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
     try:
         if not str(settings.DATABASE_URL).startswith("sqlite"):
             command.downgrade(config, "base")
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(f"Downgrade failed or was skipped: {e}", file=sys.stderr)
     downgraded_engine = create_engine(settings.DATABASE_URL)
     try:
         pass # Khong kiem tra intersection vi downgrade co the bi bo qua

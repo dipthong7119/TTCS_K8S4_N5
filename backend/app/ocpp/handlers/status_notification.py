@@ -4,12 +4,13 @@ Chỉ cập nhật trạng thái của đầu nối trong bảng connectors. C�
 """
 
 import logging
+
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint, Connector
 from app.ocpp.status_mapping import map_ocpp_status
-from app.services.ocpp_parser import pack_call_result, pack_call_error
+from app.services.ocpp_parser import pack_call_error, pack_call_result
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     internal_status = map_ocpp_status(status_raw).value
 
     from datetime import UTC, datetime
+
     from app.models.connector_error import ConnectorError
 
     error_code = payload.get("errorCode", "NoError")

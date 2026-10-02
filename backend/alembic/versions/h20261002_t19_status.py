@@ -7,6 +7,7 @@ Tham chiếu: 02_DAC_TA_DU_AN.md (StatusNotification).
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "h20261002_t19_status"
