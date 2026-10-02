@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.services.ocpp_parser import (
+    OCPPError,
     pack_call,
     pack_call_error,
     pack_call_result,
@@ -47,10 +48,25 @@ def test_pack_call_error():
     assert json.loads(raw) == [4, "123", "NotSupported", "Desc", {"detail": 1}]
 
 @pytest.mark.parametrize("invalid_raw,expected_exception_type", [
-    ('{"a": 1}', ValueError),                # Không phải mảng
-    ('[2, "123"]', ValueError),              # Thiếu phần tử
-    ('[5, "123", "Action", {}]', ValueError),# Loại khung lạ (5)
-    ('[2, "123", "Action", "not_dict"]', ValueError), # Tải không phải đối tượng
+    ('{"a": 1}', OCPPError),                # Không phải mảng
+    ('[2, "123"]', OCPPError),              # Thiếu phần tử CALL
+    ('[5, "123", "Action", {}]', OCPPError),# Loại khung lạ (5)
+    ('["2", "123", "Action", {}]', OCPPError),# msg_type không phải int
+    ('[2, 123, "Action", {}]', OCPPError),  # msg_id không phải str
+    (f'[2, "{"a"*51}", "Action", {{}}]', OCPPError), # msg_id quá dài
+    ('[2, "123", "Action", {}, 1]', OCPPError), # Dư phần tử CALL
+    ('[2, "123", "", {}]', OCPPError),      # Action rỗng
+    ('[2, "123", 123, {}]', OCPPError),     # Action không phải str
+    ('[2, "123", "Action", "not_dict"]', OCPPError), # Tải CALL không phải dict
+    ('[3, "123"]', OCPPError),              # Thiếu phần tử CALLRESULT
+    ('[3, "123", {}, 1]', OCPPError),       # Dư phần tử CALLRESULT
+    ('[3, "123", "not_dict"]', OCPPError),  # Tải CALLRESULT không phải dict
+    ('[4, "123", "Code", "Desc"]', OCPPError), # Thiếu phần tử CALLERROR
+    ('[4, "123", "Code", "Desc", {}, 1]', OCPPError), # Dư phần tử CALLERROR
+    ('[4, "123", "", "Desc", {}]', OCPPError), # Code rỗng
+    ('[4, "123", 123, "Desc", {}]', OCPPError), # Code không phải str
+    ('[4, "123", "Code", 123, {}]', OCPPError), # Desc không phải str
+    ('[4, "123", "Code", "Desc", "not_dict"]', OCPPError), # Details không phải dict
 ])
 def test_parse_invalid_formats(invalid_raw, expected_exception_type):
     with pytest.raises(expected_exception_type):
