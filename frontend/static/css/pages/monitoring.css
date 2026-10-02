@@ -1,4 +1,4 @@
-﻿/* pages/monitoring.css */
+/* pages/monitoring.css */
 .monitoring-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
@@ -152,9 +152,45 @@
   grid-column: 1/-1;
 }
 
+/* Status legend (accessibility & color blindness support - T-24) */
+.status-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  box-shadow: var(--shadow-xs);
+}
+.status-legend__title {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-right: var(--space-2);
+}
+.status-legend .badge {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.mock-mode-wrap .btn.is-active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .status-legend { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .mock-mode-wrap { margin-left: 0 !important; width: 100%; }
+  .mock-mode-wrap .btn { width: 100%; justify-content: center; }
+}
+
 @media (max-width: 600px) {
   .monitoring-grid { grid-template-columns: 1fr; }
   .station-card__open, .station-card__body { padding: var(--space-3); }
   .drawer__body { padding: var(--space-4); }
   .reset-controls { align-items: stretch; }
 }
+
