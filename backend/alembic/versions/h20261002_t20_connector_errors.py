@@ -3,10 +3,14 @@
 Revision ID: h20261002_t20_connector_errors
 Revises: h20261002_t19_status
 """
+import logging
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
+
+logger = logging.getLogger(__name__)
 
 revision: str = "h20261002_t20_connector_errors"
 down_revision: str | None = "h20261002_t19_status"
@@ -57,5 +61,5 @@ def downgrade() -> None:
     if "ix_connector_errors_connector_timestamp" not in indexes:
         try:
             op.create_index("ix_connector_errors_connector_timestamp", "connector_errors", ["connector_id", "timestamp"])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Create index failed: %s", e)

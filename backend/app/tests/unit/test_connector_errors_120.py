@@ -1,15 +1,16 @@
 """Test logic ghi lỗi vào connector_errors từ StatusNotification (SCRUM-120)."""
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, UTC
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models.charge_point import ChargePoint, Connector
-from app.models.station import Station
 from app.models.connector_error import ConnectorError
+from app.models.station import Station
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
@@ -96,9 +97,9 @@ def test_status_notification_custom_timestamp(db_session):
         "errorCode": "GroundFailure",
         "timestamp": custom_ts
     })
-    
+
     error = db_session.query(ConnectorError).first()
-    assert error.occurred_at == datetime(2026, 10, 2, 15, 0, 0)
+    assert error.occurred_at == datetime(2026, 10, 2, 15, 0, 0, tzinfo=UTC).replace(tzinfo=None)
 
 
 def test_status_notification_invalid_timestamp_fallback(db_session):
