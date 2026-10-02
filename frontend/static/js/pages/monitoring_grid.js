@@ -1,4 +1,4 @@
-/** Realtime station, charge point, and connector monitoring (T-24, T-25, T-35). */
+/** Realtime station, charge point, and connector monitoring (T-24, T-25, T-35, SCRUM-134). */
 (function () {
   'use strict';
 
@@ -152,44 +152,20 @@
     document.getElementById('detail-title').textContent = station.name;
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
-        const offline = point.status === 'offline';
         const lastSeen = point.last_seen_at
           ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>` : '';
-        const reset = canReset ? `<div class="reset-controls">
-          <label for="reset-type-${point.id}">Kiểu khởi động lại</label>
-          <select id="reset-type-${point.id}" class="form-select" aria-label="Kiểu khởi động lại trụ ${escapeHtml(point.code)}">
-            <option value="Soft">Mềm</option><option value="Hard">Cứng</option>
-          </select>
-          <button class="btn btn--secondary btn--sm" type="button" data-reset-code="${escapeHtml(point.code)}" ${offline ? 'disabled' : ''}>
-            Khởi động lại
-          </button></div>` : '';
+        const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
         return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(point.status)}</div>
           <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
-          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${reset}</section>`;
+          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${restartMarkup}</section>`;
       }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
-    body.querySelectorAll('[data-reset-code]').forEach(button => {
-      button.addEventListener('click', () => resetPoint(button, station));
-    });
+    // Gắn sự kiện cho RestartButton (SCRUM-134)
+    RestartButton.bindEvents(body);
     backdrop.classList.remove('is-hidden');
     document.getElementById('detail-close').focus();
   }
 
-  async function resetPoint(button, station) {
-    const code = button.dataset.resetCode;
-    const point = (station.charge_points || []).find(item => item.code === code);
-    const select = document.getElementById(`reset-type-${point?.id}`);
-    button.disabled = true;
-    button.textContent = 'Đang gửi lệnh…';
-    try {
-      const result = await ApiClient.resetChargePoint(code, select.value);
-      showToast(result.message || 'Trụ đã chấp nhận lệnh Reset', 'success');
-      window.setTimeout(loadData, 1000);
-    } catch (error) {
-      showToast(error.message || 'Không gửi được lệnh Reset', 'error');
-      button.disabled = false;
-      button.textContent = 'Khởi động lại';
-    }
-  }
+  // resetPoint đã được thay thế bởi RestartButton.handleRestart (SCRUM-134)
 
   function connectSSE() {
     const indicator = document.getElementById('sse-indicator');
@@ -211,9 +187,57 @@
     SseClient.connect('/api/monitoring/sse');
   }
 
+  // ── Hook RealtimeStatus (SCRUM-134) ─────────────────────────────────
+  function connectRealtimeHook() {
+    RealtimeStatus.subscribe('status_change', (payload) => {
+      // Cập nhật trạng thái đầu nối trong dữ liệu local khi nhận sự kiện mock/thật
+      for (const station of stations) {
+        for (const point of (station.charge_points || [])) {
+          if (point.code === payload.charge_point_code) {
+            for (const conn of (point.connectors || [])) {
+              if (conn.connector_id === payload.connector_id) {
+                conn.status = internalStatus(payload.status);
+              }
+            }
+            // Cập nhật ocpp_status của trụ nếu phù hợp
+            point.ocpp_status = payload.status;
+          }
+        }
+      }
+      render();
+    });
+
+    RealtimeStatus.subscribe('cp_offline', (payload) => {
+      for (const station of stations) {
+        for (const point of (station.charge_points || [])) {
+          if (point.code === payload.charge_point_code) {
+            point.status = 'offline';
+          }
+        }
+      }
+      render();
+      showToast(`Trụ ${payload.charge_point_code} đã mất kết nối`, 'warning');
+    });
+
+    RealtimeStatus.subscribe('cp_online', (payload) => {
+      for (const station of stations) {
+        for (const point of (station.charge_points || [])) {
+          if (point.code === payload.charge_point_code) {
+            point.status = 'online';
+          }
+        }
+      }
+      render();
+      showToast(`Trụ ${payload.charge_point_code} đã trực tuyến trở lại`, 'success');
+    });
+
+    RealtimeStatus.connect();
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     loadData();
     connectSSE();
+    connectRealtimeHook();
     let debounce;
     document.getElementById('mon-search')?.addEventListener('input', () => {
       clearTimeout(debounce);
