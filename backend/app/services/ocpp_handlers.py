@@ -163,6 +163,14 @@ def touch_last_seen(db: Session, charge_point_code: str) -> None:
     )
 
 
+def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
+    db.execute(
+        update(ChargePoint)
+        .where(ChargePoint.code == charge_point_code)
+        .values(last_seen_at=func.current_timestamp())
+        .execution_options(synchronize_session=False)
+    )
+
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
         from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification

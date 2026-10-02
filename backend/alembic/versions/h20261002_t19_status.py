@@ -40,6 +40,5 @@ def downgrade() -> None:
 
     if "ocpp_status" in existing:
         op.drop_column("connectors", "ocpp_status")
-        
-    if "status" in existing:
-        op.drop_column("connectors", "status")
+
+    # Do NOT drop 'status' because it was created in 0003_create_charge_points

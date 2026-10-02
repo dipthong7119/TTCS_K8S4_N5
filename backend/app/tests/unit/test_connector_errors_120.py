@@ -116,9 +116,9 @@ def test_status_notification_invalid_timestamp_fallback(db_session):
 
 def test_status_notification_two_errors(db_session):
     """Hai lỗi liên tiếp -> ghi hai dòng."""
-    _send_status(db_session, {"connectorId": 1, "status": "Faulted", "errorCode": "Err1"})
-    _send_status(db_session, {"connectorId": 1, "status": "Faulted", "errorCode": "Err2"})
-    
+    _send_status(db_session, {"connectorId": 1, "status": "Faulted", "errorCode": "Err1"}, msg_id="msg-err1")
+    _send_status(db_session, {"connectorId": 1, "status": "Faulted", "errorCode": "Err2"}, msg_id="msg-err2")
+
     errors = db_session.query(ConnectorError).order_by(ConnectorError.occurred_at.asc()).all()
     assert len(errors) == 2
     assert errors[0].error_code == "Err1"

@@ -16,8 +16,12 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     inspector = sa.inspect(op.get_bind())
+    indexes = {idx["name"] for idx in inspector.get_indexes("connector_errors")}
+    if "ix_connector_errors_connector_timestamp" in indexes:
+        op.drop_index("ix_connector_errors_connector_timestamp", table_name="connector_errors")
+
     columns = {col["name"] for col in inspector.get_columns("connector_errors")}
-    
+
     with op.batch_alter_table("connector_errors", schema=None) as batch_op:
         if "occurred_at" not in columns:
             batch_op.add_column(sa.Column("occurred_at", sa.DateTime(), nullable=False, server_default=sa.func.now()))
@@ -27,16 +31,17 @@ def upgrade() -> None:
             batch_op.drop_column("timestamp")
         if "updated_at" in columns:
             batch_op.drop_column("updated_at")
-            
-    indexes = {idx["name"] for idx in inspector.get_indexes("connector_errors")}
-    if "ix_connector_errors_connector_timestamp" in indexes:
-        op.drop_index("ix_connector_errors_connector_timestamp", table_name="connector_errors")
+
     if "ix_connector_errors_connector_occurred" not in indexes:
         op.create_index("ix_connector_errors_connector_occurred", "connector_errors", ["connector_id", "occurred_at"])
 
 
 def downgrade() -> None:
     inspector = sa.inspect(op.get_bind())
+    indexes = {idx["name"] for idx in inspector.get_indexes("connector_errors")}
+    if "ix_connector_errors_connector_occurred" in indexes:
+        op.drop_index("ix_connector_errors_connector_occurred", table_name="connector_errors")
+
     columns = {col["name"] for col in inspector.get_columns("connector_errors")}
 
     with op.batch_alter_table("connector_errors", schema=None) as batch_op:
@@ -49,8 +54,8 @@ def downgrade() -> None:
         if "occurred_at" in columns:
             batch_op.drop_column("occurred_at")
 
-    indexes = {idx["name"] for idx in inspector.get_indexes("connector_errors")}
-    if "ix_connector_errors_connector_occurred" in indexes:
-        op.drop_index("ix_connector_errors_connector_occurred", table_name="connector_errors")
     if "ix_connector_errors_connector_timestamp" not in indexes:
-        op.create_index("ix_connector_errors_connector_timestamp", "connector_errors", ["connector_id", "timestamp"])
+        try:
+            op.create_index("ix_connector_errors_connector_timestamp", "connector_errors", ["connector_id", "timestamp"])
+        except Exception:
+            pass
