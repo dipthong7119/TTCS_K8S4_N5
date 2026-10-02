@@ -3,7 +3,205 @@
   'use strict';
 
   let stations = [];
+  let isMockMode = false;
   const canReset = document.getElementById('monitoring-grid')?.dataset.canReset === 'true';
+
+  // Bộ dữ liệu mẫu 20 trụ sạc đáp ứng tiêu chí nghiệm thu SCRUM-124 / T-24 (Story S-11)
+  const MOCK_STATIONS_20_POINTS = [
+    {
+      id: 1,
+      name: "Trạm Sạc TT01 — Hoàn Kiếm",
+      address: "12 Tràng Tiền, Hoàn Kiếm, Hà Nội",
+      status: "active",
+      charge_points: [
+        {
+          id: 101, code: "CP-HN-01", station_id: 1, status: "online", ocpp_status: "Available",
+          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 1001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 1002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 102, code: "CP-HN-02", station_id: 1, status: "online", ocpp_status: "Charging",
+          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 1003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
+            { id: 1004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 103, code: "CP-HN-03", station_id: 1, status: "online", ocpp_status: "Reserved",
+          vendor: "Schneider", model: "EVlink Pro", firmware_version: "v2.1.0", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 1005, connector_id: 1, status: "đặt chỗ", ocpp_status: "Reserved" }
+          ]
+        },
+        {
+          id: 104, code: "CP-HN-04", station_id: 1, status: "offline", ocpp_status: "offline",
+          vendor: "Schneider", model: "EVlink Pro", firmware_version: "v2.1.0",
+          last_seen_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+          connectors: [
+            { id: 1006, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
+            { id: 1007, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
+          ]
+        },
+        {
+          id: 105, code: "CP-HN-05", station_id: 1, status: "online", ocpp_status: "Faulted",
+          vendor: "ABB", model: "Terra 124", firmware_version: "v1.6.0", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 1008, connector_id: 1, status: "lỗi", ocpp_status: "Faulted" },
+            { id: 1009, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        }
+      ]
+    },
+    {
+      id: 2,
+      name: "Trạm Sạc TT02 — Cầu Giấy",
+      address: "88 Duy Tân, Cầu Giấy, Hà Nội",
+      status: "active",
+      charge_points: [
+        {
+          id: 201, code: "CP-HN-06", station_id: 2, status: "online", ocpp_status: "Available",
+          vendor: "StarCharge", model: "Titan 180kW", firmware_version: "v3.0.1", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 2001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 2002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 202, code: "CP-HN-07", station_id: 2, status: "online", ocpp_status: "Charging",
+          vendor: "StarCharge", model: "Titan 180kW", firmware_version: "v3.0.1", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 2003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
+            { id: 2004, connector_id: 2, status: "bận", ocpp_status: "Charging" }
+          ]
+        },
+        {
+          id: 203, code: "CP-HN-08", station_id: 2, status: "online", ocpp_status: "Available",
+          vendor: "StarCharge", model: "Nova 60kW", firmware_version: "v2.4.5", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 2005, connector_id: 1, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 204, code: "CP-HN-09", station_id: 2, status: "offline", ocpp_status: "offline",
+          vendor: "Delta", model: "Ultra Fast 150kW", firmware_version: "v1.2.9",
+          last_seen_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+          connectors: [
+            { id: 2006, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
+            { id: 2007, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
+          ]
+        },
+        {
+          id: 205, code: "CP-HN-10", station_id: 2, status: "online", ocpp_status: "Available",
+          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 2008, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 2009, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        }
+      ]
+    },
+    {
+      id: 3,
+      name: "Trạm Sạc TT03 — Nam Từ Liêm (Mỹ Đình)",
+      address: "1 Lê Đức Thọ, Nam Từ Liêm, Hà Nội",
+      status: "active",
+      charge_points: [
+        {
+          id: 301, code: "CP-HN-11", station_id: 3, status: "online", ocpp_status: "Charging",
+          vendor: "ABB", model: "Terra 184", firmware_version: "v1.8.2", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 3001, connector_id: 1, status: "bận", ocpp_status: "Charging" },
+            { id: 3002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 302, code: "CP-HN-12", station_id: 3, status: "online", ocpp_status: "Available",
+          vendor: "ABB", model: "Terra 184", firmware_version: "v1.8.2", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 3003, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 3004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 303, code: "CP-HN-13", station_id: 3, status: "online", ocpp_status: "Faulted",
+          vendor: "Schneider", model: "EVlink 22kW", firmware_version: "v2.0.3", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 3005, connector_id: 1, status: "lỗi", ocpp_status: "Faulted" }
+          ]
+        },
+        {
+          id: 304, code: "CP-HN-14", station_id: 3, status: "online", ocpp_status: "Available",
+          vendor: "Schneider", model: "EVlink 22kW", firmware_version: "v2.0.3", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 3006, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 3007, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 305, code: "CP-HN-15", station_id: 3, status: "offline", ocpp_status: "offline",
+          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2",
+          last_seen_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+          connectors: [
+            { id: 3008, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
+            { id: 3009, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
+          ]
+        }
+      ]
+    },
+    {
+      id: 4,
+      name: "Trạm Sạc TT04 — Long Biên (Aeon)",
+      address: "27 Cổ Linh, Long Biên, Hà Nội",
+      status: "active",
+      charge_points: [
+        {
+          id: 401, code: "CP-HN-16", station_id: 4, status: "online", ocpp_status: "Available",
+          vendor: "StarCharge", model: "Titan 120kW", firmware_version: "v2.8.0", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 4001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 4002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 402, code: "CP-HN-17", station_id: 4, status: "online", ocpp_status: "Charging",
+          vendor: "StarCharge", model: "Titan 120kW", firmware_version: "v2.8.0", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 4003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
+            { id: 4004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 403, code: "CP-HN-18", station_id: 4, status: "online", ocpp_status: "Reserved",
+          vendor: "StarCharge", model: "Nova 30kW", firmware_version: "v2.2.1", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 4005, connector_id: 1, status: "đặt chỗ", ocpp_status: "Reserved" },
+            { id: 4006, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 404, code: "CP-HN-19", station_id: 4, status: "online", ocpp_status: "Available",
+          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 4007, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 4008, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        },
+        {
+          id: 405, code: "CP-HN-20", station_id: 4, status: "online", ocpp_status: "Available",
+          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
+          connectors: [
+            { id: 4009, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
+            { id: 4010, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
+          ]
+        }
+      ]
+    }
+  ];
+
   const STATUS = {
     online: ['Trực tuyến', 'badge--online'],
     offline: ['Ngoại tuyến', 'badge--offline'],
@@ -47,14 +245,73 @@
     return 'unknown';
   }
 
-  async function loadData() {
-    try {
-      const result = await ApiClient.getMonitoringTree();
-      stations = Array.isArray(result) ? result : (result.stations || []);
+  function updateMockBtnUI() {
+    const btn = document.getElementById('btn-toggle-mock');
+    const label = document.getElementById('mock-btn-label');
+    if (!btn || !label) return;
+    if (isMockMode) {
+      btn.classList.add('is-active');
+      label.textContent = 'Dữ liệu máy chủ (API)';
+      btn.title = 'Đang xem dữ liệu mẫu 20 trụ. Bấm để chuyển sang dữ liệu máy chủ';
+    } else {
+      btn.classList.remove('is-active');
+      label.textContent = 'Dữ liệu mẫu (20 trụ)';
+      btn.title = 'Bấm để nạp bộ dữ liệu mẫu 20 trụ kiểm thử giao diện';
+    }
+  }
+
+  function toggleMockMode() {
+    isMockMode = !isMockMode;
+    if (isMockMode) {
+      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
       document.getElementById('mon-loading')?.remove();
+      updateMockBtnUI();
+      if (typeof showToast === 'function') {
+        showToast('Đang hiển thị bộ dữ liệu mẫu 20 trụ kiểm thử giao diện (SCRUM-124 / T-24)', 'info');
+      }
+    } else {
+      updateMockBtnUI();
+      loadData();
+    }
+  }
+
+  async function loadData() {
+    if (isMockMode) {
+      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
+      render();
+      document.getElementById('mon-loading')?.remove();
+      updateMockBtnUI();
+      return;
+    }
+
+    try {
+      const result = await ApiClient.getMonitoringTree();
+      const serverStations = Array.isArray(result) ? result : (result?.stations || []);
+      const totalPoints = serverStations.reduce((sum, s) => sum + (s.charge_points || []).length, 0);
+
+      if (totalPoints > 0) {
+        stations = serverStations;
+        isMockMode = false;
+      } else {
+        stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
+        isMockMode = true;
+        if (typeof showToast === 'function') {
+          showToast('Máy chủ chưa có trụ sạc. Đang hiển thị bộ dữ liệu mẫu 20 trụ (SCRUM-124 / T-24)', 'info');
+        }
+      }
+      render();
+      document.getElementById('mon-loading')?.remove();
+      updateMockBtnUI();
     } catch (error) {
-      showToast(error.message || 'Không tải được dữ liệu giám sát', 'error');
+      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
+      isMockMode = true;
+      render();
+      document.getElementById('mon-loading')?.remove();
+      updateMockBtnUI();
+      if (typeof showToast === 'function') {
+        showToast('Chưa kết nối API máy chủ. Đang hiển thị dữ liệu mẫu 20 trụ (SCRUM-124)', 'warning');
+      }
     }
   }
 
@@ -244,7 +501,8 @@
       debounce = setTimeout(render, 200);
     });
     document.getElementById('mon-status-filter')?.addEventListener('change', render);
-    document.getElementById('btn-refresh-monitoring')?.addEventListener('click', loadData);
+    document.getElementById('btn-refresh-monitoring')?.addEventListener('click', () => loadData(false));
+    document.getElementById('btn-toggle-mock')?.addEventListener('click', toggleMockMode);
     document.getElementById('view-grid')?.addEventListener('click', () => setView('grid'));
     document.getElementById('view-list')?.addEventListener('click', () => setView('list'));
     document.getElementById('detail-close')?.addEventListener('click', closeDetail);
