@@ -38,7 +38,7 @@ jobs:
         run: python -m ruff check app alembic ../tests
 
       - name: Run Unit Tests (Pytest)
-        run: python -m pytest app/tests ../tests
+        run: python -m pytest app/tests ../tests --tb=short -v
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
