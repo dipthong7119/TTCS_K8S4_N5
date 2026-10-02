@@ -4,8 +4,8 @@ Tham chiếu: 02_DAC_TA_DU_AN.md — AC của S-08 và NFR của T-16/T-17.
 
 Bốn nhóm ca kiểm thử:
   1. Payload đủ 3 trường  → 3 cột lưu đúng, trạng thái online, conf đúng chuẩn.
-  2. Payload thiếu từng trường → vẫn Accepted, cột tương ứng là NULL.
-  3. Gửi 2 lần (idempotency) → chỉ 1 bản ghi trụ, conf vẫn Accepted.
+  2. Payload thiếu từng trường → vẫn Accepted, cột tương ứng là NULL (không phải "").
+  3. Gửi 2 lần (idempotency ghi đè) → chỉ 1 bản ghi trụ, conf vẫn Accepted.
   4. Đổi OCPP_HEARTBEAT_INTERVAL_SECONDS → interval trong conf đổi theo.
 """
 
@@ -23,13 +23,15 @@ from app.models.station import Station
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
+
 # ---------------------------------------------------------------------------
-# Fixture: DB in-memory mới cho mỗi test, có 1 station + 1 charge point
+# Fixture: DB in-memory mới cho mỗi test — 1 station active + 1 trụ offline
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def db_session():
-    """DB SQLite in-memory, tạo schema đầy đủ cho mỗi test."""
+    """DB SQLite in-memory, tạo đủ schema cho mỗi test, dọn dẹp sau."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -55,7 +57,9 @@ def db_session():
 # Helper: gửi BootNotification và parse phản hồi
 # ---------------------------------------------------------------------------
 
+
 def _boot(db, payload: dict, msg_id: str = "msg-boot-1"):
+    """Đóng gói CALL, gọi handler, parse CALLRESULT trả về."""
     raw = pack_call(msg_id, "BootNotification", payload)
     resp = handle_ocpp_message(db, "CP-TEST", raw)
     msg_type, resp_id, _, result, _, _ = parse_message(resp)
@@ -80,7 +84,7 @@ def test_full_payload_returns_accepted(db_session):
 
 
 def test_full_payload_saves_vendor_model_firmware(db_session):
-    """Ba cột lưu đúng giá trị (T-16 AC)."""
+    """Ba cột lưu đúng giá trị từ payload (T-16 AC)."""
     _boot(db_session, FULL_PAYLOAD)
     cp = db_session.query(ChargePoint).filter_by(code="CP-TEST").one()
     assert cp.vendor == "ABB"
@@ -89,13 +93,13 @@ def test_full_payload_saves_vendor_model_firmware(db_session):
 
 
 def test_full_payload_sets_status_online(db_session):
-    """Trụ chuyển sang online sau BootNotification Accepted (T-16 AC)."""
+    """Sau khi Boot Accepted, trụ chuyển sang online (T-16 AC)."""
     _boot(db_session, FULL_PAYLOAD)
     cp = db_session.query(ChargePoint).filter_by(code="CP-TEST").one()
     assert cp.status == "online"
 
 
-def test_full_payload_conf_has_current_time(db_session):
+def test_full_payload_conf_has_current_time_utc(db_session):
     """currentTime là UTC ISO 8601 trong khoảng hợp lý (T-17 NFR)."""
     before = datetime.now(UTC)
     _, _, result = _boot(db_session, FULL_PAYLOAD)
@@ -104,7 +108,7 @@ def test_full_payload_conf_has_current_time(db_session):
     assert before.timestamp() - 1 <= current_time.timestamp() <= after.timestamp() + 1
 
 
-def test_full_payload_conf_has_interval(db_session):
+def test_full_payload_conf_has_positive_interval(db_session):
     """interval có trong conf và là số nguyên dương (T-17 AC)."""
     _, _, result = _boot(db_session, FULL_PAYLOAD)
     assert isinstance(result["interval"], int)
@@ -112,8 +116,9 @@ def test_full_payload_conf_has_interval(db_session):
 
 
 # ---------------------------------------------------------------------------
-# Nhóm 2: payload thiếu từng trường → cột tương ứng là NULL
+# Nhóm 2: payload thiếu từng trường → cột tương ứng là NULL (không phải "")
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "payload,missing_field",
@@ -138,7 +143,7 @@ def test_full_payload_conf_has_interval(db_session):
     ids=["missing_vendor", "missing_model", "missing_firmware", "all_missing"],
 )
 def test_missing_field_still_accepted(db_session, payload, missing_field):
-    """Payload thiếu trường → vẫn trả Accepted (T-16 NFR: không từ chối)."""
+    """Payload thiếu trường vẫn trả Accepted — không từ chối (T-16 NFR)."""
     msg_type, _, result = _boot(db_session, payload, msg_id=f"msg-miss-{missing_field}")
     assert msg_type == 3
     assert result["status"] == "Accepted"
@@ -163,15 +168,16 @@ def test_missing_field_still_accepted(db_session, payload, missing_field):
     ids=["null_vendor", "null_model", "null_firmware"],
 )
 def test_missing_field_column_is_null(db_session, payload, null_attr):
-    """Cột tương ứng trường thiếu phải là NULL — không được lưu chuỗi rỗng (T-16 NFR)."""
+    """Cột tương ứng trường thiếu phải là NULL, không được lưu chuỗi rỗng (T-16 NFR)."""
     _boot(db_session, payload, msg_id=f"msg-null-{null_attr}")
     cp = db_session.query(ChargePoint).filter_by(code="CP-TEST").one()
     assert getattr(cp, null_attr) is None
 
 
 # ---------------------------------------------------------------------------
-# Nhóm 3: gửi 2 lần → vẫn chỉ 1 bản ghi trụ (idempotency từ T-30)
+# Nhóm 3: gửi 2 lần → vẫn chỉ 1 bản ghi trụ (S-08 AC3)
 # ---------------------------------------------------------------------------
+
 
 def test_second_boot_does_not_create_new_charge_point(db_session):
     """Gửi BootNotification 2 lần → bảng charge_points vẫn 1 dòng (S-08 AC3)."""
@@ -182,15 +188,25 @@ def test_second_boot_does_not_create_new_charge_point(db_session):
 
 
 def test_second_boot_still_accepted(db_session):
-    """Lần gửi thứ hai vẫn trả Accepted (S-08 AC3)."""
+    """Lần gửi thứ hai (msg_id khác nhau) vẫn trả Accepted (S-08 AC3)."""
     _boot(db_session, FULL_PAYLOAD, msg_id="boot-c")
     _, _, result = _boot(db_session, FULL_PAYLOAD, msg_id="boot-d")
     assert result["status"] == "Accepted"
 
 
+def test_second_boot_updates_firmware_version(db_session):
+    """Lần gửi thứ hai cập nhật firmware_version mà không tạo dòng mới (S-08 AC3)."""
+    _boot(db_session, FULL_PAYLOAD, msg_id="boot-e")
+    _boot(db_session, {**FULL_PAYLOAD, "firmwareVersion": "9.9.9"}, msg_id="boot-f")
+    cp = db_session.query(ChargePoint).filter_by(code="CP-TEST").one()
+    assert cp.firmware_version == "9.9.9"
+    assert db_session.query(ChargePoint).count() == 1
+
+
 # ---------------------------------------------------------------------------
-# Nhóm 4: đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo
+# Nhóm 4: đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo (T-17 AC)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "interval",
