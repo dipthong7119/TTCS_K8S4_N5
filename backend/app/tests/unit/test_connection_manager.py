@@ -73,6 +73,10 @@ def test_duplicate_connection(caplog):
         assert f"old_connection_id={id(ws1)}" in caplog.text
         assert f"new_connection_id={id(ws2)}" in caplog.text
         
+        # Test old socket disconnect does not remove new socket
+        manager.disconnect("CP01", ws1)
+        assert manager.active_connections.get("CP01") == ws2
+        
         manager.disconnect("CP01", ws2)
         assert "CP01" not in manager.active_connections
 
