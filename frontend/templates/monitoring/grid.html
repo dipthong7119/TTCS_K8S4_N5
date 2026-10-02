@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "monitoring" %}
 
 {% block title %}Giám sát thời gian thực{% endblock %}
@@ -59,6 +59,17 @@
   </div>
 </div>
 
+<!-- Status legend (accessibility & color blindness support - SCRUM-124 / T-24) -->
+<div class="status-legend" aria-label="Chú giải trạng thái" style="margin-bottom:var(--space-4);">
+  <span class="status-legend__title">Chú giải trạng thái:</span>
+  <span class="badge badge--available"><span class="badge-text">Sẵn sàng</span></span>
+  <span class="badge badge--charging"><span class="badge-text">Đang sạc</span></span>
+  <span class="badge badge--warning"><span class="badge-text">Đã đặt chỗ / Tạm dừng</span></span>
+  <span class="badge badge--offline"><span class="badge-text">Ngoại tuyến / Tạm ngừng</span></span>
+  <span class="badge badge--fault"><span class="badge-text">Báo lỗi</span></span>
+  <span class="badge badge--neutral"><span class="badge-text">Chưa rõ</span></span>
+</div>
+
 <!-- View toggle + filter -->
 <div class="filters-bar" style="margin-bottom:var(--space-4);">
   <div class="search-input-wrap" style="max-width:280px;">
@@ -89,6 +100,16 @@
         <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
         <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
       </svg>
+    </button>
+  </div>
+  <div class="mock-mode-wrap" style="margin-left:auto;">
+    <button class="btn btn--secondary btn--sm" id="btn-toggle-mock" type="button" title="Chuyển đổi nguồn dữ liệu kiểm thử (20 trụ)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+      <span id="mock-btn-label">Dữ liệu mẫu (20 trụ)</span>
     </button>
   </div>
 </div>
