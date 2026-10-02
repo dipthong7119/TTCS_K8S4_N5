@@ -128,23 +128,7 @@ const RestartButton = (() => {
     });
   }
 
-  /**
-   * Mock API gửi lệnh restart (xóa khi có API thật từ SCRUM-107/134).
-   * Giả lập thời gian phản hồi 800–1500ms.
-   */
-  async function _mockResetApi(cpCode, resetType) {
-    return new Promise((resolve, reject) => {
-      const delay = 800 + Math.random() * 700;
-      setTimeout(() => {
-        // Giả lập: 85% thành công, 15% thất bại
-        if (Math.random() < 0.85) {
-          resolve({ message: `Trụ ${cpCode} đã chấp nhận lệnh Reset ${resetType}`, status: 'Accepted' });
-        } else {
-          reject({ message: `Trụ ${cpCode} từ chối lệnh Reset — vui lòng thử lại`, status: 'Rejected' });
-        }
-      }, delay);
-    });
-  }
+
 
   /**
    * Xử lý gửi lệnh restart cho trụ sạc.
@@ -174,12 +158,10 @@ const RestartButton = (() => {
     }
 
     try {
-      // Khi SCRUM-107 & API SCRUM-134 sẵn sàng, thay _mockResetApi bằng:
-      //   const result = await ApiClient.resetChargePoint(cpCode, resetType);
-      const result = await _mockResetApi(cpCode, resetType);
+      const result = await ApiClient.resetChargePoint(cpCode, resetType);
 
       if (typeof showToast === 'function') {
-        showToast(result.message, 'success');
+        showToast(result.message || 'Lệnh khởi động lại đã được gửi', 'success');
       }
     } catch (error) {
       if (typeof showToast === 'function') {
