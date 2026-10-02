@@ -181,18 +181,31 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
 
 
 def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    point.vendor = payload.get("chargePointVendor") or ""
-    point.model = payload.get("chargePointModel") or ""
-    point.firmware_version = payload.get("firmwareVersion") or ""
+    # Đọc 3 trường từ payload, thiếu thì lưu NULL (T-16 NFR)
+    point.vendor = payload.get("chargePointVendor") or None
+    point.model = payload.get("chargePointModel") or None
+    point.firmware_version = payload.get("firmwareVersion") or None
+
     station = db.query(Station).filter(Station.id == point.station_id).first()
-    # A paused/maintenance station still connects so it can report state.
-    # An administrative lock explicitly rejects the OCPP boot handshake.
+    # Trạm tạm ngừng (inactive/paused) vẫn Accepted để trụ báo trạng thái.
+    # Trạm bị khóa hành chính mới Rejected (T-17 AC).
     accepted = station is not None and station.status != "locked"
     point.status = "online" if accepted else "offline"
+
+    # Log ngắn gọn — không log toàn bộ payload (00_QUY_TAC_AGENT.md)
+    logger.info(
+        "BootNotification charge_point=%s vendor=%s model=%s firmware=%s status=%s",
+        point.code,
+        point.vendor,
+        point.model,
+        point.firmware_version,
+        "Accepted" if accepted else "Rejected",
+    )
     return pack_call_result(
         msg_id,
         {
             "currentTime": _utc_timestamp(),
+            # Khoảng nhịp tim đọc từ cấu hình, không ghi cứng (T-17 NFR)
             "interval": settings.OCPP_HEARTBEAT_INTERVAL_SECONDS,
             "status": "Accepted" if accepted else "Rejected",
         },
