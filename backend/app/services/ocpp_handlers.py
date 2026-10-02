@@ -170,7 +170,8 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
         return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
-        return handle_status_notification(db, point, msg_id, payload)
+        from app.ocpp.handlers.status_notification import handle_status_notification as new_handle_status_notification
+        return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
         return handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
@@ -217,47 +218,6 @@ def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, paylo
 
 
 
-def handle_status_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    connector_id = payload.get("connectorId")
-    status_raw = payload.get("status")
-    error_code = payload.get("errorCode")
-    if type(connector_id) is not int or connector_id < 0:
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a non-negative integer")
-    if not isinstance(status_raw, str) or not status_raw:
-        return pack_call_error(msg_id, "FormationViolation", "status must be a non-empty string")
-    if not isinstance(error_code, str) or not error_code:
-        return pack_call_error(msg_id, "FormationViolation", "errorCode must be a non-empty string")
-
-    if connector_id == 0:
-        # OCPP connector 0 describes the charge point itself, not a connector row.
-        point.ocpp_status = status_raw
-        return pack_call_result(msg_id, {})
-
-    connector = (
-        db.query(Connector)
-        .filter_by(charge_point_id=point.id, connector_id=connector_id)
-        .first()
-    )
-    if connector is None:
-        _warn_missing_connector(point.code, connector_id)
-        return pack_call_result(msg_id, {})
-
-    connector.ocpp_status = status_raw
-    connector.status = map_status(status_raw)
-    connector.error_code = error_code
-
-    if error_code != "NoError":
-        timestamp = _parse_timestamp(payload.get("timestamp")) or datetime.now(UTC).replace(tzinfo=None)
-        db.add(
-            ConnectorError(
-                connector_id=connector.id,
-                error_code=error_code,
-                vendor_error_code=payload.get("vendorErrorCode"),
-                info=payload.get("info"),
-                timestamp=timestamp,
-            )
-        )
-    return pack_call_result(msg_id, {})
 
 
 def handle_authorize(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
