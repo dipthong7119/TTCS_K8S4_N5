@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
 from app.services.connection_manager import manager
-from app.services.ocpp_handlers import handle_ocpp_message, mark_charge_point_seen
+from app.services.ocpp_handlers import handle_ocpp_message, touch_last_seen
 from app.services.ocpp_parser import OCPPError, pack_call_error, parse_message
 
 router = APIRouter()
@@ -65,7 +65,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
 
             if msg_type == 3:
                 with SessionLocal() as db:
-                    mark_charge_point_seen(db, charge_point_code)
+                    touch_last_seen(db, charge_point_code)
                     db.commit()
                 matched = await manager.resolve_call_result(
                     charge_point_code, msg_id, payload, websocket
@@ -75,7 +75,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 continue
             if msg_type == 4:
                 with SessionLocal() as db:
-                    mark_charge_point_seen(db, charge_point_code)
+                    touch_last_seen(db, charge_point_code)
                     db.commit()
                 matched = await manager.resolve_call_error(
                     charge_point_code,
@@ -119,6 +119,16 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
             logger.debug("WebSocket was already closed for %s", charge_point_code)
     finally:
         manager.disconnect(charge_point_code, websocket)
+        if manager.active_connections.get(charge_point_code) is None:
+            with SessionLocal() as db:
+                point = db.query(ChargePoint).filter_by(code=charge_point_code).first()
+                if point and point.status != "offline":
+                    point.status = "offline"
+                    for connector in point.connectors:
+                        connector.status = "unknown"
+                    db.commit()
+                    from app.services.ocpp_handlers import publish_charge_point_status
+                    publish_charge_point_status(db, point.id)
 
 
 def _normalize_parsed_message(message):
