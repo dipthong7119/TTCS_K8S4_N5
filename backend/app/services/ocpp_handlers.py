@@ -92,7 +92,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
     if existing:
         if existing.request_hash and existing.request_hash != request_hash:
             logger.warning("OCPP message ID reused with different content from %s", charge_point_code)
-        mark_charge_point_seen(db, charge_point_code)
+        touch_last_seen(db, charge_point_code)
         if action != "BootNotification" or _boot_was_accepted(existing.response_payload):
             point.status = "online"
         db.commit()
@@ -102,7 +102,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
             publish_session_update(db, point.id, action, payload)
         return existing.response_payload
 
-    mark_charge_point_seen(db, charge_point_code)
+    touch_last_seen(db, charge_point_code)
     try:
         if action != "BootNotification":
             point.status = "online"
@@ -153,7 +153,8 @@ def _parse_for_handler(raw_msg: str):
         raise OCPPError(code, str(exc)) from exc
 
 
-def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
+def touch_last_seen(db: Session, charge_point_code: str) -> None:
+    """Cập nhật last_seen_at cho mọi tin nhắn từ trụ bằng 1 câu UPDATE (không đọc-sửa-ghi)."""
     db.execute(
         update(ChargePoint)
         .where(ChargePoint.code == charge_point_code)
@@ -166,7 +167,8 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     if action == "BootNotification":
         return handle_boot_notification(db, point, msg_id, payload)
     if action == "Heartbeat":
-        return handle_heartbeat(db, point, msg_id)
+        from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
+        return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
         return handle_status_notification(db, point, msg_id, payload)
     if action == "Authorize":
@@ -212,10 +214,7 @@ def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, paylo
     )
 
 
-def handle_heartbeat(db: Session, point: ChargePoint, msg_id: str) -> str:
-    # The router only lets an accepted booted connection reach this handler.
-    point.status = "online"
-    return pack_call_result(msg_id, {"currentTime": _utc_timestamp()})
+
 
 
 def handle_status_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
