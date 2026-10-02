@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     LOCKOUT_DURATION_MINUTES: int = 15
 
     # OCPP 1.6J and background job settings
+    HEARTBEAT_INTERVAL: int = 300
     OCPP_HEARTBEAT_INTERVAL_SECONDS: int = 300
     OCPP_HEARTBEAT_MULTIPLIER: int = 2
     OCPP_MESSAGE_RETENTION_DAYS: int = 7

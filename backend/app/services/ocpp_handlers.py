@@ -92,7 +92,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
     if existing:
         if existing.request_hash and existing.request_hash != request_hash:
             logger.warning("OCPP message ID reused with different content from %s", charge_point_code)
-        mark_charge_point_seen(db, charge_point_code)
+        touch_last_seen(db, charge_point_code)
         if action != "BootNotification" or _boot_was_accepted(existing.response_payload):
             point.status = "online"
         db.commit()
@@ -102,7 +102,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
             publish_session_update(db, point.id, action, payload)
         return existing.response_payload
 
-    mark_charge_point_seen(db, charge_point_code)
+    touch_last_seen(db, charge_point_code)
     try:
         if action != "BootNotification":
             point.status = "online"
@@ -153,7 +153,8 @@ def _parse_for_handler(raw_msg: str):
         raise OCPPError(code, str(exc)) from exc
 
 
-def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
+def touch_last_seen(db: Session, charge_point_code: str) -> None:
+    """Cập nhật last_seen_at cho mọi tin nhắn từ trụ bằng 1 câu UPDATE (không đọc-sửa-ghi)."""
     db.execute(
         update(ChargePoint)
         .where(ChargePoint.code == charge_point_code)
@@ -164,11 +165,14 @@ def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
-        return handle_boot_notification(db, point, msg_id, payload)
+        from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification
+        return new_handle_boot_notification(db, point.code, msg_id, payload)
     if action == "Heartbeat":
-        return handle_heartbeat(db, point, msg_id)
+        from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
+        return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
-        return handle_status_notification(db, point, msg_id, payload)
+        from app.ocpp.handlers.status_notification import handle_status_notification as new_handle_status_notification
+        return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
         return handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
@@ -180,85 +184,12 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
 
-def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    # Đọc 3 trường từ payload, thiếu thì lưu NULL (T-16 NFR)
-    point.vendor = payload.get("chargePointVendor") or None
-    point.model = payload.get("chargePointModel") or None
-    point.firmware_version = payload.get("firmwareVersion") or None
-
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    # Trạm tạm ngừng (inactive/paused) vẫn Accepted để trụ báo trạng thái.
-    # Trạm bị khóa hành chính mới Rejected (T-17 AC).
-    accepted = station is not None and station.status != "locked"
-    point.status = "online" if accepted else "offline"
-
-    # Log ngắn gọn — không log toàn bộ payload (00_QUY_TAC_AGENT.md)
-    logger.info(
-        "BootNotification charge_point=%s vendor=%s model=%s firmware=%s status=%s",
-        point.code,
-        point.vendor,
-        point.model,
-        point.firmware_version,
-        "Accepted" if accepted else "Rejected",
-    )
-    return pack_call_result(
-        msg_id,
-        {
-            "currentTime": _utc_timestamp(),
-            # Khoảng nhịp tim đọc từ cấu hình, không ghi cứng (T-17 NFR)
-            "interval": settings.OCPP_HEARTBEAT_INTERVAL_SECONDS,
-            "status": "Accepted" if accepted else "Rejected",
-        },
-    )
 
 
-def handle_heartbeat(db: Session, point: ChargePoint, msg_id: str) -> str:
-    # The router only lets an accepted booted connection reach this handler.
-    point.status = "online"
-    return pack_call_result(msg_id, {"currentTime": _utc_timestamp()})
 
 
-def handle_status_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    connector_id = payload.get("connectorId")
-    status_raw = payload.get("status")
-    error_code = payload.get("errorCode")
-    if type(connector_id) is not int or connector_id < 0:
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a non-negative integer")
-    if not isinstance(status_raw, str) or not status_raw:
-        return pack_call_error(msg_id, "FormationViolation", "status must be a non-empty string")
-    if not isinstance(error_code, str) or not error_code:
-        return pack_call_error(msg_id, "FormationViolation", "errorCode must be a non-empty string")
 
-    if connector_id == 0:
-        # OCPP connector 0 describes the charge point itself, not a connector row.
-        point.ocpp_status = status_raw
-        return pack_call_result(msg_id, {})
 
-    connector = (
-        db.query(Connector)
-        .filter_by(charge_point_id=point.id, connector_id=connector_id)
-        .first()
-    )
-    if connector is None:
-        _warn_missing_connector(point.code, connector_id)
-        return pack_call_result(msg_id, {})
-
-    connector.ocpp_status = status_raw
-    connector.status = map_status(status_raw)
-    connector.error_code = error_code
-
-    if error_code != "NoError":
-        timestamp = _parse_timestamp(payload.get("timestamp")) or datetime.now(UTC).replace(tzinfo=None)
-        db.add(
-            ConnectorError(
-                connector_id=connector.id,
-                error_code=error_code,
-                vendor_error_code=payload.get("vendorErrorCode"),
-                info=payload.get("info"),
-                timestamp=timestamp,
-            )
-        )
-    return pack_call_result(msg_id, {})
 
 
 def handle_authorize(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
