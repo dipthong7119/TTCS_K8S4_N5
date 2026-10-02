@@ -45,7 +45,8 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
         )
         .values(
             status=internal_status,
-            ocpp_status=status_raw
+            ocpp_status=status_raw,
+            error_code=payload.get('errorCode', 'NoError')
         )
         .execution_options(synchronize_session=False)
     )

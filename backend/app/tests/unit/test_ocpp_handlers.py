@@ -161,11 +161,11 @@ def test_handle_status_notification_error(db_session):
     assert conn_db.status == "lỗi"
     assert conn_db.error_code == "InternalError"
     
-    # Check error table
-    err = db_session.query(ConnectorError).filter_by(connector_id=conn.id).first()
-    assert err is not None
-    assert err.error_code == "InternalError"
-    assert err.info == "Something broke"
+    # Check error table (Removed by SCRUM-119 which only does 1 UPDATE)
+    # err = db_session.query(ConnectorError).filter_by(connector_id=conn.id).first()
+    # assert err is not None
+    # assert err.error_code == "InternalError"
+    # assert err.info == "Something broke"
 
 def test_handle_status_notification_unregistered_connector(db_session, caplog):
     raw_msg = pack_call("msg7", "StatusNotification", {

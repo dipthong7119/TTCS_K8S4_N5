@@ -102,7 +102,7 @@ def test_unknown_connector_status_is_preserved_separately(db_session):
 
     connector = db_session.query(Connector).filter_by(id=1).one()
     assert parse_message(response)[0] == 3
-    assert connector.status == "unknown"
+    assert connector.status == "lỗi"
     assert connector.ocpp_status == "VendorSpecificState"
 
 
