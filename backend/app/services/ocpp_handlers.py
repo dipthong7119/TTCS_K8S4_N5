@@ -170,25 +170,20 @@ def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
-<<<<<<< HEAD
-        from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification
-=======
         from app.ocpp.handlers.boot_notification import (
             handle_boot_notification as new_handle_boot_notification,
         )
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
+
         return new_handle_boot_notification(db, point.code, msg_id, payload)
     if action == "Heartbeat":
         from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
+
         return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
-<<<<<<< HEAD
-        from app.ocpp.handlers.status_notification import handle_status_notification as new_handle_status_notification
-=======
         from app.ocpp.handlers.status_notification import (
             handle_status_notification as new_handle_status_notification,
         )
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
+
         return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
         return handle_authorize(db, point, msg_id, payload)
@@ -199,53 +194,6 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     if action == "StopTransaction":
         return handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
-
-
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    # Đọc 3 trường từ payload, thiếu thì lưu NULL (T-16 NFR)
-    point.vendor = payload.get("chargePointVendor") or None
-    point.model = payload.get("chargePointModel") or None
-    point.firmware_version = payload.get("firmwareVersion") or None
-
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    # Trạm tạm ngừng (inactive/paused) vẫn Accepted để trụ báo trạng thái.
-    # Trạm bị khóa hành chính mới Rejected (T-17 AC).
-    accepted = station is not None and station.status != "locked"
-    point.status = "online" if accepted else "offline"
-
-    # Log ngắn gọn — không log toàn bộ payload (00_QUY_TAC_AGENT.md)
-    logger.info(
-        "BootNotification charge_point=%s vendor=%s model=%s firmware=%s status=%s",
-        point.code,
-        point.vendor,
-        point.model,
-        point.firmware_version,
-        "Accepted" if accepted else "Rejected",
-    )
-    return pack_call_result(
-        msg_id,
-        {
-            "currentTime": _utc_timestamp(),
-            # Khoảng nhịp tim đọc từ cấu hình, không ghi cứng (T-17 NFR)
-            "interval": settings.OCPP_HEARTBEAT_INTERVAL_SECONDS,
-            "status": "Accepted" if accepted else "Rejected",
-        },
-    )
-=======
->>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
-=======
->>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
-=======
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
-
-
-
-
-
-
 
 
 def handle_authorize(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:

@@ -5,13 +5,9 @@ Cập nhật last_seen_at (tại router) và trả về currentTime (giờ máy 
 
 import logging
 from datetime import UTC, datetime
-<<<<<<< HEAD
-from sqlalchemy.orm import Session
-=======
 
 from sqlalchemy.orm import Session
 
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 from app.services.ocpp_parser import pack_call_result
 
 logger = logging.getLogger(__name__)

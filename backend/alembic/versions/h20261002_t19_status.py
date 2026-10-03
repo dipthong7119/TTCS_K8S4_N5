@@ -7,10 +7,7 @@ Tham chiếu: 02_DAC_TA_DU_AN.md (StatusNotification).
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-<<<<<<< HEAD
-=======
 
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 from alembic import op
 
 revision: str = "h20261002_t19_status"
@@ -44,11 +41,4 @@ def downgrade() -> None:
 
     if "ocpp_status" in existing:
         op.drop_column("connectors", "ocpp_status")
-<<<<<<< HEAD
-        
-    if "status" in existing:
-        op.drop_column("connectors", "status")
-=======
-
     # Do NOT drop 'status' because it was created in 0003_create_charge_points
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728

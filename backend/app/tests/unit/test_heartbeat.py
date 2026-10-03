@@ -2,12 +2,6 @@
 Test cho handler Heartbeat và cơ chế cập nhật last_seen_at (SCRUM-117).
 """
 
-<<<<<<< HEAD
-import time
-from datetime import UTC, datetime
-=======
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,10 +13,7 @@ from app.models.station import Station
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 @pytest.fixture()
 def db_session():
     """DB SQLite in-memory cho test."""
@@ -104,14 +95,7 @@ def test_touch_last_seen_preserves_other_columns(db_session):
     
 def test_unknown_charge_point_does_not_crash(db_session):
     """Trụ có mã không tồn tại: không làm lỗi hệ thống (bỏ qua cập nhật)."""
-    # handle_ocpp_message trả về lỗi SecurityError cho mã không tồn tại
-<<<<<<< HEAD
-    result = _send_call(db_session, "Heartbeat", {}, cp_code="UNKNOWN-CP")
-=======
-    _send_call(db_session, "Heartbeat", {}, cp_code="UNKNOWN-CP")
->>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
-    # Vẫn trả về dict kết quả lỗi (pack_call_error) chứ không gây sập ứng dụng
-    # parse_message sẽ bắt result (nếu lỗi là dict chi tiết)
-    # Tuy nhiên helper _send_call parse nó thành CallError nên hơi khác, 
-    # Nhưng cái cần test là KHÔNG có ngoại lệ nào lọt ra ngoài.
-    assert True
+    raw = pack_call("unknown-heartbeat", "Heartbeat", {})
+    response = handle_ocpp_message(db_session, "UNKNOWN-CP", raw)
+
+    assert "SecurityError" in response
