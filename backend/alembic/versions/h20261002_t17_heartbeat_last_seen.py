@@ -7,7 +7,10 @@ Tham chiếu: 02_DAC_TA_DU_AN.md (Heartbeat).
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+<<<<<<< HEAD
+=======
 
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 from alembic import op
 
 revision: str = "h20261002_t17_heartbeat"
