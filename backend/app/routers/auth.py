@@ -12,6 +12,7 @@ from app.config import settings
 from app.core.deps import deny_unannotated_route, public_route, require_role
 from app.core.security import verify_password
 from app.database import get_db
+from app.models.login_ip_attempt import LoginIPAttempt
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse
 
@@ -38,7 +39,14 @@ def role_home_page(role_names: list[str]) -> str:
     raise HTTPException(status_code=403, detail="Tài khoản chưa được phân quyền")
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    responses={
+        401: {"description": "Thông tin đăng nhập sai hoặc tài khoản/địa chỉ IP đang bị khóa"},
+        403: {"description": "Tài khoản chưa được phân quyền"},
+    },
+)
 @public_route
 async def login(
     request: Request,
@@ -51,31 +59,60 @@ async def login(
     - Sai >= MAX_LOGIN_ATTEMPTS lan -> khoa LOCKOUT_DURATION_MINUTES phut (SSD-1)
     - Dem sai luu o DB, khong luu bien trong tien trinh (SSD-1 rang buoc)
     """
+    now = datetime.now(UTC).replace(tzinfo=None)
     user: User | None = db.query(User).filter(User.email == body.email).first()
+    client_ip = request.client.host if request.client else None
+    ip_attempt = None
+    if client_ip:
+        ip_attempt = (
+            db.query(LoginIPAttempt)
+            .filter(LoginIPAttempt.ip_address == client_ip)
+            .first()
+        )
 
-    # --- Kiem tra khoa truoc (du mat khau co dung thi van khoa) ---
-    # Check account lockout
-    if user and user.locked_until and user.locked_until > datetime.now(UTC).replace(tzinfo=None):
-        raise HTTPException(status_code=401, detail=_ERR_LOCKED)
+    # Check account and IP lockouts before verifying the password. Expired
+    # windows start a fresh consecutive-failure count.
+    for tracker in (user, ip_attempt):
+        if tracker and tracker.locked_until:
+            if tracker.locked_until > now:
+                raise HTTPException(status_code=401, detail=_ERR_LOCKED)
+            tracker.failed_login_count = 0
+            tracker.locked_until = None
 
     # --- Xac thuc ---
     ok = user is not None and user.is_active and verify_password(body.password, user.password_hash)
 
     if not ok:
-        # Update User tracker (neu email dung nhung sai mat khau hoac tai khoan khong active)
-        if user:
-            # +1 so lan sai
-            user.failed_login_count = (user.failed_login_count or 0) + 1
-            user.last_failed_ip = request.client.host if request.client else None
-            if user.failed_login_count >= settings.MAX_LOGIN_ATTEMPTS:
-                user.locked_until = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=settings.LOCKOUT_DURATION_MINUTES)
+        # Track failures by IP even for unknown emails, without creating fake users.
+        if client_ip:
+            if ip_attempt is None:
+                ip_attempt = LoginIPAttempt(ip_address=client_ip, failed_login_count=0)
+                db.add(ip_attempt)
+            ip_attempt.failed_login_count = (ip_attempt.failed_login_count or 0) + 1
+            if ip_attempt.failed_login_count >= settings.MAX_LOGIN_ATTEMPTS:
+                ip_attempt.locked_until = now + timedelta(
+                    minutes=settings.LOCKOUT_DURATION_MINUTES
+                )
 
+        # Also track failures against a known account.
+        if user:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            user.last_failed_ip = client_ip
+            if user.failed_login_count >= settings.MAX_LOGIN_ATTEMPTS:
+                user.locked_until = now + timedelta(
+                    minutes=settings.LOCKOUT_DURATION_MINUTES
+                )
+
+        if user or ip_attempt:
             db.commit()
 
         # Tra ve cung thong bao loi (khong tiet lo email co ton tai hay khong)
         raise HTTPException(status_code=401, detail=_ERR_WRONG)
 
     # --- Dang nhap thanh cong: reset dem sai ---
+    if ip_attempt:
+        ip_attempt.failed_login_count = 0
+        ip_attempt.locked_until = None
     user.failed_login_count = 0
     user.locked_until = None
     user.last_failed_ip = None
