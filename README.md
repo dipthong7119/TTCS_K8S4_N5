@@ -49,6 +49,31 @@ giữ nguyên dữ liệu PostgreSQL trong volume `postgres_data`.
 Docker Desktop/Engine phải đang chạy trước khi gọi Compose. Ứng dụng chờ PostgreSQL
 sẵn sàng rồi tự chạy Alembic trước khi mở cổng HTTP.
 
+### Sao lưu và khôi phục PostgreSQL
+
+Compose khởi chạy dịch vụ `backup`, tạo một bản sao lưu ngay khi dịch vụ bắt đầu,
+sau đó lặp lại mỗi 24 giờ. Dump ở định dạng PostgreSQL custom được kiểm tra bằng
+`pg_restore --list` trước khi lưu thành công trong thư mục `backups/` trên host.
+Mặc định giữ 14 ngày; có thể đổi bằng `CSMS_BACKUP_RETENTION_DAYS` trong `.env`.
+
+Để khôi phục, dừng ứng dụng và bộ lập lịch backup, rồi chạy lệnh sau trong
+PowerShell, thay tên file bằng dump muốn dùng:
+
+```powershell
+docker compose stop app backup
+docker compose run --rm --no-deps backup restore /backups/csms-20261003T020000Z.dump
+```
+
+Lệnh restore kiểm tra dump và yêu cầu nhập `RESTORE` trước khi ghi đè các đối
+tượng tương ứng trong database. Sau đó khởi động lại ứng dụng và bộ backup:
+
+```powershell
+docker compose up -d app backup
+```
+
+Các file backup không được đưa vào Git. Cần sao chép thư mục `backups/` sang nơi
+lưu trữ riêng nếu muốn giữ bản sao ngoài máy chạy Docker.
+
 ### Chạy bằng `run.ps1` trên Windows
 
 ```powershell
@@ -237,6 +262,7 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | `CSMS_DB_NAME` | `csms` | Tên database PostgreSQL dùng bởi Docker Compose |
 | `CSMS_DB_USER` | `csms` | Tài khoản PostgreSQL dùng bởi Docker Compose |
 | `CSMS_DB_PASSWORD` | `csms` | Mật khẩu PostgreSQL dùng bởi Docker Compose; đổi trước khi triển khai |
+| `CSMS_BACKUP_RETENTION_DAYS` | `14` | Số ngày giữ file backup PostgreSQL |
 | `SECRET_KEY` | *(phải đổi)* | Khoá ký session/JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Thời gian hết hạn token |
 | `APP_ENV` | `development` | Môi trường (`development`/`production`) |

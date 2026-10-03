@@ -40,5 +40,26 @@ services:
       timeout: 10s
       retries: 3
 
+  backup:
+    image: postgres:15-alpine
+    container_name: csms_backup
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${CSMS_DB_NAME:-csms}
+      PGUSER: ${CSMS_DB_USER:-csms}
+      PGPASSWORD: ${CSMS_DB_PASSWORD:-csms}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${CSMS_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - ./backend/scripts/backup_postgres.sh:/usr/local/bin/backup_postgres.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup_postgres.sh"]
+    command: ["loop"]
+    restart: unless-stopped
+
 volumes:
   postgres_data:
