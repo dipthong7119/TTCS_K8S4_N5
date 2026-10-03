@@ -49,6 +49,15 @@ giữ nguyên dữ liệu PostgreSQL trong volume `postgres_data`.
 Docker Desktop/Engine phải đang chạy trước khi gọi Compose. Ứng dụng chờ PostgreSQL
 sẵn sàng rồi tự chạy Alembic trước khi mở cổng HTTP.
 
+Muốn chạy trụ OCPP ảo `SIM-01` cùng stack để thử luồng WebSocket, bật profile riêng:
+
+```powershell
+docker compose --profile ocpp-simulator up -d --build simulator
+docker compose logs -f simulator
+```
+
+Profile này không chạy trong cấu hình mặc định.
+
 ### Sao lưu và khôi phục PostgreSQL
 
 Compose khởi chạy dịch vụ `backup`, tạo một bản sao lưu ngay khi dịch vụ bắt đầu,

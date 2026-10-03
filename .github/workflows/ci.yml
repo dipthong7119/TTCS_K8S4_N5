@@ -52,3 +52,42 @@ jobs:
           tags: csms-app:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke-test Docker Compose OCPP simulator
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          docker compose up -d --build db app
+
+          for attempt in $(seq 1 60); do
+            if curl --max-time 3 -fsS http://localhost:8000/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker compose logs app db
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker compose --profile ocpp-simulator up -d --build simulator
+          for attempt in $(seq 1 30); do
+            if docker compose logs --no-color simulator | grep -q "Boot accepted"; then
+              exit 0
+            fi
+            if docker compose ps --status exited --quiet simulator | grep -q .; then
+              docker compose logs simulator
+              exit 1
+            fi
+            sleep 2
+          done
+          docker compose logs simulator app
+          echo "Virtual charge point did not complete BootNotification in time."
+          exit 1
+
+      - name: Stop Docker Compose smoke-test stack
+        if: always()
+        working-directory: .
+        run: docker compose down -v --remove-orphans
