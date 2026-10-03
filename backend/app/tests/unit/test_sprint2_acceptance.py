@@ -107,6 +107,7 @@ def test_unknown_connector_status_is_preserved_separately(db_session):
 
 
 def test_boot_uses_configured_heartbeat_interval(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "HEARTBEAT_INTERVAL", 17, raising=False)
     monkeypatch.setattr(settings, "OCPP_HEARTBEAT_INTERVAL_SECONDS", 17, raising=False)
 
     response = handle_ocpp_message(
