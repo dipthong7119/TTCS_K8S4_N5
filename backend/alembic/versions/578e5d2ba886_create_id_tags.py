@@ -31,8 +31,32 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
         )
+
+    # Keep the uniqueness guarantee if a development database already has the
+    # table but is missing the index expected by this migration.
+    inspector = sa.inspect(conn)
+    indexes = inspector.get_indexes("id_tags")
+    unique_constraints = inspector.get_unique_constraints("id_tags")
+    has_unique_id_tag = any(
+        index.get("unique") and index.get("column_names") == ["id_tag"]
+        for index in indexes
+    ) or any(
+        constraint.get("column_names") == ["id_tag"]
+        for constraint in unique_constraints
+    )
+    if not has_unique_id_tag:
         op.create_index("ix_id_tags_id_tag", "id_tags", ["id_tag"], unique=True)
 
 def downgrade() -> None:
-    op.drop_index("ix_id_tags_id_tag", table_name="id_tags")
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if not inspector.has_table("id_tags"):
+        return
+
+    has_named_index = any(
+        index.get("name") == "ix_id_tags_id_tag"
+        for index in inspector.get_indexes("id_tags")
+    )
+    if has_named_index:
+        op.drop_index("ix_id_tags_id_tag", table_name="id_tags")
     op.drop_table("id_tags")
