@@ -5,7 +5,13 @@ Xử lý lưu vendor, model, firmware_version và quyết định trạng thái 
 
 import logging
 from datetime import UTC, datetime
+<<<<<<< HEAD
 from sqlalchemy.orm import Session
+=======
+
+from sqlalchemy.orm import Session
+
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 from app.config import settings
 from app.models.charge_point import ChargePoint
 from app.models.station import Station

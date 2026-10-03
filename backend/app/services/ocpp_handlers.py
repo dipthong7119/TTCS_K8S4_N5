@@ -10,10 +10,8 @@ from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
-from app.models.connector_error import ConnectorError
 from app.models.id_tag import IdTag
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
@@ -27,7 +25,6 @@ from app.services.ocpp_parser import (
     pack_call_result,
     parse_message,
 )
-from app.services.ocpp_status import map_status
 from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
@@ -163,15 +160,35 @@ def touch_last_seen(db: Session, charge_point_code: str) -> None:
     )
 
 
+def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
+    db.execute(
+        update(ChargePoint)
+        .where(ChargePoint.code == charge_point_code)
+        .values(last_seen_at=func.current_timestamp())
+        .execution_options(synchronize_session=False)
+    )
+
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
+<<<<<<< HEAD
         from app.ocpp.handlers.boot_notification import handle_boot_notification as new_handle_boot_notification
+=======
+        from app.ocpp.handlers.boot_notification import (
+            handle_boot_notification as new_handle_boot_notification,
+        )
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
         return new_handle_boot_notification(db, point.code, msg_id, payload)
     if action == "Heartbeat":
         from app.ocpp.handlers.heartbeat import handle_heartbeat as new_handle_heartbeat
         return new_handle_heartbeat(db, point.code, msg_id, payload)
     if action == "StatusNotification":
+<<<<<<< HEAD
         from app.ocpp.handlers.status_notification import handle_status_notification as new_handle_status_notification
+=======
+        from app.ocpp.handlers.status_notification import (
+            handle_status_notification as new_handle_status_notification,
+        )
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
         return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
         return handle_authorize(db, point, msg_id, payload)
@@ -184,6 +201,7 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
@@ -220,6 +238,8 @@ def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, paylo
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
+=======
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 
 
 

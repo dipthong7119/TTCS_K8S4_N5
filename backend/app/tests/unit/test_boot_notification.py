@@ -343,8 +343,7 @@ def test_second_boot_updates_firmware_version(db_session):
     ids=["60s", "300s", "600s"],
 )
 def test_interval_follows_config(db_session, interval):
-    """interval trong CALLRESULT phải bằng OCPP_HEARTBEAT_INTERVAL_SECONDS (T-17 AC)."""
-    with patch("app.services.ocpp_handlers.settings") as mock_settings:
-        mock_settings.OCPP_HEARTBEAT_INTERVAL_SECONDS = interval
+    """interval trong CALLRESULT phải bằng HEARTBEAT_INTERVAL (T-17 AC)."""
+    with patch("app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval):
         _, _, result = _boot(db_session, FULL_PAYLOAD, msg_id=f"boot-iv-{interval}")
     assert result["interval"] == interval

@@ -71,13 +71,17 @@
       if (isEdit) {
         await ApiClient.updateStation(stationId, payload);
         showToast('Đã cập nhật trạm thành công', 'success');
+        // Chuyển về trang danh sách trạm sau khi lưu thông tin trạm (kể cả cập nhật trạng thái)
+        setTimeout(() => {
+          window.location.href = '/stations';
+        }, 300);
       } else {
         const created = await ApiClient.createStation(payload);
         showToast('Đã tạo trạm mới thành công!', 'success');
-        // Chuyển sang trang edit để thêm trụ
+        // Chuyển về trang danh sách trạm
         setTimeout(() => {
-          window.location.href = `/stations/${created.id}/edit`;
-        }, 800);
+          window.location.href = `/stations`;
+        }, 300);
       }
     }, {
       loadingText: isEdit ? 'Đang lưu...' : 'Đang tạo...',
@@ -174,7 +178,7 @@
         });
         showToast('Đã thêm trụ sạc thành công', 'success');
         closeCpModal();
-        // Reload để cập nhật bảng trụ
+        // Reload để cập nhật bảng danh sách trụ trong trạm
         window.location.reload();
       } catch (err) {
         if (err.status === 409) {

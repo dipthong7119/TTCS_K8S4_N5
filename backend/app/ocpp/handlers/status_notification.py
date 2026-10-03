@@ -4,12 +4,20 @@ Chỉ cập nhật trạng thái của đầu nối trong bảng connectors. C�
 """
 
 import logging
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint, Connector
 from app.ocpp.status_mapping import map_ocpp_status
+<<<<<<< HEAD
 from app.services.ocpp_parser import pack_call_result, pack_call_error
+=======
+from app.services.ocpp_parser import pack_call_error, pack_call_result
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,7 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
 
     internal_status = map_ocpp_status(status_raw).value
 
+<<<<<<< HEAD
     # Cập nhật bằng 1 câu truy vấn để tối ưu hiệu suất (không read-modify-write)
     # Lồng query truy tìm ChargePoint.id từ charge_point_code
     cp_subq = db.query(ChargePoint.id).filter(ChargePoint.code == charge_point_code).scalar_subquery()
@@ -53,4 +62,64 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     if result.rowcount == 0:
         logger.warning("Connector %s not found on %s, ignoring status update.", connector_id, charge_point_code)
     
+=======
+    from datetime import UTC, datetime
+
+    from app.models.connector_error import ConnectorError
+
+    error_code = payload.get("errorCode", "NoError")
+    vendor_error_code = payload.get("vendorErrorCode")
+    timestamp_raw = payload.get("timestamp")
+    
+    # Chuẩn hoá timestamp về UTC
+    occurred_at = datetime.now(UTC).replace(tzinfo=None)
+    if isinstance(timestamp_raw, str) and timestamp_raw:
+        try:
+            # Chuyển đổi "Z" thành "+00:00" để fromisoformat xử lý được
+            dt = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            occurred_at = dt.astimezone(UTC).replace(tzinfo=None)
+        except ValueError:
+            pass
+
+    # Cập nhật bằng 1 câu truy vấn và lấy lại id của connector
+    cp_subq = db.query(ChargePoint.id).filter(ChargePoint.code == charge_point_code).scalar_subquery()
+
+    try:
+        result = db.execute(
+            update(Connector)
+            .where(
+                Connector.charge_point_id == cp_subq,
+                Connector.connector_id == connector_id
+            )
+            .values(
+                status=internal_status,
+                ocpp_status=status_raw
+            )
+            .returning(Connector.id)
+            .execution_options(synchronize_session=False)
+        )
+        row = result.fetchone()
+        
+        if not row:
+            logger.warning("Connector %s not found on %s, ignoring status update.", connector_id, charge_point_code)
+            return pack_call_result(msg_id, {})
+            
+        connector_pk = row[0]
+        
+        # Ghi log lỗi nếu có lỗi
+        if error_code != "NoError":
+            db.add(ConnectorError(
+                connector_id=connector_pk,
+                error_code=error_code,
+                vendor_error_code=vendor_error_code,
+                occurred_at=occurred_at
+            ))
+            logger.warning("Connector error %s-%s: %s", charge_point_code, connector_id, error_code)
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("Failed to update status for %s-%s: %s", charge_point_code, connector_id, e)
+
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
     return pack_call_result(msg_id, {})

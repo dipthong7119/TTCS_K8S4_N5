@@ -2,12 +2,21 @@
 Test cho BootNotification (SCRUM-113).
 """
 
+<<<<<<< HEAD
 import pytest
 import asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from unittest.mock import patch, MagicMock
+=======
+from unittest.mock import patch
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
 
 from app.database import Base
 from app.models.charge_point import ChargePoint

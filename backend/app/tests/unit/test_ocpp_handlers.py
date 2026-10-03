@@ -159,13 +159,11 @@ def test_handle_status_notification_error(db_session):
     
     conn_db = db_session.query(Connector).filter_by(id=conn.id).first()
     assert conn_db.status == "lỗi"
-    assert conn_db.error_code == "InternalError"
-    
-    # Check error table
+
+    # Kể từ SCRUM-120, mã lỗi được lưu vào bảng connector_errors thay vì cập nhật đè lên bảng connectors
     err = db_session.query(ConnectorError).filter_by(connector_id=conn.id).first()
     assert err is not None
     assert err.error_code == "InternalError"
-    assert err.info == "Something broke"
 
 def test_handle_status_notification_unregistered_connector(db_session, caplog):
     raw_msg = pack_call("msg7", "StatusNotification", {

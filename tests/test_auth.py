@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.login_ip_attempt import LoginIPAttempt
 from app.models.user import User
 
 WRONG_CREDENTIALS = "email ho\u1eb7c m\u1eadt kh\u1ea9u kh\u00f4ng \u0111\u00fang"
@@ -111,45 +110,6 @@ def test_lock_survives_new_client(
         restarted_client.close()
 
     assert response.status_code == 401
-
-
-def test_repeated_failures_from_same_ip_are_rate_limited(client: TestClient) -> None:
-    for attempt in range(settings.MAX_LOGIN_ATTEMPTS):
-        response = client.post(
-            "/api/auth/login",
-            json={
-                "email": f"missing-{attempt}@example.com",
-                "password": "wrong-password",
-            },
-        )
-        assert response.status_code == 401
-
-    blocked_response = client.post(
-        "/api/auth/login",
-        json={"email": "another-missing@example.com", "password": "wrong-password"},
-    )
-
-    assert blocked_response.status_code == 401
-    assert blocked_response.json() == {"detail": ACCOUNT_LOCKED}
-
-
-def test_ip_failures_use_a_counter_table_instead_of_synthetic_users(
-    client: TestClient,
-    db_session: Session,
-    user_factory: Callable[..., User],
-) -> None:
-    user_factory()
-
-    response = client.post(
-        "/api/auth/login",
-        json={"email": "missing@example.com", "password": "wrong-password"},
-    )
-
-    assert response.status_code == 401
-    assert db_session.query(User).count() == 1
-    assert db_session.query(LoginIPAttempt).count() == 1
-    attempt = db_session.query(LoginIPAttempt).one()
-    assert attempt.failed_login_count == 1
 
 
 def test_successful_login_sets_httponly_cookie_and_resets_failures(

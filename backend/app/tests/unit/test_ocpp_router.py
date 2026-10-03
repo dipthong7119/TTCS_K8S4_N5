@@ -149,3 +149,37 @@ def test_websocket_rejects_unsupported_protocol():
     ):
         websocket.receive_text()
     assert exc.value.code == 1002
+
+def test_websocket_disconnect_publishes_offline_status():
+    import json
+
+    from app.services import connection_manager
+    
+    with patch("app.services.ocpp_handlers.publish_charge_point_status") as mock_publish:
+        with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as ws:
+            ws.send_text(
+                json.dumps(
+                    [
+                        2,
+                        "boot1",
+                        "BootNotification",
+                        {
+                            "chargePointVendor": "VendorX",
+                            "chargePointModel": "ModelY",
+                        },
+                    ]
+                )
+            )
+            # Receive response
+            ws.receive_text()
+            # Active connections should have CP_VALID
+            assert "CP_VALID" in connection_manager.manager.active_connections
+        
+        # When context exits, the websocket is closed and disconnected.
+        # It should have called publish_charge_point_status
+        mock_publish.assert_called()
+        # Verify it went offline in the DB
+        db = SessionLocalTest()
+        cp = db.query(ChargePoint).filter_by(code="CP_VALID").first()
+        assert cp.status == "offline"
+        db.close()

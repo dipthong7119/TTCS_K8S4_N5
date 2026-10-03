@@ -45,6 +45,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Lùi: xóa cột nếu migration này đã thêm chúng.
+<<<<<<< HEAD
     # Guard tương tự để tránh lỗi trên DB chưa có cột.
     inspector = sa.inspect(op.get_bind())
     existing = {col["name"] for col in inspector.get_columns("charge_points")}
@@ -55,3 +56,8 @@ def downgrade() -> None:
         op.drop_column("charge_points", "model")
     if "vendor" in existing:
         op.drop_column("charge_points", "vendor")
+=======
+    # Nhưng vì các cột này đã được tạo từ 0003_create_charge_points,
+    # chúng ta không nên drop chúng ở đây để tránh lỗi.
+    pass
+>>>>>>> 8cf926d056b9e2b97c0e961073b67f863da7c728
