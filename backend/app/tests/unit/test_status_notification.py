@@ -127,11 +127,65 @@ def test_status_notification_connector_zero(db_session):
     assert conn.ocpp_status is None
 
 
-def test_status_notification_unknown_connector(db_session):
-    """connectorId không tồn tại: không tạo bản ghi mới, không lỗi."""
-    count_before = db_session.query(Connector).count()
-    result = _send_status(db_session, {"connectorId": 99, "errorCode": "NoError", "status": "Available"})
-    assert result == {}  # Không lỗi, trả về rỗng
+def test_status_notification_unknown_connector_warns(db_session, caplog):
+    """Trụ khai 1 đầu nối gửi cho đầu nối 3: connectors không đổi, không lỗi, ghi cảnh báo."""
+    from app.ocpp.warning_throttler import unknown_connector_throttler
+    # Xoá trạng thái throttler trước khi test
+    unknown_connector_throttler._last_warn_time.clear()
 
-    count_after = db_session.query(Connector).count()
-    assert count_before == count_after  # Không tạo thêm
+    count_before = db_session.query(Connector).count()
+    result = _send_status(db_session, {"connectorId": 3, "errorCode": "NoError", "status": "Available"})
+    
+    # 1. Trả về {}
+    assert result == {}
+    # 2. Không sinh bản ghi
+    assert db_session.query(Connector).count() == count_before
+    # 3. Log ra đúng cảnh báo chứa mã trụ và số connectorId
+    assert "Đầu nối chưa khai báo: Trụ CP-STATUS-TEST gửi trạng thái cho đầu nối 3" in caplog.text
+
+
+def test_status_notification_unknown_connector_throttles(db_session, caplog, monkeypatch):
+    """Kiểm tra gom cảnh báo: 5 lần liên tiếp trong khoảng gom chỉ 1 cảnh báo."""
+    from app.ocpp.warning_throttler import unknown_connector_throttler
+    unknown_connector_throttler._last_warn_time.clear()
+
+    # Dùng đồng hồ giả tĩnh
+    current_time = 1000.0
+    monkeypatch.setattr(unknown_connector_throttler, "_get_time", lambda: current_time)
+
+    caplog.clear()
+    
+    # Gửi 5 lần
+    for _ in range(5):
+        res = _send_status(db_session, {"connectorId": 3, "errorCode": "NoError", "status": "Available"})
+        assert res == {}
+
+    # Chỉ có 1 log warning
+    warnings = [rec for rec in caplog.records if "Đầu nối chưa khai báo" in rec.message]
+    assert len(warnings) == 1
+
+    # Dời đồng hồ qua khoảng gom (mặc định 300s, ta dời 301s)
+    current_time += 301.0
+    _send_status(db_session, {"connectorId": 3, "errorCode": "NoError", "status": "Available"})
+    
+    # Lần này phải có log thứ 2
+    warnings_after = [rec for rec in caplog.records if "Đầu nối chưa khai báo" in rec.message]
+    assert len(warnings_after) == 2
+
+    # Hai trụ hoặc đầu nối khác nhau có khoá riêng
+    _send_status(db_session, {"connectorId": 4, "errorCode": "NoError", "status": "Available"})
+    warnings_diff = [rec for rec in caplog.records if "Đầu nối chưa khai báo" in rec.message]
+    assert len(warnings_diff) == 3
+
+
+def test_status_notification_unknown_connector_with_error(db_session, caplog):
+    """Đầu nối chưa khai báo kèm errorCode: vẫn không tạo connector_errors."""
+    from app.models.connector_error import ConnectorError
+    from app.ocpp.warning_throttler import unknown_connector_throttler
+    unknown_connector_throttler._last_warn_time.clear()
+    
+    errors_before = db_session.query(ConnectorError).count()
+    result = _send_status(db_session, {"connectorId": 9, "errorCode": "HardwareError", "status": "Faulted"})
+    
+    assert result == {}
+    assert db_session.query(ConnectorError).count() == errors_before

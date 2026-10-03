@@ -3,12 +3,14 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
 from app.ocpp.status_mapping import map_ocpp_status
+from app.ocpp.warning_throttler import unknown_connector_throttler
 from app.services.ocpp_parser import pack_call_error, pack_call_result
 
 logger = logging.getLogger(__name__)
@@ -63,11 +65,22 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     connector = result.first()
 
     if connector is None:
-        logger.warning(
-            "Connector %s not found on %s, ignoring status update.",
-            connector_id,
+        # Lấy số đầu nối đã khai (số dòng của trụ này trong bảng connectors)
+        declared_count = db.query(func.count(Connector.id)).filter(
+            Connector.charge_point_id == charge_point_id
+        ).scalar()
+
+        if unknown_connector_throttler.should_warn(
             charge_point_code,
-        )
+            connector_id,
+            settings.UNKNOWN_CONNECTOR_WARN_INTERVAL,
+        ):
+            logger.warning(
+                "Đầu nối chưa khai báo: Trụ %s gửi trạng thái cho đầu nối %s, nhưng chỉ khai %s đầu nối.",
+                charge_point_code,
+                connector_id,
+                declared_count,
+            )
         return pack_call_result(msg_id, {})
 
     if error_code != "NoError":
