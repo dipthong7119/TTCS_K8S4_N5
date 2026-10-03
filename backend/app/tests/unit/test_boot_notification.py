@@ -5,8 +5,13 @@ Tham chiếu: 02_DAC_TA_DU_AN.md — AC của S-08 và NFR của T-16/T-17.
 Bốn nhóm ca kiểm thử:
   1. Payload đủ 3 trường  → 3 cột lưu đúng, trạng thái online, conf đúng chuẩn.
 <<<<<<< HEAD
+<<<<<<< HEAD
   2. Payload thiếu từng trường → vẫn Accepted, cột tương ứng là NULL.
   3. Gửi 2 lần (idempotency) → chỉ 1 bản ghi trụ, conf vẫn Accepted.
+=======
+  2. Payload thiếu từng trường → vẫn Accepted, cột tương ứng là NULL (không phải "").
+  3. Gửi 2 lần (idempotency ghi đè) → chỉ 1 bản ghi trụ, conf vẫn Accepted.
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
   2. Payload thiếu từng trường → vẫn Accepted, cột tương ứng là NULL (không phải "").
   3. Gửi 2 lần (idempotency ghi đè) → chỉ 1 bản ghi trụ, conf vẫn Accepted.
@@ -29,6 +34,7 @@ from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Fixture: DB in-memory mới cho mỗi test, có 1 station + 1 charge point
 # ---------------------------------------------------------------------------
@@ -37,6 +43,8 @@ from app.services.ocpp_parser import pack_call, parse_message
 def db_session():
     """DB SQLite in-memory, tạo schema đầy đủ cho mỗi test."""
 =======
+=======
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 
 # ---------------------------------------------------------------------------
 # Fixture: DB in-memory mới cho mỗi test — 1 station active + 1 trụ offline
@@ -46,6 +54,9 @@ def db_session():
 @pytest.fixture()
 def db_session():
     """DB SQLite in-memory, tạo đủ schema cho mỗi test, dọn dẹp sau."""
+<<<<<<< HEAD
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
+=======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
     engine = create_engine(
         "sqlite:///:memory:",
@@ -73,7 +84,13 @@ def db_session():
 # ---------------------------------------------------------------------------
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def _boot(db, payload: dict, msg_id: str = "msg-boot-1"):
+=======
+
+def _boot(db, payload: dict, msg_id: str = "msg-boot-1"):
+    """Đóng gói CALL, gọi handler, parse CALLRESULT trả về."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
 
 def _boot(db, payload: dict, msg_id: str = "msg-boot-1"):
@@ -104,7 +121,11 @@ def test_full_payload_returns_accepted(db_session):
 
 def test_full_payload_saves_vendor_model_firmware(db_session):
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Ba cột lưu đúng giá trị (T-16 AC)."""
+=======
+    """Ba cột lưu đúng giá trị từ payload (T-16 AC)."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
     """Ba cột lưu đúng giá trị từ payload (T-16 AC)."""
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -117,7 +138,11 @@ def test_full_payload_saves_vendor_model_firmware(db_session):
 
 def test_full_payload_sets_status_online(db_session):
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Trụ chuyển sang online sau BootNotification Accepted (T-16 AC)."""
+=======
+    """Sau khi Boot Accepted, trụ chuyển sang online (T-16 AC)."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
     """Sau khi Boot Accepted, trụ chuyển sang online (T-16 AC)."""
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -127,7 +152,11 @@ def test_full_payload_sets_status_online(db_session):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def test_full_payload_conf_has_current_time(db_session):
+=======
+def test_full_payload_conf_has_current_time_utc(db_session):
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
 def test_full_payload_conf_has_current_time_utc(db_session):
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -140,7 +169,11 @@ def test_full_payload_conf_has_current_time_utc(db_session):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def test_full_payload_conf_has_interval(db_session):
+=======
+def test_full_payload_conf_has_positive_interval(db_session):
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
 def test_full_payload_conf_has_positive_interval(db_session):
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -152,14 +185,20 @@ def test_full_payload_conf_has_positive_interval(db_session):
 
 # ---------------------------------------------------------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Nhóm 2: payload thiếu từng trường → cột tương ứng là NULL
 # ---------------------------------------------------------------------------
 
 =======
+=======
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 # Nhóm 2: payload thiếu từng trường → cột tương ứng là NULL (không phải "")
 # ---------------------------------------------------------------------------
 
 
+<<<<<<< HEAD
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
+=======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 @pytest.mark.parametrize(
     "payload,missing_field",
@@ -185,7 +224,11 @@ def test_full_payload_conf_has_positive_interval(db_session):
 )
 def test_missing_field_still_accepted(db_session, payload, missing_field):
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Payload thiếu trường → vẫn trả Accepted (T-16 NFR: không từ chối)."""
+=======
+    """Payload thiếu trường vẫn trả Accepted — không từ chối (T-16 NFR)."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
     """Payload thiếu trường vẫn trả Accepted — không từ chối (T-16 NFR)."""
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -214,7 +257,11 @@ def test_missing_field_still_accepted(db_session, payload, missing_field):
 )
 def test_missing_field_column_is_null(db_session, payload, null_attr):
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Cột tương ứng trường thiếu phải là NULL — không được lưu chuỗi rỗng (T-16 NFR)."""
+=======
+    """Cột tương ứng trường thiếu phải là NULL, không được lưu chuỗi rỗng (T-16 NFR)."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
     """Cột tương ứng trường thiếu phải là NULL, không được lưu chuỗi rỗng (T-16 NFR)."""
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -225,14 +272,20 @@ def test_missing_field_column_is_null(db_session, payload, null_attr):
 
 # ---------------------------------------------------------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Nhóm 3: gửi 2 lần → vẫn chỉ 1 bản ghi trụ (idempotency từ T-30)
 # ---------------------------------------------------------------------------
 
 =======
+=======
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 # Nhóm 3: gửi 2 lần → vẫn chỉ 1 bản ghi trụ (S-08 AC3)
 # ---------------------------------------------------------------------------
 
 
+<<<<<<< HEAD
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
+=======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 def test_second_boot_does_not_create_new_charge_point(db_session):
     """Gửi BootNotification 2 lần → bảng charge_points vẫn 1 dòng (S-08 AC3)."""
@@ -244,7 +297,11 @@ def test_second_boot_does_not_create_new_charge_point(db_session):
 
 def test_second_boot_still_accepted(db_session):
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Lần gửi thứ hai vẫn trả Accepted (S-08 AC3)."""
+=======
+    """Lần gửi thứ hai (msg_id khác nhau) vẫn trả Accepted (S-08 AC3)."""
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
     """Lần gửi thứ hai (msg_id khác nhau) vẫn trả Accepted (S-08 AC3)."""
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
@@ -254,11 +311,14 @@ def test_second_boot_still_accepted(db_session):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Nhóm 4: đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo
 # ---------------------------------------------------------------------------
 
 =======
+=======
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 def test_second_boot_updates_firmware_version(db_session):
     """Lần gửi thứ hai cập nhật firmware_version mà không tạo dòng mới (S-08 AC3)."""
     _boot(db_session, FULL_PAYLOAD, msg_id="boot-e")
@@ -273,6 +333,9 @@ def test_second_boot_updates_firmware_version(db_session):
 # ---------------------------------------------------------------------------
 
 
+<<<<<<< HEAD
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
+=======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 @pytest.mark.parametrize(
     "interval",

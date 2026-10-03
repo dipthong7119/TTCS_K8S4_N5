@@ -185,6 +185,7 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
     # Đọc 3 trường từ payload, thiếu thì lưu NULL (T-16 NFR)
     point.vendor = payload.get("chargePointVendor") or None
@@ -215,6 +216,8 @@ def handle_boot_notification(db: Session, point: ChargePoint, msg_id: str, paylo
             "status": "Accepted" if accepted else "Rejected",
         },
     )
+=======
+>>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 =======
 >>>>>>> 6a22a3bcaeb02a09abcc54b42d0a411af47de934
 
