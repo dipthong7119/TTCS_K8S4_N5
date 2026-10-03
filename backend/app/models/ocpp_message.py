@@ -15,6 +15,7 @@ class OcppMessage(Base):
     msg_id = Column(String(50), nullable=False)
     charge_point_code = Column(String(50), nullable=False)
     action = Column(String(50), nullable=False)
+    request_payload = Column(JSON, nullable=True)
     response_payload = Column(JSON, nullable=False)
     request_hash = Column(String(64), nullable=False, default="")
 

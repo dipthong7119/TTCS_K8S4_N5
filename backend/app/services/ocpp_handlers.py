@@ -60,13 +60,6 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
 
     if msg_type in (3, 4):
         return ""
-    if action not in SUPPORTED_ACTIONS:
-        logger.warning("Unsupported OCPP action from %s: %s", charge_point_code, action)
-        return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
-    if action not in IMPLEMENTED_ACTIONS:
-        logger.warning("OCPP action planned but not implemented for %s: %s", charge_point_code, action)
-        return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
-
     point = db.query(ChargePoint).filter(ChargePoint.code == charge_point_code).first()
     if point is None:
         return pack_call_error(msg_id, "SecurityError", "Charge point not found")
@@ -101,13 +94,21 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
 
     touch_last_seen(db, charge_point_code)
     try:
-        if action != "BootNotification":
+        is_implemented = action in SUPPORTED_ACTIONS and action in IMPLEMENTED_ACTIONS
+        if is_implemented and action != "BootNotification":
             point.status = "online"
-        response = _dispatch(db, point, msg_id, action, payload)
+        if not is_implemented:
+            logger.warning("Unsupported OCPP action from %s: %s", charge_point_code, action)
+            response = pack_call_error(
+                msg_id, "NotImplemented", f"Action {action} is not implemented"
+            )
+        else:
+            response = _dispatch(db, point, msg_id, action, payload)
         record = OcppMessage(
             charge_point_code=charge_point_code,
             msg_id=msg_id,
             action=action,
+            request_payload=json.loads(raw_msg),
             response_payload=response,
             request_hash=request_hash,
         )
