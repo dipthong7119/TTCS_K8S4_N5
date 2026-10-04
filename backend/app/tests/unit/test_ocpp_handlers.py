@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
-from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import Role, User
 from app.services.ocpp_handlers import handle_ocpp_message
@@ -110,14 +109,16 @@ def test_handle_heartbeat(db_session):
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
     assert cp.last_seen_at is not None
 
-def test_handle_unsupported_action(db_session):
+def test_handle_unsupported_action(db_session, caplog):
     raw_msg = pack_call("msg4", "UnknownAction", {})
-    resp = handle_ocpp_message(db_session, "CP001", raw_msg)
-    
+    with caplog.at_level("WARNING", logger="app.services.ocpp_handlers"):
+        resp = handle_ocpp_message(db_session, "CP001", raw_msg)
+
     msg_type, msg_id, _, err_code, err_desc, _ = parse_message(resp)
     assert msg_type == 4
     assert msg_id == "msg4"
     assert err_code == "NotImplemented"
+    assert any("UnknownAction" in record.message for record in caplog.records)
 
 def test_handle_status_notification(db_session):
     # Setup connector
