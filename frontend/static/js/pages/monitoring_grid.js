@@ -4,6 +4,8 @@
 
   let stations = [];
   let isMockMode = false;
+  let mockModeSelected = false;
+  let loadRequestId = 0;
   const canReset = document.getElementById('monitoring-grid')?.dataset.canReset === 'true';
 
   // Bộ dữ liệu mẫu 20 trụ sạc đáp ứng tiêu chí nghiệm thu SCRUM-124 / T-24 (Story S-11)
@@ -264,6 +266,8 @@
 
   function toggleMockMode() {
     isMockMode = !isMockMode;
+    mockModeSelected = isMockMode;
+    loadRequestId += 1; // Ignore an in-flight API response after the user changes sources.
     if (isMockMode) {
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
@@ -285,11 +289,12 @@
   }
 
   async function loadData(forceServer = false) {
+    const requestId = ++loadRequestId;
     if (forceServer) {
       isMockMode = false;
       updateMockBtnUI();
     }
-    if (isMockMode) {
+    if (isMockMode && mockModeSelected) {
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
       document.getElementById('mon-loading')?.remove();
@@ -299,6 +304,7 @@
 
     try {
       const result = await ApiClient.getMonitoringTree();
+      if (requestId !== loadRequestId) return;
       const serverStations = Array.isArray(result) ? result : (result?.stations || []);
       const totalPoints = serverStations.reduce((sum, s) => sum + (s.charge_points || []).length, 0);
 
@@ -320,6 +326,7 @@
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
     } catch (error) {
+      if (requestId !== loadRequestId) return;
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       isMockMode = true;
       render();
@@ -461,8 +468,8 @@
     SseClient.on('_connected', () => {
       if (indicator) indicator.className = 'sse-indicator connected';
       if (label) label.textContent = 'Đang theo dõi';
-      if (!isMockMode) {
-        loadData(false); // Refresh authoritative state after initial connection or reconnect (T-25 AC)
+      if (!mockModeSelected) {
+        loadData(true); // Retry the server tree after initial connection or reconnect, including after mock fallback.
       }
     });
     SseClient.on('_error', () => {
@@ -470,7 +477,11 @@
       if (label) label.textContent = 'Đang kết nối lại';
     });
     SseClient.on('status_update', payload => {
-      if (isMockMode) return; // Không ghi đè khi đang bật chế độ dữ liệu mẫu kiểm thử
+      if (mockModeSelected) return; // Giữ nguyên dữ liệu mẫu khi người dùng chủ động bật mock.
+      if (isMockMode) {
+        loadData(true); // An SSE update can arrive while the page is showing fallback mock data.
+        return;
+      }
       const station = stations.find(item => item.id === payload.station_id);
       if (station && payload.charge_points) {
         station.charge_points = payload.charge_points;
