@@ -98,7 +98,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
-    users = sa.table("users", sa.column("id", sa.Integer), sa.column("email", sa.String))
+    users = sa.table(
+        "users", sa.column("id", sa.Integer), sa.column("email", sa.String)
+    )
     user_roles = sa.table("user_roles", sa.column("user_id", sa.Integer))
     for u in _DEMO_USERS:
         user_id = conn.execute(

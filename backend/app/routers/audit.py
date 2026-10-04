@@ -30,17 +30,22 @@ async def list_audit_logs(
 ):
     query = db.query(AuditLog)
     if charge_point_code:
-        query = query.filter(AuditLog.charge_point_code.ilike(f"%{charge_point_code.strip()}%"))
+        query = query.filter(
+            AuditLog.charge_point_code.ilike(f"%{charge_point_code.strip()}%")
+        )
     if actor:
         search = f"%{actor.strip()}%"
-        query = query.filter(or_(AuditLog.actor_email.ilike(search), AuditLog.actor_name.ilike(search)))
+        query = query.filter(
+            or_(AuditLog.actor_email.ilike(search), AuditLog.actor_name.ilike(search))
+        )
     if date_from:
         query = query.filter(
             AuditLog.created_at >= datetime.combine(date_from, time.min)
         )
     if date_to:
         query = query.filter(
-            AuditLog.created_at < datetime.combine(date_to + timedelta(days=1), time.min)
+            AuditLog.created_at
+            < datetime.combine(date_to + timedelta(days=1), time.min)
         )
 
     total = query.count()

@@ -14,8 +14,12 @@ from app.services.ownership import filter_by_owner
 def test_filter_by_owner_admin_sees_all(db_session: Session):
     """Admin thấy tất cả trạm"""
     # Tạo 2 user: admin và owner
-    admin = User(email="admin@test.com", password_hash="x", full_name="Admin", is_active=True)
-    owner = User(email="owner@test.com", password_hash="x", full_name="Owner", is_active=True)
+    admin = User(
+        email="admin@test.com", password_hash="x", full_name="Admin", is_active=True
+    )
+    owner = User(
+        email="owner@test.com", password_hash="x", full_name="Owner", is_active=True
+    )
     db_session.add_all([admin, owner])
     db_session.commit()
 
@@ -46,8 +50,12 @@ def test_filter_by_owner_admin_sees_all(db_session: Session):
 
 def test_filter_by_owner_station_owner_sees_only_their_stations(db_session: Session):
     """Chủ trạm chỉ thấy trạm của mình"""
-    owner1 = User(email="owner1@test.com", password_hash="x", full_name="Owner 1", is_active=True)
-    owner2 = User(email="owner2@test.com", password_hash="x", full_name="Owner 2", is_active=True)
+    owner1 = User(
+        email="owner1@test.com", password_hash="x", full_name="Owner 1", is_active=True
+    )
+    owner2 = User(
+        email="owner2@test.com", password_hash="x", full_name="Owner 2", is_active=True
+    )
     db_session.add_all([owner1, owner2])
     db_session.commit()
 
@@ -65,8 +73,12 @@ def test_filter_by_owner_station_owner_sees_only_their_stations(db_session: Sess
 
 def test_filter_by_owner_driver_sees_nothing(db_session: Session):
     """Tài xế không thấy trạm nào"""
-    driver = User(email="driver@test.com", password_hash="x", full_name="Driver", is_active=True)
-    owner = User(email="owner@test.com", password_hash="x", full_name="Owner", is_active=True)
+    driver = User(
+        email="driver@test.com", password_hash="x", full_name="Driver", is_active=True
+    )
+    owner = User(
+        email="owner@test.com", password_hash="x", full_name="Owner", is_active=True
+    )
     db_session.add_all([driver, owner])
     db_session.commit()
 

@@ -1,8 +1,7 @@
-﻿"""
+"""
 Models: users, roles, user_roles
 Tham chieu: SPRINT_1.md T-04, 02_CODING_STANDARDS.md muc 2.2
 """
-
 
 from sqlalchemy import (
     Boolean,
@@ -22,8 +21,12 @@ from app.database import Base
 user_roles = Table(
     "user_roles",
     Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column(
+        "role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -56,7 +59,9 @@ class User(Base):
     last_failed_ip = Column(String(45), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     stations = relationship("Station", back_populates="owner")

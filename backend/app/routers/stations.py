@@ -14,7 +14,11 @@ from app.models.station import Station
 from app.schemas.station import StationCreate, StationResponse, StationUpdate
 from app.services.ownership import filter_by_owner, get_station_for_user
 
-router = APIRouter(prefix="/stations", tags=["stations"], dependencies=[Depends(deny_unannotated_route)])
+router = APIRouter(
+    prefix="/stations",
+    tags=["stations"],
+    dependencies=[Depends(deny_unannotated_route)],
+)
 
 
 def _paginate(query, page: int, size: int):
@@ -24,7 +28,9 @@ def _paginate(query, page: int, size: int):
     return items, total
 
 
-@router.get("", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "", dependencies=[Depends(require_role("admin", "station_owner", "operator"))]
+)
 async def list_stations(
     current_user: CurrentUser,
     status: str | None = Query(None, description="Lọc theo trạng thái"),
@@ -48,14 +54,19 @@ async def list_stations(
 
     items, total = _paginate(q, page, page_size)
     from app.models.charge_point import ChargePoint
+
     for item in items:
-        item.charge_point_count = db.query(ChargePoint).filter(
-            ChargePoint.station_id == item.id
-        ).count()
+        item.charge_point_count = (
+            db.query(ChargePoint).filter(ChargePoint.station_id == item.id).count()
+        )
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
-@router.get("/{station_id}", response_model=StationResponse, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "/{station_id}",
+    response_model=StationResponse,
+    dependencies=[Depends(require_role("admin", "station_owner", "operator"))],
+)
 async def get_station(
     station_id: int,
     current_user: CurrentUser,
@@ -68,7 +79,11 @@ async def get_station(
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
 
     # Kiểm tra quyền sở hữu (admin thì bỏ qua)
-    if "admin" not in role_names and "operator" not in role_names and station.owner_id != current_user.id:
+    if (
+        "admin" not in role_names
+        and "operator" not in role_names
+        and station.owner_id != current_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Không có quyền xem trạm này",
@@ -76,13 +91,19 @@ async def get_station(
 
     # Đếm số trụ cho hiển thị trên danh sách
     from app.models.charge_point import ChargePoint
-    station.charge_point_count = db.query(ChargePoint).filter(
-        ChargePoint.station_id == station_id
-    ).count()
+
+    station.charge_point_count = (
+        db.query(ChargePoint).filter(ChargePoint.station_id == station_id).count()
+    )
     return station
 
 
-@router.post("", response_model=StationResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.post(
+    "",
+    response_model=StationResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def create_station(
     body: StationCreate,
     current_user: CurrentUser,
@@ -119,7 +140,11 @@ async def create_station(
     return station
 
 
-@router.put("/{station_id}", response_model=StationResponse, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.put(
+    "/{station_id}",
+    response_model=StationResponse,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def update_station(
     station_id: int,
     body: StationUpdate,
@@ -127,7 +152,9 @@ async def update_station(
     db: Session = Depends(get_db),
 ):
     """Sửa trạm — chỉ owner hoặc admin được sửa."""
-    station = get_station_for_user(db, station_id, current_user.id, [r.name for r in current_user.roles], "update")
+    station = get_station_for_user(
+        db, station_id, current_user.id, [r.name for r in current_user.roles], "update"
+    )
     if not station:
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
 
@@ -165,14 +192,20 @@ async def update_station(
     return station
 
 
-@router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.delete(
+    "/{station_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def delete_station(
     station_id: int,
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ):
     """Xoá trạm — chỉ owner hoặc admin. Bị chặn nếu còn trụ (ON DELETE RESTRICT)."""
-    station = get_station_for_user(db, station_id, current_user.id, [r.name for r in current_user.roles], "delete")
+    station = get_station_for_user(
+        db, station_id, current_user.id, [r.name for r in current_user.roles], "delete"
+    )
     if not station:
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
 

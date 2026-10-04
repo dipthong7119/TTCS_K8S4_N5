@@ -18,24 +18,26 @@ from app.services.jobs import (
 @pytest.fixture(scope="function")
 def db_session(monkeypatch):
     engine_test = create_engine(
-        "sqlite:///:memory:", 
+        "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine_test)
     SessionLocalTest = sessionmaker(autocommit=False, autoflush=False, bind=engine_test)
     db = SessionLocalTest()
-    
+
     import app.services.jobs
+
     monkeypatch.setattr(app.services.jobs, "SessionLocal", SessionLocalTest)
-    
+
     st1 = Station(id=1, name="Station 1", owner_id=1, status="active")
     db.add(st1)
     db.commit()
-    
+
     yield db
     db.close()
     Base.metadata.drop_all(bind=engine_test)
+
 
 @pytest.mark.asyncio
 async def test_check_offline_charge_points(db_session, monkeypatch):
@@ -58,7 +60,9 @@ async def test_check_offline_charge_points(db_session, monkeypatch):
 
     # Run the job manually for 1 iteration
     import app.services.jobs
+
     original_sleep = asyncio.sleep
+
     async def mock_sleep(seconds):
         raise asyncio.CancelledError() # Stop the loop
 
@@ -72,10 +76,19 @@ async def test_check_offline_charge_points(db_session, monkeypatch):
     app.services.jobs.asyncio.sleep = original_sleep
 
     # Check results
-    assert db_session.query(ChargePoint).filter_by(code="CP01").first().status == "online"
-    assert db_session.query(ChargePoint).filter_by(code="CP02").first().status == "offline"
-    assert db_session.query(ChargePoint).filter_by(code="CP03").first().status == "offline"
-    assert db_session.query(Connector).filter_by(charge_point_id=cp2.id).one().status == "unknown"
+    assert (
+        db_session.query(ChargePoint).filter_by(code="CP01").first().status == "online"
+    )
+    assert (
+        db_session.query(ChargePoint).filter_by(code="CP02").first().status == "offline"
+    )
+    assert (
+        db_session.query(ChargePoint).filter_by(code="CP03").first().status == "offline"
+    )
+    assert (
+        db_session.query(Connector).filter_by(charge_point_id=cp2.id).one().status
+        == "unknown"
+    )
 
 
 def test_offline_sweep_is_idempotent_and_heartbeat_recovers_charge_point(
@@ -91,7 +104,8 @@ def test_offline_sweep_is_idempotent_and_heartbeat_recovers_charge_point(
         code="CP-RECOVER",
         station_id=1,
         status="online",
-        last_seen_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=20),
+        last_seen_at=datetime.now(timezone.utc).replace(tzinfo=None)
+        - timedelta(seconds=20),
     )
     point.connectors = [Connector(connector_id=1, status="bận")]
     db_session.add(point)

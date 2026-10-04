@@ -1,4 +1,4 @@
-﻿"""
+"""
 Models: stations
 Tham chieu: SPRINT_1.md T-08, 02_CODING_STANDARDS.md muc 2.2
 """
@@ -22,10 +22,14 @@ class Station(Base):
     longitude = Column(Float, nullable=True)
     # active | inactive | maintenance | locked (administrative OCPP boot block)
     status = Column(String(20), default="active", nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     # Chi muc tren owner_id -- moi truy van cua chu tram loc theo cot nay (T-08 NFR)
     __table_args__ = (Index("ix_stations_owner_id", "owner_id"),)

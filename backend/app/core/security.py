@@ -1,4 +1,4 @@
-﻿"""
+"""
 security.py -- hash/verify mat khau bang argon2id, tao/doc session cookie
 Tham chieu: SPRINT_1.md T-05, 02_CODING_STANDARDS.md
 """

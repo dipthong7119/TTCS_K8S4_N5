@@ -18,7 +18,9 @@ def finalize_session_billing(
 ) -> ChargingInvoice | None:
     """Snapshot the effective tariff and charge once inside the OCPP transaction."""
     existing = (
-        db.query(ChargingInvoice).filter(ChargingInvoice.session_id == session.id).first()
+        db.query(ChargingInvoice)
+        .filter(ChargingInvoice.session_id == session.id)
+        .first()
     )
     if existing is not None:
         return existing

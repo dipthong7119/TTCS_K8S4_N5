@@ -20,19 +20,29 @@ from app.schemas.charge_point import (
 )
 from app.services.ownership import filter_by_owner, get_station_for_user
 
-router = APIRouter(prefix="/charge-points", tags=["charge_points"], dependencies=[Depends(deny_unannotated_route)])
+router = APIRouter(
+    prefix="/charge-points",
+    tags=["charge_points"],
+    dependencies=[Depends(deny_unannotated_route)],
+)
 
 
 def _get_station_owner_role(db: Session, station_id: int) -> str | None:
     """Lấy vai trò của người sở hữu trạm"""
     from app.models.station import Station
+
     station = db.query(Station).filter(Station.id == station_id).first()
     if not station:
         return None
     return [r.name for r in station.owner.roles]
 
 
-@router.post("", response_model=ChargePointResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.post(
+    "",
+    response_model=ChargePointResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def create_charge_point(
     body: ChargePointCreate,
     current_user: CurrentUser,
@@ -43,12 +53,15 @@ async def create_charge_point(
     Mã trụ unique toàn hệ thống (T-10 AC)."""
     # Kiểm tra trạm tồn tại và quyền sở hữu
     from app.models.station import Station
+
     station = db.query(Station).filter(Station.id == body.station_id).first()
     if not station:
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
 
     role_names = [r.name for r in current_user.roles]
-    get_station_for_user(db, body.station_id, current_user.id, role_names, "add_charge_point")
+    get_station_for_user(
+        db, body.station_id, current_user.id, role_names, "add_charge_point"
+    )
     if "station_owner" not in role_names and "admin" not in role_names:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -105,7 +118,11 @@ async def create_charge_point(
     return cp
 
 
-@router.get("", response_model=list[ChargePointResponse], dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "",
+    response_model=list[ChargePointResponse],
+    dependencies=[Depends(require_role("admin", "station_owner", "operator"))],
+)
 async def list_charge_points(
     current_user: CurrentUser,
     station_id: int | None = Query(None, description="Lọc theo trạm"),
@@ -116,7 +133,9 @@ async def list_charge_points(
 
     role_names = [r.name for r in current_user.roles]
     if station_id is not None:
-        get_station_for_user(db, station_id, current_user.id, role_names, "list_charge_points")
+        get_station_for_user(
+            db, station_id, current_user.id, role_names, "list_charge_points"
+        )
         q = q.filter(ChargePoint.station_id == station_id)
     else:
         # Lọc theo sở hữu nếu không phải admin
@@ -124,6 +143,7 @@ async def list_charge_points(
         if "admin" not in role_names:
             # Join với stations để lọc
             from app.models.station import Station
+
             q = q.join(Station)
             q = filter_by_owner(q, current_user.id, role_names)
 
@@ -132,12 +152,18 @@ async def list_charge_points(
 
     # Load connectors cho mỗi charge point
     for cp in items:
-        cp.connectors = db.query(Connector).filter(Connector.charge_point_id == cp.id).all()
+        cp.connectors = (
+            db.query(Connector).filter(Connector.charge_point_id == cp.id).all()
+        )
 
     return items
 
 
-@router.get("/{cp_id:int}", response_model=ChargePointResponse, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "/{cp_id:int}",
+    response_model=ChargePointResponse,
+    dependencies=[Depends(require_role("admin", "station_owner", "operator"))],
+)
 async def get_charge_point(
     cp_id: int,
     current_user: CurrentUser,
@@ -150,7 +176,9 @@ async def get_charge_point(
 
     # Kiểm tra quyền sở hữu
     role_names = [r.name for r in current_user.roles]
-    get_station_for_user(db, cp.station_id, current_user.id, role_names, "view_charge_point")
+    get_station_for_user(
+        db, cp.station_id, current_user.id, role_names, "view_charge_point"
+    )
     if "admin" not in role_names and "operator" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
@@ -163,7 +191,11 @@ async def get_charge_point(
     return cp
 
 
-@router.patch("/{cp_id}", response_model=ChargePointResponse, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.patch(
+    "/{cp_id}",
+    response_model=ChargePointResponse,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def update_charge_point(
     cp_id: int,
     body: ChargePointUpdate,
@@ -176,7 +208,9 @@ async def update_charge_point(
         raise HTTPException(status_code=404, detail="Không tìm thấy trụ")
 
     role_names = [r.name for r in current_user.roles]
-    get_station_for_user(db, cp.station_id, current_user.id, role_names, "update_charge_point")
+    get_station_for_user(
+        db, cp.station_id, current_user.id, role_names, "update_charge_point"
+    )
     if "admin" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
@@ -200,7 +234,11 @@ async def update_charge_point(
     return cp
 
 
-@router.delete("/{cp_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_role("station_owner", "admin"))])
+@router.delete(
+    "/{cp_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
 async def delete_charge_point(
     cp_id: int,
     current_user: CurrentUser,
@@ -212,7 +250,9 @@ async def delete_charge_point(
         raise HTTPException(status_code=404, detail="Không tìm thấy trụ")
 
     role_names = [r.name for r in current_user.roles]
-    get_station_for_user(db, cp.station_id, current_user.id, role_names, "delete_charge_point")
+    get_station_for_user(
+        db, cp.station_id, current_user.id, role_names, "delete_charge_point"
+    )
     if "admin" not in role_names:
         station = db.query(Station).filter(Station.id == cp.station_id).first()
         if not station or station.owner_id != current_user.id:
@@ -225,7 +265,11 @@ async def delete_charge_point(
     db.commit()
 
 
-@router.get("/check-code", status_code=200, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "/check-code",
+    status_code=200,
+    dependencies=[Depends(require_role("admin", "station_owner", "operator"))],
+)
 async def check_code(
     current_user: CurrentUser,
     code: str = Query(..., description="Mã trụ cần kiểm tra"),

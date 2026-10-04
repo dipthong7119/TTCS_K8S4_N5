@@ -16,18 +16,24 @@ from app.services.ocpp_parser import pack_call_error, pack_call_result
 logger = logging.getLogger(__name__)
 
 
-def handle_status_notification(db: Session, charge_point_code: str, msg_id: str, payload: dict) -> str:
+def handle_status_notification(
+    db: Session, charge_point_code: str, msg_id: str, payload: dict
+) -> str:
     """Update connector state and append an error record when needed."""
     connector_id = payload.get("connectorId")
     status_raw = payload.get("status")
 
     if type(connector_id) is not int or connector_id < 0:
         logger.error("Invalid connectorId %s from %s", connector_id, charge_point_code)
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a non-negative integer")
+        return pack_call_error(
+            msg_id, "FormationViolation", "connectorId must be a non-negative integer"
+        )
 
     if not isinstance(status_raw, str) or not status_raw:
         logger.error("Invalid status %s from %s", status_raw, charge_point_code)
-        return pack_call_error(msg_id, "FormationViolation", "status must be a non-empty string")
+        return pack_call_error(
+            msg_id, "FormationViolation", "status must be a non-empty string"
+        )
 
     # connectorId = 0 reports the charge point status, not a connector row.
     if connector_id == 0:
@@ -42,7 +48,9 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     occurred_at = datetime.now(UTC).replace(tzinfo=None)
     if isinstance(timestamp_raw, str) and timestamp_raw:
         try:
-            parsed_timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            parsed_timestamp = datetime.fromisoformat(
+                timestamp_raw.replace("Z", "+00:00")
+            )
             occurred_at = parsed_timestamp.astimezone(UTC).replace(tzinfo=None)
         except ValueError:
             pass
@@ -66,9 +74,11 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
 
     if connector is None:
         # Lấy số đầu nối đã khai (số dòng của trụ này trong bảng connectors)
-        declared_count = db.query(func.count(Connector.id)).filter(
-            Connector.charge_point_id == charge_point_id
-        ).scalar()
+        declared_count = (
+            db.query(func.count(Connector.id))
+            .filter(Connector.charge_point_id == charge_point_id)
+            .scalar()
+        )
 
         if unknown_connector_throttler.should_warn(
             charge_point_code,
@@ -92,6 +102,8 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
                 occurred_at=occurred_at,
             )
         )
-        logger.warning("Connector error %s-%s: %s", charge_point_code, connector_id, error_code)
+        logger.warning(
+            "Connector error %s-%s: %s", charge_point_code, connector_id, error_code
+        )
 
     return pack_call_result(msg_id, {})

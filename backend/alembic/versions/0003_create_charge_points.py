@@ -1,4 +1,4 @@
-﻿"""
+"""
 Migration: tao bang charge_points va connectors
 Tham chieu: SPRINT_1.md T-10
 """
@@ -32,8 +32,12 @@ def upgrade() -> None:
         # online | offline
         sa.Column("status", sa.String(20), server_default="offline", nullable=False),
         sa.Column("last_seen_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     # Chi muc rieng tren code de tra cuu OCPP nhanh (T-10 NFR)
@@ -52,12 +56,22 @@ def upgrade() -> None:
         # Khop voi connectorId trong giao thuc OCPP, bat dau tu 1 (T-10 NFR)
         sa.Column("connector_id", sa.Integer(), nullable=False),
         # unavailable | available | charging | faulted
-        sa.Column("status", sa.String(20), server_default="unavailable", nullable=False),
-        sa.Column("error_code", sa.String(50), server_default="NoError", nullable=False),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "status", sa.String(20), server_default="unavailable", nullable=False
+        ),
+        sa.Column(
+            "error_code", sa.String(50), server_default="NoError", nullable=False
+        ),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
         # DB tu choi neu chen hai dau noi cung tru cung so (T-10 AC)
-        sa.UniqueConstraint("charge_point_id", "connector_id", name="uq_connector_per_charge_point"),
+        sa.UniqueConstraint(
+            "charge_point_id", "connector_id", name="uq_connector_per_charge_point"
+        ),
     )
 
 

@@ -3,7 +3,6 @@ services/ownership.py -- Ham loc theo quyen so huu, dung chung (T-07)
 Tham chieu: SPRINT_1.md T-07, 02_CODING_STANDARDS.md, SSD-1
 """
 
-
 import logging
 
 from fastapi import HTTPException, status
@@ -35,9 +34,11 @@ def get_station_for_user(
     action: str = "view",
 ) -> Station:
     """Fetch through the shared owner filter and log denied cross-owner access."""
-    station = filter_by_owner(
-        db.query(Station), user_id, role_names
-    ).filter(Station.id == station_id).first()
+    station = (
+        filter_by_owner(db.query(Station), user_id, role_names)
+        .filter(Station.id == station_id)
+        .first()
+    )
     if station is not None:
         return station
 
@@ -53,4 +54,6 @@ def get_station_for_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Khong co quyen truy cap tram nay",
         )
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khong tim thay tram")
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Khong tim thay tram"
+    )

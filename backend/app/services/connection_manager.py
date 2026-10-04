@@ -22,7 +22,9 @@ class ConnectionManager:
         async with self._lock:
             old_ws = self.active_connections.get(charge_point_code)
             self.active_connections[charge_point_code] = websocket
-            self._fail_pending(charge_point_code, ConnectionError("Charge point reconnected"))
+            self._fail_pending(
+                charge_point_code, ConnectionError("Charge point reconnected")
+            )
         if old_ws and old_ws is not websocket:
             logger.info(
                 "Charge point connection replaced: code=%s old_connection_id=%s new_connection_id=%s",
@@ -33,12 +35,16 @@ class ConnectionManager:
             try:
                 await old_ws.close(code=1000, reason="New connection opened")
             except Exception:
-                logger.debug("Could not close the previous charge point websocket", exc_info=True)
+                logger.debug(
+                    "Could not close the previous charge point websocket", exc_info=True
+                )
 
     def disconnect(self, charge_point_code: str, websocket: WebSocket):
         if self.active_connections.get(charge_point_code) == websocket:
             del self.active_connections[charge_point_code]
-            self._fail_pending(charge_point_code, ConnectionError("Charge point disconnected"))
+            self._fail_pending(
+                charge_point_code, ConnectionError("Charge point disconnected")
+            )
 
     async def send_to(self, charge_point_code: str, text: str):
         websocket = self.active_connections.get(charge_point_code)
@@ -64,12 +70,18 @@ class ConnectionManager:
         self._pending_websockets[key] = websocket
         try:
             if self.active_connections.get(charge_point_code) is not websocket:
-                raise ConnectionError("Charge point reconnected before command was sent")
+                raise ConnectionError(
+                    "Charge point reconnected before command was sent"
+                )
             try:
                 await websocket.send_text(pack_call(message_id, action, payload))
             except Exception as exc:
                 raise ConnectionError("Charge point connection was lost") from exc
-            wait_seconds = timeout if timeout is not None else settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS
+            wait_seconds = (
+                timeout
+                if timeout is not None
+                else settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS
+            )
             return await asyncio.wait_for(future, timeout=wait_seconds)
         finally:
             self.pending_calls.pop(key, None)
@@ -113,5 +125,6 @@ class ConnectionManager:
         for key, future in tuple(self.pending_calls.items()):
             if key[0] == charge_point_code and not future.done():
                 future.set_exception(error)
-            
+
+
 manager = ConnectionManager()

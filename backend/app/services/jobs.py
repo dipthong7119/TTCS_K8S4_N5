@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def _stale_cutoff(db):
-    timeout = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS * settings.OCPP_HEARTBEAT_MULTIPLIER
+    timeout = (
+        settings.OCPP_HEARTBEAT_INTERVAL_SECONDS * settings.OCPP_HEARTBEAT_MULTIPLIER
+    )
     if db.get_bind().dialect.name == "sqlite":
         return func.datetime(func.current_timestamp(), f"-{timeout} seconds")
     return func.current_timestamp() - text(f"INTERVAL '{timeout} seconds'")
@@ -30,7 +32,8 @@ def expire_stale_charge_points_once(db) -> int:
         db.query(ChargePoint)
         .filter(
             ChargePoint.status == "online",
-            (ChargePoint.last_seen_at.is_(None)) | (ChargePoint.last_seen_at < _stale_cutoff(db)),
+            (ChargePoint.last_seen_at.is_(None))
+            | (ChargePoint.last_seen_at < _stale_cutoff(db)),
         )
         .all()
     )
@@ -42,7 +45,9 @@ def expire_stale_charge_points_once(db) -> int:
         point.status = "offline"
         for connector in point.connectors:
             connector.status = "unknown"
-        logger.info("Charge point marked offline after missed heartbeats: %s", point.code)
+        logger.info(
+            "Charge point marked offline after missed heartbeats: %s", point.code
+        )
     db.commit()
 
     from app.routers.monitoring import notify_status_change
@@ -88,7 +93,8 @@ def review_stale_sessions_once(db) -> int:
             ChargingSession.status == "active",
             ChargingSession.ended_at.is_(None),
             ChargePoint.status == "offline",
-            func.coalesce(ChargePoint.last_seen_at, ChargePoint.created_at) <= offline_cutoff,
+            func.coalesce(ChargePoint.last_seen_at, ChargePoint.created_at)
+            <= offline_cutoff,
         )
         .all()
     )
@@ -106,7 +112,13 @@ def review_stale_sessions_once(db) -> int:
     station_owner_ids = {
         station_id: owner_id
         for station_id, owner_id in db.query(Station.id, Station.owner_id).filter(
-            Station.id.in_({session.station_id for session in changed if session.station_id is not None})
+            Station.id.in_(
+                {
+                    session.station_id
+                    for session in changed
+                    if session.station_id is not None
+                }
+            )
         )
     }
     for session in changed:

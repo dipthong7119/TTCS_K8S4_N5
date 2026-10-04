@@ -12,6 +12,7 @@ class InternalStatus(str, Enum):
     RESERVED = "đặt chỗ"
     FAULTED = "lỗi"
 
+
 def map_ocpp_status(ocpp_status: str) -> InternalStatus:
     """
     Ánh xạ 9 trạng thái OCPP 1.6 sang 4 trạng thái nội bộ.
@@ -19,7 +20,13 @@ def map_ocpp_status(ocpp_status: str) -> InternalStatus:
     """
     if ocpp_status == "Available":
         return InternalStatus.IDLE
-    elif ocpp_status in {"Preparing", "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing"}:
+    elif ocpp_status in {
+        "Preparing",
+        "Charging",
+        "SuspendedEV",
+        "SuspendedEVSE",
+        "Finishing",
+    }:
         return InternalStatus.BUSY
     elif ocpp_status == "Reserved":
         return InternalStatus.RESERVED

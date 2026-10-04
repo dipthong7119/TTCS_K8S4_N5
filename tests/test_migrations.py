@@ -54,10 +54,11 @@ def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
             command.downgrade(config, "base")
     except Exception as e:
         import sys
+
         print(f"Downgrade failed or was skipped: {e}", file=sys.stderr)
     downgraded_engine = create_engine(settings.DATABASE_URL)
     try:
-        pass # Khong kiem tra intersection vi downgrade co the bi bo qua
+        pass  # Khong kiem tra intersection vi downgrade co the bi bo qua
     finally:
         downgraded_engine.dispose()
 
@@ -65,7 +66,11 @@ def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
 def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
     _, engine = migrated_database
     with engine.connect() as connection:
-        roles = connection.execute(text("SELECT name FROM roles ORDER BY name")).scalars().all()
+        roles = (
+            connection.execute(text("SELECT name FROM roles ORDER BY name"))
+            .scalars()
+            .all()
+        )
 
     assert roles == ["accountant", "admin", "driver", "operator", "station_owner"]
 
@@ -73,7 +78,9 @@ def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
 def test_new_connector_default_matches_sprint_one_schema(migrated_database) -> None:
     _, engine = migrated_database
     status_column = next(
-        column for column in inspect(engine).get_columns("connectors") if column["name"] == "status"
+        column
+        for column in inspect(engine).get_columns("connectors")
+        if column["name"] == "status"
     )
 
     assert status_column["default"].strip("'\"") == "unavailable"

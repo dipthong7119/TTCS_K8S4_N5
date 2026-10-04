@@ -27,6 +27,7 @@ from app.services.ocpp_parser import pack_call, parse_message
 # Fixture: DB in-memory mới cho mỗi test, có 1 station + 1 charge point
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def db_session():
     """DB SQLite in-memory, tạo schema đầy đủ cho mỗi test."""
@@ -54,6 +55,7 @@ def db_session():
 # ---------------------------------------------------------------------------
 # Helper: gửi BootNotification và parse phản hồi
 # ---------------------------------------------------------------------------
+
 
 def _boot(db, payload: dict, msg_id: str = "msg-boot-1"):
     raw = pack_call(msg_id, "BootNotification", payload)
@@ -115,6 +117,7 @@ def test_full_payload_conf_has_interval(db_session):
 # Nhóm 2: payload thiếu từng trường → cột tương ứng là NULL
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "payload,missing_field",
     [
@@ -173,6 +176,7 @@ def test_missing_field_column_is_null(db_session, payload, null_attr):
 # Nhóm 3: gửi 2 lần → vẫn chỉ 1 bản ghi trụ (idempotency từ T-30)
 # ---------------------------------------------------------------------------
 
+
 def test_second_boot_does_not_create_new_charge_point(db_session):
     """Gửi BootNotification 2 lần → bảng charge_points vẫn 1 dòng (S-08 AC3)."""
     _boot(db_session, FULL_PAYLOAD, msg_id="boot-a")
@@ -194,6 +198,7 @@ def test_second_boot_still_accepted(db_session):
 # Nhóm 4: đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "interval",
     [60, 300, 600],
@@ -201,6 +206,8 @@ def test_second_boot_still_accepted(db_session):
 )
 def test_interval_follows_config(db_session, interval):
     """interval trong CALLRESULT phải bằng HEARTBEAT_INTERVAL (T-17 AC)."""
-    with patch("app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval):
+    with patch(
+        "app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval
+    ):
         _, _, result = _boot(db_session, FULL_PAYLOAD, msg_id=f"boot-iv-{interval}")
     assert result["interval"] == interval

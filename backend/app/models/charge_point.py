@@ -1,4 +1,4 @@
-﻿"""
+"""
 Models: charge_points, connectors
 Tham chieu: SPRINT_1.md T-10, 02_CODING_STANDARDS.md muc 2.2
 """
@@ -18,7 +18,9 @@ class ChargePoint(Base):
     id = Column(Integer, primary_key=True)
     # UNIQUE + INDEX: moi ket noi WebSocket OCPP tra cuu theo cot nay (T-10 NFR)
     code = Column(String(50), unique=True, nullable=False, index=True)
-    station_id = Column(Integer, ForeignKey("stations.id", ondelete="CASCADE"), nullable=False)
+    station_id = Column(
+        Integer, ForeignKey("stations.id", ondelete="CASCADE"), nullable=False
+    )
     vendor = Column(String(255), nullable=True)
     model = Column(String(255), nullable=True)
     firmware_version = Column(String(100), nullable=True)
@@ -29,7 +31,9 @@ class ChargePoint(Base):
     last_seen_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     station = relationship("Station", back_populates="charge_points")
     connectors = relationship(
@@ -43,22 +47,32 @@ class Connector(Base):
     __tablename__ = "connectors"
 
     id = Column(Integer, primary_key=True)
-    charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False)
+    charge_point_id = Column(
+        Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False
+    )
     # Khop voi connectorId trong tin nhan OCPP, bat dau tu 1 (T-10 NFR)
     connector_id = Column(Integer, nullable=False)
     # T-10: a new connector starts unavailable until the charge point reports its status.
-    status = Column(String(20), default="unavailable", server_default="unavailable", nullable=False)
+    status = Column(
+        String(20), default="unavailable", server_default="unavailable", nullable=False
+    )
     # Preserve the exact OCPP status separately from the internal UI status.
     ocpp_status = Column(String(50), nullable=True)
     error_code = Column(String(50), default="NoError", nullable=False)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     __table_args__ = (
         # Moi cap (tru, dau noi) phai duy nhat -- DB tu choi neu chon trung (T-10 AC)
-        UniqueConstraint("charge_point_id", "connector_id", name="uq_connector_per_charge_point"),
+        UniqueConstraint(
+            "charge_point_id", "connector_id", name="uq_connector_per_charge_point"
+        ),
     )
 
     charge_point = relationship("ChargePoint", back_populates="connectors")
-    errors = relationship("ConnectorError", back_populates="connector", cascade="all, delete-orphan")
+    errors = relationship(
+        "ConnectorError", back_populates="connector", cascade="all, delete-orphan"
+    )

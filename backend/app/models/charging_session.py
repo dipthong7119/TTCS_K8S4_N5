@@ -24,14 +24,22 @@ class ChargingSession(Base):
 
     # This ID is also the transactionId returned to the charge point.
     id = Column(Integer, primary_key=True)
-    charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="SET NULL"), nullable=True)
+    charge_point_id = Column(
+        Integer, ForeignKey("charge_points.id", ondelete="SET NULL"), nullable=True
+    )
     charge_point_code = Column(String(50), nullable=False)
-    station_id = Column(Integer, ForeignKey("stations.id", ondelete="SET NULL"), nullable=True)
+    station_id = Column(
+        Integer, ForeignKey("stations.id", ondelete="SET NULL"), nullable=True
+    )
     station_name = Column(String(255), nullable=False)
     connector_number = Column(Integer, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     driver_name = Column(String(255), nullable=True)
-    id_tag_id = Column(Integer, ForeignKey("id_tags.id", ondelete="SET NULL"), nullable=True)
+    id_tag_id = Column(
+        Integer, ForeignKey("id_tags.id", ondelete="SET NULL"), nullable=True
+    )
     id_tag = Column(String(50), nullable=True)
     meter_start_wh = Column(Integer, nullable=False)
     meter_stop_wh = Column(Integer, nullable=True)
@@ -39,13 +47,17 @@ class ChargingSession(Base):
     started_at = Column(DateTime, nullable=False)
     ended_at = Column(DateTime, nullable=True)
     remote_stop_requested_at = Column(DateTime, nullable=True)
-    status = Column(String(20), nullable=False, default="active", server_default="active")
+    status = Column(
+        String(20), nullable=False, default="active", server_default="active"
+    )
     stop_reason = Column(String(50), nullable=True)
     anomaly_reason = Column(String(50), nullable=True)
     is_demo = Column(Boolean, nullable=False, default=False, server_default=false())
     demo_key = Column(String(80), nullable=True, unique=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
-    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     invoice = relationship("ChargingInvoice", back_populates="session", uselist=False)
 

@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     # T-26: Start background job
 
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
 
@@ -105,6 +106,7 @@ app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")
 
 app.include_router(pages_router)
+
 
 # -- Health check -------------------------------------------------------------
 @app.get("/health")

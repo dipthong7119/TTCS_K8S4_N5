@@ -20,7 +20,9 @@ sse_clients: list[dict] = []
 SSE_QUEUE_LIMIT = 10
 
 
-def notify_status_change(station_id: int, charge_points_data: list, owner_id: int | None = None):
+def notify_status_change(
+    station_id: int, charge_points_data: list, owner_id: int | None = None
+):
     data = json.dumps({"station_id": station_id, "charge_points": charge_points_data})
     event = {"event": "status_update", "data": data}
     for subscriber in tuple(sse_clients):
@@ -38,7 +40,9 @@ def notify_status_change(station_id: int, charge_points_data: list, owner_id: in
                 continue
 
 
-def notify_session_change(user_id: int | None, owner_id: int | None, session_id: int) -> None:
+def notify_session_change(
+    user_id: int | None, owner_id: int | None, session_id: int
+) -> None:
     event = {"event": "session_update", "data": json.dumps({"session_id": session_id})}
     for subscriber in tuple(sse_clients):
         if (
@@ -60,11 +64,15 @@ def notify_session_change(user_id: int | None, owner_id: int | None, session_id:
 
 @router.get(
     "/sse",
-    dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))],
+    dependencies=[
+        Depends(require_role("admin", "station_owner", "operator", "driver"))
+    ],
 )
 async def monitoring_sse(
     request: Request,
-    current_user: User = Depends(require_role("admin", "station_owner", "operator", "driver")),
+    current_user: User = Depends(
+        require_role("admin", "station_owner", "operator", "driver")
+    ),
 ):
     roles = [role.name for role in current_user.roles]
     subscriber = {

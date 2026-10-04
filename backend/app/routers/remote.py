@@ -92,7 +92,9 @@ async def reset_charge_point(
         ) from exc
 
     if result.get("status") != "Accepted":
-        record_reset_outcome("charge_point.reset.rejected", result.get("status", "unknown"))
+        record_reset_outcome(
+            "charge_point.reset.rejected", result.get("status", "unknown")
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Trụ không chấp nhận lệnh Reset.",

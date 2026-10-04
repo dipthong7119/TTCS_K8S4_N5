@@ -1,4 +1,4 @@
-﻿# models/__init__.py
+# models/__init__.py
 # Import tat ca model de Alembic autogenerate phat hien duoc toan bo schema
 
 from app.models.audit_log import AuditLog  # noqa: F401

@@ -13,11 +13,12 @@ from app.models.station import Station
 from app.models.user import User
 
 engine_test = create_engine(
-    "sqlite:///:memory:", 
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool
+    poolclass=StaticPool,
 )
 SessionLocalTest = sessionmaker(autocommit=False, autoflush=False, bind=engine_test)
+
 
 def override_get_db():
     try:
@@ -26,11 +27,13 @@ def override_get_db():
     finally:
         db.close()
 
+
 import app.routers.ocpp as ocpp_router_mod
 
 ocpp_router_mod.SessionLocal = SessionLocalTest
 
 client = TestClient(main_app)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def apply_override():
@@ -38,11 +41,12 @@ def apply_override():
     yield
     main_app.dependency_overrides.clear()
 
+
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine_test)
     db = SessionLocalTest()
-    
+
     user = User(id=1, email="test@test.com", password_hash="123", full_name="Test User")
     station = Station(id=1, name="Test Station", owner_id=1, status="active")
     cp = ChargePoint(id=1, code="CP_VALID", station_id=1, status="offline")
@@ -51,17 +55,23 @@ def setup_db():
     db.add(cp)
     db.commit()
     db.close()
-    
+
     yield
-    
+
     Base.metadata.drop_all(bind=engine_test)
 
+
 def test_websocket_accepts_valid_cp():
-    with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as websocket:
+    with client.websocket_connect(
+        "/ocpp/CP_VALID", subprotocols=["ocpp1.6"]
+    ) as websocket:
         import json
-        raw_msg = json.dumps([2, "msg1", "BootNotification", {"chargePointVendor": "V"}])
+
+        raw_msg = json.dumps(
+            [2, "msg1", "BootNotification", {"chargePointVendor": "V"}]
+        )
         websocket.send_text(raw_msg)
-        
+
         data = websocket.receive_text()
         resp = json.loads(data)
         assert resp[0] == 3
@@ -75,9 +85,14 @@ def test_websocket_boot_accepted_when_station_is_paused():
     db.commit()
     db.close()
 
-    with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as websocket:
+    with client.websocket_connect(
+        "/ocpp/CP_VALID", subprotocols=["ocpp1.6"]
+    ) as websocket:
         websocket.send_text('[2,"paused-boot","BootNotification",{}]')
-        assert __import__("json").loads(websocket.receive_text())[2]["status"] == "Accepted"
+        assert (
+            __import__("json").loads(websocket.receive_text())[2]["status"]
+            == "Accepted"
+        )
 
 
 def test_websocket_boot_rejected_when_station_is_locked():
@@ -86,12 +101,20 @@ def test_websocket_boot_rejected_when_station_is_locked():
     db.commit()
     db.close()
 
-    with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as websocket:
+    with client.websocket_connect(
+        "/ocpp/CP_VALID", subprotocols=["ocpp1.6"]
+    ) as websocket:
         websocket.send_text('[2,"locked-boot","BootNotification",{}]')
-        assert __import__("json").loads(websocket.receive_text())[2]["status"] == "Rejected"
+        assert (
+            __import__("json").loads(websocket.receive_text())[2]["status"]
+            == "Rejected"
+        )
+
 
 def test_websocket_requires_boot_before_other_calls():
-    with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as websocket:
+    with client.websocket_connect(
+        "/ocpp/CP_VALID", subprotocols=["ocpp1.6"]
+    ) as websocket:
         websocket.send_text('[2,"early-heartbeat","Heartbeat",{}]')
         rejected = __import__("json").loads(websocket.receive_text())
         assert rejected[0] == 4
@@ -105,11 +128,15 @@ def test_websocket_requires_boot_before_other_calls():
         heartbeat = __import__("json").loads(websocket.receive_text())
         assert heartbeat[0] == 3
 
+
 def test_websocket_rejects_invalid_cp():
     from starlette.websockets import WebSocketDisconnect
+
     with (
         pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect("/ocpp/CP_INVALID", subprotocols=["ocpp1.6"]) as websocket,
+        client.websocket_connect(
+            "/ocpp/CP_INVALID", subprotocols=["ocpp1.6"]
+        ) as websocket,
     ):
         websocket.receive_text()
     assert exc.value.code == 1008
@@ -121,7 +148,9 @@ def test_websocket_logs_unknown_charge_point_once():
     with (
         patch.object(ocpp_router_mod.logger, "warning") as warning,
         pytest.raises(WebSocketDisconnect),
-        client.websocket_connect("/ocpp/CP_UNKNOWN", subprotocols=["ocpp1.6"]) as websocket,
+        client.websocket_connect(
+            "/ocpp/CP_UNKNOWN", subprotocols=["ocpp1.6"]
+        ) as websocket,
     ):
         websocket.receive_text()
 
@@ -131,7 +160,9 @@ def test_websocket_logs_unknown_charge_point_once():
 
 
 def test_malformed_call_error_does_not_close_websocket():
-    with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as websocket:
+    with client.websocket_connect(
+        "/ocpp/CP_VALID", subprotocols=["ocpp1.6"]
+    ) as websocket:
         websocket.send_text('[2,"malformed-boot","BootNotification",[]]')
         error = __import__("json").loads(websocket.receive_text())
         assert error[0] == 4
@@ -141,21 +172,28 @@ def test_malformed_call_error_does_not_close_websocket():
         accepted = __import__("json").loads(websocket.receive_text())
         assert accepted[2]["status"] == "Accepted"
 
+
 def test_websocket_rejects_unsupported_protocol():
     from starlette.websockets import WebSocketDisconnect
+
     with (
         pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.5"]) as websocket,
+        client.websocket_connect(
+            "/ocpp/CP_VALID", subprotocols=["ocpp1.5"]
+        ) as websocket,
     ):
         websocket.receive_text()
     assert exc.value.code == 1002
+
 
 def test_websocket_disconnect_publishes_offline_status():
     import json
 
     from app.services import connection_manager
-    
-    with patch("app.services.ocpp_handlers.publish_charge_point_status") as mock_publish:
+
+    with patch(
+        "app.services.ocpp_handlers.publish_charge_point_status"
+    ) as mock_publish:
         with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as ws:
             ws.send_text(
                 json.dumps(
@@ -174,7 +212,7 @@ def test_websocket_disconnect_publishes_offline_status():
             ws.receive_text()
             # Active connections should have CP_VALID
             assert "CP_VALID" in connection_manager.manager.active_connections
-        
+
         # When context exits, the websocket is closed and disconnected.
         # It should have called publish_charge_point_status
         mock_publish.assert_called()

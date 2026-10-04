@@ -39,7 +39,9 @@ class StationTariff(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("station_id", "effective_from", name="uq_station_tariff_effective"),
+        UniqueConstraint(
+            "station_id", "effective_from", name="uq_station_tariff_effective"
+        ),
         Index("ix_station_tariffs_station_effective", "station_id", "effective_from"),
     )
 
@@ -64,7 +66,11 @@ class TariffBand(Base):
             "end_minute > start_minute AND end_minute <= 1440",
             name="ck_tariff_band_minutes",
         ),
-        CheckConstraint("price_vnd_per_kwh >= 0", name="ck_tariff_band_price_nonnegative"),
+        CheckConstraint(
+            "price_vnd_per_kwh >= 0", name="ck_tariff_band_price_nonnegative"
+        ),
         UniqueConstraint("tariff_id", "start_minute", name="uq_tariff_band_start"),
-        Index("ix_tariff_bands_tariff_minutes", "tariff_id", "start_minute", "end_minute"),
+        Index(
+            "ix_tariff_bands_tariff_minutes", "tariff_id", "start_minute", "end_minute"
+        ),
     )

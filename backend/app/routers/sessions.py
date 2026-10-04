@@ -39,7 +39,9 @@ def _session_query(db: Session):
     return db.query(ChargingSession)
 
 
-def _calculate_live_kwh(item: ChargingSession, reading: MeterValue | None) -> float | None:
+def _calculate_live_kwh(
+    item: ChargingSession, reading: MeterValue | None
+) -> float | None:
     if reading is None:
         return None
     value = float(reading.value)
@@ -131,7 +133,9 @@ def _list_sessions(
     # SQL SUM over nullable energy values returns None when no sessions have kWh.
     aggregate = query.with_entities(func.sum(ChargingSession.energy_kwh)).scalar()
     aggregate_cost = (
-        query.outerjoin(ChargingInvoice, ChargingInvoice.session_id == ChargingSession.id)
+        query.outerjoin(
+            ChargingInvoice, ChargingInvoice.session_id == ChargingSession.id
+        )
         .with_entities(func.coalesce(func.sum(ChargingInvoice.total_vnd), 0))
         .scalar()
     )
@@ -161,7 +165,12 @@ async def list_my_sessions(
     status_filter: str | None = Query(None, alias="status", max_length=20),
 ):
     return _list_sessions(
-        db, current_user, page=page, page_size=page_size, days=days, status_filter=status_filter
+        db,
+        current_user,
+        page=page,
+        page_size=page_size,
+        days=days,
+        status_filter=status_filter,
     )
 
 
@@ -184,14 +193,19 @@ async def get_current_driver_session(
     row = (
         db.query(ChargingSession, MeterValue)
         .outerjoin(MeterValue, MeterValue.id == latest_meter_id)
-        .filter(ChargingSession.user_id == current_user.id, ChargingSession.ended_at.is_(None))
+        .filter(
+            ChargingSession.user_id == current_user.id,
+            ChargingSession.ended_at.is_(None),
+        )
         .order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
         .first()
     )
     if row is None:
         return Response(status_code=204)
     item, latest_meter = row
-    return _serialize_session(db, item, load_latest_meter=False, latest_meter=latest_meter)
+    return _serialize_session(
+        db, item, load_latest_meter=False, latest_meter=latest_meter
+    )
 
 
 @router.get("", dependencies=[Depends(require_role(*SESSION_VIEW_ROLES))])
@@ -204,7 +218,12 @@ async def list_sessions(
     status_filter: str | None = Query(None, alias="status", max_length=20),
 ):
     return _list_sessions(
-        db, current_user, page=page, page_size=page_size, days=days, status_filter=status_filter
+        db,
+        current_user,
+        page=page,
+        page_size=page_size,
+        days=days,
+        status_filter=status_filter,
     )
 
 
@@ -216,20 +235,25 @@ async def list_anomalies(
     days: str = Query("30", max_length=10),
     reason: str | None = Query(None, max_length=30),
 ):
-    base_query = _session_query(db).outerjoin(
-        ChargePoint, ChargingSession.charge_point_id == ChargePoint.id
-    ).filter(
-        ChargingSession.status.in_(("anomaly", "needs_review"))
+    base_query = (
+        _session_query(db)
+        .outerjoin(ChargePoint, ChargingSession.charge_point_id == ChargePoint.id)
+        .filter(ChargingSession.status.in_(("anomaly", "needs_review")))
     )
     if days != "all":
         try:
             day_count = int(days)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+            raise HTTPException(
+                status_code=422, detail="days phải là số ngày hoặc all"
+            ) from exc
         if not 1 <= day_count <= 3650:
-            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            raise HTTPException(
+                status_code=422, detail="days nằm ngoài khoảng cho phép"
+            )
         base_query = base_query.filter(
-            ChargingSession.started_at >= datetime.now(UTC).replace(tzinfo=None) - timedelta(days=day_count)
+            ChargingSession.started_at
+            >= datetime.now(UTC).replace(tzinfo=None) - timedelta(days=day_count)
         )
 
     query = base_query
@@ -246,7 +270,9 @@ async def list_anomalies(
     negative_kwh_count = base_query.filter(
         ChargingSession.anomaly_reason == "negative_kwh"
     ).count()
-    offline_count = base_query.filter(ChargingSession.anomaly_reason == "offline").count()
+    offline_count = base_query.filter(
+        ChargingSession.anomaly_reason == "offline"
+    ).count()
     rows = (
         query.add_columns(ChargePoint.status)
         .order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
@@ -287,7 +313,9 @@ async def get_session(
     if "station_owner" in roles:
         station = db.query(Station).filter(Station.id == item.station_id).first()
         if station is None or station.owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
+            raise HTTPException(
+                status_code=403, detail="Không có quyền xem phiên sạc này"
+            )
     elif item.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
     return _serialize_session(db, item)
@@ -313,7 +341,9 @@ async def remote_stop_session(
         or point.status != "online"
         or is_charge_point_stale(point.last_seen_at)
     ):
-        raise HTTPException(status_code=409, detail="Phiên/trụ không còn sẵn sàng để dừng từ xa")
+        raise HTTPException(
+            status_code=409, detail="Phiên/trụ không còn sẵn sàng để dừng từ xa"
+        )
 
     try:
         result = await manager.send_call(
@@ -335,7 +365,9 @@ async def remote_stop_session(
             details={"outcome": "timeout"},
         )
         db.commit()
-        raise HTTPException(status_code=504, detail="Trụ không phản hồi lệnh dừng từ xa") from exc
+        raise HTTPException(
+            status_code=504, detail="Trụ không phản hồi lệnh dừng từ xa"
+        ) from exc
     except (ConnectionError, OCPPError) as exc:
         append_audit(
             db,
@@ -349,7 +381,9 @@ async def remote_stop_session(
             details={"outcome": "connection_error"},
         )
         db.commit()
-        raise HTTPException(status_code=502, detail="Không gửi được lệnh dừng tới trụ") from exc
+        raise HTTPException(
+            status_code=502, detail="Không gửi được lệnh dừng tới trụ"
+        ) from exc
 
     accepted = result.get("status") == "Accepted"
     if accepted:
@@ -369,10 +403,17 @@ async def remote_stop_session(
     )
     db.commit()
     if not accepted:
-        raise HTTPException(status_code=502, detail="Trụ không chấp nhận lệnh dừng từ xa")
+        raise HTTPException(
+            status_code=502, detail="Trụ không chấp nhận lệnh dừng từ xa"
+        )
     if item.ended_at is None:
         station = db.query(Station).filter(Station.id == item.station_id).first()
         from app.routers.monitoring import notify_session_change
 
-        notify_session_change(item.user_id, station.owner_id if station else None, item.id)
-    return {"status": "Accepted", "message": "Đã gửi lệnh; phiên sẽ đóng khi trụ báo StopTransaction."}
+        notify_session_change(
+            item.user_id, station.owner_id if station else None, item.id
+        )
+    return {
+        "status": "Accepted",
+        "message": "Đã gửi lệnh; phiên sẽ đóng khi trụ báo StopTransaction.",
+    }

@@ -81,7 +81,10 @@ def test_charge_point_create_read_update_delete_ten_times(client, user_factory) 
         assert created_response.status_code == 201, created_response.text
         charge_point = created_response.json()
         assert [item["connector_id"] for item in charge_point["connectors"]] == [1, 2]
-        assert [item["status"] for item in charge_point["connectors"]] == ["unavailable", "unavailable"]
+        assert [item["status"] for item in charge_point["connectors"]] == [
+            "unavailable",
+            "unavailable",
+        ]
 
         duplicate_create = client.post(
             "/api/charge-points",
@@ -141,7 +144,9 @@ def test_only_admin_can_lock_or_unlock_station(client, user_factory) -> None:
     assert owner_lock.status_code == 403, owner_lock.text
 
     client.post("/api/auth/logout")
-    admin = user_factory(email="lock-admin@example.com", password=PASSWORD, role_name="admin")
+    admin = user_factory(
+        email="lock-admin@example.com", password=PASSWORD, role_name="admin"
+    )
     login(client, admin)
     admin_lock = client.put(f"/api/stations/{station_id}", json={"status": "locked"})
     assert admin_lock.status_code == 200, admin_lock.text
@@ -157,7 +162,9 @@ def test_only_admin_can_lock_or_unlock_station(client, user_factory) -> None:
     assert owner_unlock.status_code == 403, owner_unlock.text
 
 
-def test_owner_cannot_list_charge_points_from_another_owner(client, db_session, user_factory) -> None:
+def test_owner_cannot_list_charge_points_from_another_owner(
+    client, db_session, user_factory
+) -> None:
     owner_a = user_factory(email="owner-a@example.com", password=PASSWORD)
     owner_b = user_factory(email="owner-b@example.com", password=PASSWORD)
     station = Station(name="Private station", address="Private", owner_id=owner_b.id)
@@ -211,7 +218,9 @@ def test_owner_cannot_add_charge_point_to_another_owners_station(
 
 
 def test_driver_is_denied_operator_monitoring_route(client, user_factory) -> None:
-    driver = user_factory(email="driver-route@example.com", password=PASSWORD, role_name="driver")
+    driver = user_factory(
+        email="driver-route@example.com", password=PASSWORD, role_name="driver"
+    )
     login(client, driver)
 
     response = client.get("/api/monitoring/tree")
@@ -219,7 +228,9 @@ def test_driver_is_denied_operator_monitoring_route(client, user_factory) -> Non
     assert response.status_code == 403, response.text
 
 
-def test_station_pages_require_login_and_operator_is_read_only(client, user_factory) -> None:
+def test_station_pages_require_login_and_operator_is_read_only(
+    client, user_factory
+) -> None:
     assert client.get("/stations").status_code == 401
 
     driver = user_factory(email="driver-pages@example.com", role_name="driver")

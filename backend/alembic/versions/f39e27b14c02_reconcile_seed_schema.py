@@ -21,7 +21,9 @@ def upgrade() -> None:
     # columns/tables were added to that revision. Add only the missing pieces.
     column_additions = {
         "charging_sessions": {
-            "remote_stop_requested_at": sa.Column("remote_stop_requested_at", sa.DateTime()),
+            "remote_stop_requested_at": sa.Column(
+                "remote_stop_requested_at", sa.DateTime()
+            ),
         },
         "audit_logs": {
             "actor_email": sa.Column("actor_email", sa.String(255)),
@@ -31,7 +33,9 @@ def upgrade() -> None:
     for table_name, columns in column_additions.items():
         if table_name not in tables:
             continue
-        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        existing_columns = {
+            column["name"] for column in inspector.get_columns(table_name)
+        }
         for column_name, column in columns.items():
             if column_name not in existing_columns:
                 op.add_column(table_name, column)
@@ -45,7 +49,12 @@ def upgrade() -> None:
             sa.Column("measurand", sa.String(80), nullable=False),
             sa.Column("value", sa.Numeric(18, 6), nullable=False),
             sa.Column("unit", sa.String(20), nullable=True),
-            sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
             sa.ForeignKeyConstraint(
                 ["session_id"], ["charging_sessions.id"], ondelete="CASCADE"
             ),
@@ -60,8 +69,15 @@ def upgrade() -> None:
             sa.Column("transaction_id", sa.Integer(), nullable=True),
             sa.Column("connector_number", sa.Integer(), nullable=True),
             sa.Column("reason", sa.String(80), nullable=False),
-            sa.Column("payload", sa.JSON(), server_default=sa.text("'{}'"), nullable=False),
-            sa.Column("received_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+            sa.Column(
+                "payload", sa.JSON(), server_default=sa.text("'{}'"), nullable=False
+            ),
+            sa.Column(
+                "received_at",
+                sa.DateTime(),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
         )
 
     inspector = sa.inspect(bind)
@@ -75,7 +91,9 @@ def upgrade() -> None:
         },
     }
     for table_name, indexes in index_additions.items():
-        existing_indexes = {index["name"] for index in inspector.get_indexes(table_name)}
+        existing_indexes = {
+            index["name"] for index in inspector.get_indexes(table_name)
+        }
         for index_name, columns in indexes.items():
             if index_name not in existing_indexes:
                 op.create_index(index_name, table_name, columns)

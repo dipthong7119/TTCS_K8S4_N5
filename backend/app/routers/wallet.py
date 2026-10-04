@@ -62,9 +62,13 @@ async def get_my_wallet_ledger(
         try:
             day_count = int(days)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+            raise HTTPException(
+                status_code=422, detail="days phải là số ngày hoặc all"
+            ) from exc
         if not 1 <= day_count <= 3650:
-            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            raise HTTPException(
+                status_code=422, detail="days nằm ngoài khoảng cho phép"
+            )
     return list_wallet_entries(
         db,
         current_user.id,
@@ -107,7 +111,9 @@ async def manually_top_up_driver(
     if driver is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
     if not driver.is_active:
-        raise HTTPException(status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa")
+        raise HTTPException(
+            status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa"
+        )
     if db.query(WalletLedgerEntry.id).filter_by(receipt_code=body.receipt_code).first():
         raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng")
 
@@ -131,12 +137,18 @@ async def manually_top_up_driver(
             actor_id=current_user.id,
             actor_email=current_user.email,
             actor_name=current_user.full_name,
-            details={"driver_id": driver.id, "amount_vnd": body.amount_vnd, "receipt_code": body.receipt_code},
+            details={
+                "driver_id": driver.id,
+                "amount_vnd": body.amount_vnd,
+                "receipt_code": body.receipt_code,
+            },
         )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng") from exc
+        raise HTTPException(
+            status_code=409, detail="Mã phiếu thu đã được sử dụng"
+        ) from exc
 
     return {
         "id": entry.id,

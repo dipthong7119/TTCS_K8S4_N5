@@ -17,15 +17,25 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     inspector = sa.inspect(op.get_bind())
-    connector_columns = {column["name"] for column in inspector.get_columns("connectors")}
+    connector_columns = {
+        column["name"] for column in inspector.get_columns("connectors")
+    }
     if "ocpp_status" not in connector_columns:
-        op.add_column("connectors", sa.Column("ocpp_status", sa.String(50), nullable=True))
+        op.add_column(
+            "connectors", sa.Column("ocpp_status", sa.String(50), nullable=True)
+        )
 
-    charge_point_columns = {column["name"] for column in inspector.get_columns("charge_points")}
+    charge_point_columns = {
+        column["name"] for column in inspector.get_columns("charge_points")
+    }
     if "ocpp_status" not in charge_point_columns:
-        op.add_column("charge_points", sa.Column("ocpp_status", sa.String(50), nullable=True))
+        op.add_column(
+            "charge_points", sa.Column("ocpp_status", sa.String(50), nullable=True)
+        )
 
-    message_columns = {column["name"] for column in inspector.get_columns("ocpp_messages")}
+    message_columns = {
+        column["name"] for column in inspector.get_columns("ocpp_messages")
+    }
     if "request_hash" not in message_columns:
         op.add_column(
             "ocpp_messages",
@@ -43,7 +53,9 @@ def upgrade() -> None:
             unique=True,
         )
 
-    error_indexes = {index["name"] for index in inspector.get_indexes("connector_errors")}
+    error_indexes = {
+        index["name"] for index in inspector.get_indexes("connector_errors")
+    }
     if "ix_connector_errors_connector_timestamp" not in error_indexes:
         op.create_index(
             "ix_connector_errors_connector_timestamp",
@@ -54,12 +66,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     try:
-        op.drop_index("ix_connector_errors_connector_timestamp", table_name="connector_errors")
+        op.drop_index(
+            "ix_connector_errors_connector_timestamp", table_name="connector_errors"
+        )
     except Exception as e:
         logger.warning("Drop index failed: %s", e)
     op.drop_index("uq_ocpp_message_per_charge_point", table_name="ocpp_messages")
     try:
-        op.create_index("ix_ocpp_messages_msg_id", "ocpp_messages", ["msg_id"], unique=True)
+        op.create_index(
+            "ix_ocpp_messages_msg_id", "ocpp_messages", ["msg_id"], unique=True
+        )
     except Exception as e:
         logger.warning("Create index failed: %s", e)
     with op.batch_alter_table("ocpp_messages") as batch_op:

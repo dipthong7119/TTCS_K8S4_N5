@@ -5,6 +5,7 @@ Revises: 3c710c686e60
 Create Date: 2026-09-26 16:15:19.710301
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -12,10 +13,11 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '578e5d2ba886'
-down_revision: str | None = '3c710c686e60'
+revision: str = "578e5d2ba886"
+down_revision: str | None = "3c710c686e60"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
 
 def upgrade() -> None:
     conn = op.get_bind()
@@ -25,11 +27,28 @@ def upgrade() -> None:
             "id_tags",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("id_tag", sa.String(50), nullable=False),
-            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-            sa.Column("is_blocked", sa.Boolean(), server_default=sa.false(), nullable=False),
+            sa.Column(
+                "user_id",
+                sa.Integer(),
+                sa.ForeignKey("users.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            sa.Column(
+                "is_blocked", sa.Boolean(), server_default=sa.false(), nullable=False
+            ),
             sa.Column("expiry_date", sa.DateTime(), nullable=True),
-            sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
         )
 
     # Keep the uniqueness guarantee if a development database already has the
@@ -46,6 +65,7 @@ def upgrade() -> None:
     )
     if not has_unique_id_tag:
         op.create_index("ix_id_tags_id_tag", "id_tags", ["id_tag"], unique=True)
+
 
 def downgrade() -> None:
     conn = op.get_bind()

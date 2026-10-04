@@ -17,7 +17,9 @@ docker_frontend_dir = Path("/app/frontend")
 if docker_frontend_dir.exists():
     _templates_dir = docker_frontend_dir / "templates"
 else:
-    _templates_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
+    _templates_dir = (
+        Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
+    )
 
 templates = Jinja2Templates(directory=str(_templates_dir))
 
@@ -33,7 +35,9 @@ ROLE_LABELS = {
 def _require_any_role(current_user, *allowed_roles: str) -> list[str]:
     roles = [role.name for role in current_user.roles]
     if not set(roles).intersection(allowed_roles):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền truy cập")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền truy cập"
+        )
     return roles
 
 
@@ -153,7 +157,9 @@ async def edit_station_page(
 
 @router.get("/sessions")
 async def sessions_page(request: Request, current_user: CurrentUser):
-    roles = _require_any_role(current_user, "admin", "operator", "accountant", "station_owner")
+    roles = _require_any_role(
+        current_user, "admin", "operator", "accountant", "station_owner"
+    )
     return templates.TemplateResponse(
         request,
         "sessions/my_session.html",
@@ -162,8 +168,12 @@ async def sessions_page(request: Request, current_user: CurrentUser):
             current_user,
             is_global_sessions=True,
             show_driver_column=True,
-            can_view_all_sessions=bool({"admin", "operator", "accountant"}.intersection(roles)),
-            can_subscribe_sessions=bool({"admin", "operator", "station_owner", "driver"}.intersection(roles)),
+            can_view_all_sessions=bool(
+                {"admin", "operator", "accountant"}.intersection(roles)
+            ),
+            can_subscribe_sessions=bool(
+                {"admin", "operator", "station_owner", "driver"}.intersection(roles)
+            ),
             can_remote_stop=bool({"admin", "operator"}.intersection(roles)),
         ),
     )
@@ -206,7 +216,11 @@ async def audit_page(request: Request, current_user: CurrentUser):
 @router.get("/wallet")
 async def wallet_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "accountant", "driver")
-    template_name = "wallet/admin_drivers.html" if "admin" in roles or "accountant" in roles else "wallet/wallet.html"
+    template_name = (
+        "wallet/admin_drivers.html"
+        if "admin" in roles or "accountant" in roles
+        else "wallet/wallet.html"
+    )
     return templates.TemplateResponse(
         request, template_name, _page_context(request, current_user)
     )

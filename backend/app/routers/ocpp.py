@@ -31,7 +31,9 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
 
     with SessionLocal() as db:
         charge_point_exists = (
-            db.query(ChargePoint.id).filter(ChargePoint.code == charge_point_code).first()
+            db.query(ChargePoint.id)
+            .filter(ChargePoint.code == charge_point_code)
+            .first()
             is not None
         )
     if not charge_point_exists:
@@ -55,13 +57,21 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 message = parse_message(raw_msg)
             except OCPPError as exc:
                 await websocket.send_text(
-                    pack_call_error(exc.message_id, exc.error_code, exc.description, exc.details)
+                    pack_call_error(
+                        exc.message_id, exc.error_code, exc.description, exc.details
+                    )
                 )
                 continue
 
-            msg_type, msg_id, action, payload, error_code, error_description, error_details = (
-                *_normalize_parsed_message(message),
-            )
+            (
+                msg_type,
+                msg_id,
+                action,
+                payload,
+                error_code,
+                error_description,
+                error_details,
+            ) = (*_normalize_parsed_message(message),)
 
             if msg_type == 3:
                 with SessionLocal() as db:
@@ -71,7 +81,9 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                     charge_point_code, msg_id, payload, websocket
                 )
                 if not matched:
-                    logger.warning("Unmatched OCPP CALLRESULT from %s", charge_point_code)
+                    logger.warning(
+                        "Unmatched OCPP CALLRESULT from %s", charge_point_code
+                    )
                 continue
             if msg_type == 4:
                 with SessionLocal() as db:
@@ -86,12 +98,16 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                     websocket,
                 )
                 if not matched:
-                    logger.warning("Unmatched OCPP CALLERROR from %s", charge_point_code)
+                    logger.warning(
+                        "Unmatched OCPP CALLERROR from %s", charge_point_code
+                    )
                 continue
 
             if not boot_accepted and action != "BootNotification":
                 await websocket.send_text(
-                    pack_call_error(msg_id, "SecurityError", "BootNotification is required first")
+                    pack_call_error(
+                        msg_id, "SecurityError", "BootNotification is required first"
+                    )
                 )
                 continue
 
@@ -102,11 +118,18 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 response_frame = parse_message(response) if response else None
             except OCPPError:
                 response_frame = None
-            if action == "BootNotification" and response_frame and response_frame[0] == 3:
+            if (
+                action == "BootNotification"
+                and response_frame
+                and response_frame[0] == 3
+            ):
                 boot_accepted = response_frame[3].get("status") == "Accepted"
 
             # Do not deliver work from a replaced socket to its successor.
-            if manager.active_connections.get(charge_point_code) is websocket and response:
+            if (
+                manager.active_connections.get(charge_point_code) is websocket
+                and response
+            ):
                 await websocket.send_text(response)
 
     except WebSocketDisconnect:
@@ -128,6 +151,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                         connector.status = "unknown"
                     db.commit()
                     from app.services.ocpp_handlers import publish_charge_point_status
+
                     publish_charge_point_status(db, point.id)
 
 
@@ -137,4 +161,12 @@ def _normalize_parsed_message(message):
     error_code = payload if msg_type == 4 else None
     if msg_type == 4:
         payload = None
-    return msg_type, msg_id, action, payload, error_code, error_description, error_details
+    return (
+        msg_type,
+        msg_id,
+        action,
+        payload,
+        error_code,
+        error_description,
+        error_details,
+    )

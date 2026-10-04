@@ -21,9 +21,13 @@ def upgrade() -> None:
         sa.Column("timezone_name", sa.String(80), nullable=False),
         sa.Column("effective_from", sa.DateTime(), nullable=False),
         sa.Column("is_demo", sa.Boolean(), server_default=sa.false(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["station_id"], ["stations.id"], ondelete="RESTRICT"),
-        sa.UniqueConstraint("station_id", "effective_from", name="uq_station_tariff_effective"),
+        sa.UniqueConstraint(
+            "station_id", "effective_from", name="uq_station_tariff_effective"
+        ),
     )
     op.create_index(
         "ix_station_tariffs_station_effective",
@@ -38,13 +42,17 @@ def upgrade() -> None:
         sa.Column("start_minute", sa.Integer(), nullable=False),
         sa.Column("end_minute", sa.Integer(), nullable=False),
         sa.Column("price_vnd_per_kwh", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["tariff_id"], ["station_tariffs.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["tariff_id"], ["station_tariffs.id"], ondelete="RESTRICT"
+        ),
         sa.CheckConstraint(
             "start_minute >= 0 AND start_minute < 1440 AND "
             "end_minute > start_minute AND end_minute <= 1440",
             name="ck_tariff_band_minutes",
         ),
-        sa.CheckConstraint("price_vnd_per_kwh >= 0", name="ck_tariff_band_price_nonnegative"),
+        sa.CheckConstraint(
+            "price_vnd_per_kwh >= 0", name="ck_tariff_band_price_nonnegative"
+        ),
         sa.UniqueConstraint("tariff_id", "start_minute", name="uq_tariff_band_start"),
     )
     op.create_index(
@@ -61,11 +69,19 @@ def upgrade() -> None:
         sa.Column("segments", sa.JSON(), nullable=False),
         sa.Column("calculation_version", sa.String(30), nullable=False),
         sa.Column("is_demo", sa.Boolean(), server_default=sa.false(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["session_id"], ["charging_sessions.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["tariff_id"], ["station_tariffs.id"], ondelete="RESTRICT"),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.ForeignKeyConstraint(
+            ["session_id"], ["charging_sessions.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["tariff_id"], ["station_tariffs.id"], ondelete="RESTRICT"
+        ),
         sa.UniqueConstraint("session_id", name="uq_charging_invoices_session"),
-        sa.CheckConstraint("total_vnd >= 0", name="ck_charging_invoice_total_nonnegative"),
+        sa.CheckConstraint(
+            "total_vnd >= 0", name="ck_charging_invoice_total_nonnegative"
+        ),
     )
     op.create_index("ix_charging_invoices_tariff", "charging_invoices", ["tariff_id"])
     op.create_table(
@@ -80,7 +96,9 @@ def upgrade() -> None:
         sa.Column("receipt_code", sa.String(80), nullable=True),
         sa.Column("description", sa.String(255), nullable=False),
         sa.Column("actor_id", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="SET NULL"),
         sa.CheckConstraint(
@@ -88,14 +106,20 @@ def upgrade() -> None:
             "(entry_type = 'session_charge' AND amount_vnd < 0)",
             name="ck_wallet_ledger_amount_sign",
         ),
-        sa.UniqueConstraint("user_id", "idempotency_key", name="uq_wallet_user_idempotency"),
+        sa.UniqueConstraint(
+            "user_id", "idempotency_key", name="uq_wallet_user_idempotency"
+        ),
         sa.UniqueConstraint("receipt_code", name="uq_wallet_receipt_code"),
     )
     op.create_index(
-        "ix_wallet_ledger_user_created", "wallet_ledger", ["user_id", "created_at", "id"]
+        "ix_wallet_ledger_user_created",
+        "wallet_ledger",
+        ["user_id", "created_at", "id"],
     )
     op.create_index(
-        "ix_wallet_ledger_reference", "wallet_ledger", ["reference_type", "reference_id"]
+        "ix_wallet_ledger_reference",
+        "wallet_ledger",
+        ["reference_type", "reference_id"],
     )
 
     dialect = op.get_bind().dialect.name

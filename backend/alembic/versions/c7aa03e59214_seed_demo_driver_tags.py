@@ -11,6 +11,7 @@ down_revision: str | None = "a6d2f891c104"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+
 def upgrade() -> None:
     connection = op.get_bind()
     drivers = connection.execute(
@@ -52,6 +53,8 @@ def downgrade() -> None:
     ).scalars()
     for user_id in drivers:
         connection.execute(
-            sa.text("DELETE FROM id_tags WHERE id_tag = :id_tag AND user_id = :user_id"),
+            sa.text(
+                "DELETE FROM id_tags WHERE id_tag = :id_tag AND user_id = :user_id"
+            ),
             {"id_tag": f"DEMO-DRIVER-{user_id:04d}", "user_id": user_id},
         )

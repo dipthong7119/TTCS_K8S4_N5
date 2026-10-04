@@ -15,10 +15,16 @@ def upgrade() -> None:
         "login_ip_attempts",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("ip_address", sa.String(length=45), nullable=False),
-        sa.Column("failed_login_count", sa.Integer(), server_default="0", nullable=False),
+        sa.Column(
+            "failed_login_count", sa.Integer(), server_default="0", nullable=False
+        ),
         sa.Column("locked_until", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
         sa.UniqueConstraint("ip_address", name="uq_login_ip_attempts_ip_address"),
     )
 

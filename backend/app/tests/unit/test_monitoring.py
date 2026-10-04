@@ -16,11 +16,12 @@ from app.models.station import Station
 from app.models.user import User
 
 engine_test = create_engine(
-    "sqlite:///:memory:", 
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool
+    poolclass=StaticPool,
 )
 SessionLocalTest = sessionmaker(autocommit=False, autoflush=False, bind=engine_test)
+
 
 def override_get_db():
     try:
@@ -30,39 +31,42 @@ def override_get_db():
         db.close()
 
 
-
-
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine_test)
     db = SessionLocalTest()
-    
+
     # 2 users: admin and station_owner
     admin = User(id=1, email="admin@test.com", password_hash="123", full_name="Admin")
     owner = User(id=2, email="owner@test.com", password_hash="123", full_name="Owner")
     db.add_all([admin, owner])
-    
+
     # 2 stations
     st1 = Station(id=1, name="Station 1", owner_id=1, status="active")
     st2 = Station(id=2, name="Station 2", owner_id=2, status="active")
     db.add_all([st1, st2])
-    
+
     # Charge points
     recent = datetime.now(timezone.utc)
-    cp1 = ChargePoint(id=1, code="CP001", station_id=1, status="online", last_seen_at=recent)
-    cp2 = ChargePoint(id=2, code="CP002", station_id=2, status="offline", last_seen_at=recent)
+    cp1 = ChargePoint(
+        id=1, code="CP001", station_id=1, status="online", last_seen_at=recent
+    )
+    cp2 = ChargePoint(
+        id=2, code="CP002", station_id=2, status="offline", last_seen_at=recent
+    )
     db.add_all([cp1, cp2])
-    
+
     # Connectors
     cn1 = Connector(id=1, charge_point_id=1, connector_id=1, status="rảnh")
     cn2 = Connector(id=2, charge_point_id=2, connector_id=1, status="bận")
     db.add_all([cn1, cn2])
-    
+
     db.commit()
     db.close()
-    
+
     yield
     Base.metadata.drop_all(bind=engine_test)
+
 
 def test_monitoring_tree_admin():
     from app.core.deps import get_current_user
@@ -84,6 +88,7 @@ def test_monitoring_tree_admin():
     assert data[0]["name"] == "Station 1"
     assert data[0]["charge_points"][0]["connectors"][0]["status"] == "rảnh"
 
+
 def test_monitoring_tree_owner():
     from app.core.deps import get_current_user
 
@@ -96,7 +101,9 @@ def test_monitoring_tree_owner():
             self.id = id
             self.roles = [MockRole(r) for r in roles]
 
-    app.dependency_overrides[get_current_user] = lambda: MockUser(id=2, roles=["station_owner"])
+    app.dependency_overrides[get_current_user] = lambda: MockUser(
+        id=2, roles=["station_owner"]
+    )
     resp = client.get("/api/monitoring/tree")
     assert resp.status_code == 200
     data = resp.json()
@@ -134,6 +141,7 @@ def test_monitoring_tree_loads_50_charge_points_in_one_query_under_200ms():
     db.commit()
 
     statements = []
+
     def record_query(_conn, _cursor, statement, _params, _context, _many):
         statements.append(statement)
 
@@ -180,10 +188,129 @@ def test_status_updates_are_filtered_by_station_owner(monkeypatch):
     assert other_owner_queue.empty()
     assert operator_queue.qsize() == 1
 
+
 @pytest.fixture(scope="function", autouse=True)
 def apply_override():
     app.dependency_overrides[get_db] = override_get_db
     yield
     app.dependency_overrides.clear()
 
+
 client = TestClient(app)
+
+
+def test_publish_charge_point_status_uses_station_status_payload(monkeypatch):
+    from app.routers import monitoring
+    from app.services.ocpp_handlers import publish_charge_point_status
+
+    received = {}
+
+    def mock_notify_status_change(station_id, charge_points_data, owner_id=None):
+        received["station_id"] = station_id
+        received["charge_points_data"] = charge_points_data
+        received["owner_id"] = owner_id
+
+    monkeypatch.setattr(monitoring, "notify_status_change", mock_notify_status_change)
+
+    db = SessionLocalTest()
+    try:
+        # CP2 is offline in setup_db, its connector has status 'bận'.
+        publish_charge_point_status(db, 2)
+
+        assert received.get("station_id") == 2
+        assert received.get("owner_id") == 2
+
+        cp_data = received.get("charge_points_data")
+        assert len(cp_data) == 1
+        assert cp_data[0]["code"] == "CP002"
+        assert cp_data[0]["status"] == "offline"
+
+        # In current flawed implementation, connector status is NOT unknown.
+        # But according to station_status_payload logic, offline CP -> unknown connector.
+        assert cp_data[0]["connectors"][0]["status"] == "unknown"
+    finally:
+        db.close()
+
+
+def test_status_update_queue_full_drops_oldest(monkeypatch):
+    import asyncio
+    import json
+
+    from app.routers import monitoring
+
+    queue = asyncio.Queue(maxsize=2)
+    monkeypatch.setattr(
+        monitoring,
+        "sse_clients",
+        [{"owner_id": 1, "global_access": False, "queue": queue}],
+    )
+
+    # Fill the queue
+    monitoring.notify_status_change(1, [{"id": 1}], owner_id=1)
+    monitoring.notify_status_change(1, [{"id": 2}], owner_id=1)
+
+    assert queue.qsize() == 2
+
+    # Add one more
+    monitoring.notify_status_change(1, [{"id": 3}], owner_id=1)
+
+    # Size should still be 2
+    assert queue.qsize() == 2
+
+    # The oldest event (id 1) should be dropped, the remaining are 2 and 3
+    event1 = queue.get_nowait()
+    event2 = queue.get_nowait()
+
+    assert json.loads(event1["data"])["charge_points"][0]["id"] == 2
+    assert json.loads(event2["data"])["charge_points"][0]["id"] == 3
+
+
+def test_status_updates_not_sent_to_driver(monkeypatch):
+    import asyncio
+
+    from app.routers import monitoring
+
+    queue = asyncio.Queue()
+    monkeypatch.setattr(
+        monitoring,
+        "sse_clients",
+        [{"owner_id": None, "global_access": False, "queue": queue, "driver_id": 5}],
+    )
+
+    monitoring.notify_status_change(1, [{"code": "CP-01"}], owner_id=1)
+
+    assert queue.empty()
+
+
+def test_handle_ocpp_message_publishes_status(monkeypatch):
+    import json
+
+    from app.services import ocpp_handlers
+
+    published_id = None
+    call_count = 0
+
+    def mock_publish(db, point_id):
+        nonlocal published_id, call_count
+        published_id = point_id
+        call_count += 1
+
+    monkeypatch.setattr(ocpp_handlers, "publish_charge_point_status", mock_publish)
+
+    db = SessionLocalTest()
+    try:
+        # CP001 has id=1
+        msg = json.dumps(
+            [
+                2,
+                "msg123",
+                "StatusNotification",
+                {"connectorId": 1, "status": "Available", "errorCode": "NoError"},
+            ]
+        )
+        ocpp_handlers.handle_ocpp_message(db, "CP001", msg)
+
+        assert call_count == 1
+        assert published_id == 1
+    finally:
+        db.close()

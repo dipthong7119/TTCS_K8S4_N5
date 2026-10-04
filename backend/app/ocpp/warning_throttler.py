@@ -13,7 +13,9 @@ class WarningThrottler:
         self._last_warn_time: dict[tuple[str, int], float] = {}
         self._get_time = get_time
 
-    def should_warn(self, charge_point_code: str, connector_id: int, interval_seconds: int) -> bool:
+    def should_warn(
+        self, charge_point_code: str, connector_id: int, interval_seconds: int
+    ) -> bool:
         """
         Kiểm tra xem có nên ghi log cảnh báo không dựa trên khoảng thời gian gom (interval_seconds).
         Đồng thời dọn dẹp bộ nhớ các khoá đã cũ.
@@ -38,6 +40,7 @@ class WarningThrottler:
                 continue
             if now - self._last_warn_time[k] >= interval_seconds:
                 del self._last_warn_time[k]
+
 
 # Instance chung (singleton pattern) cho toàn ứng dụng
 unknown_connector_throttler = WarningThrottler()

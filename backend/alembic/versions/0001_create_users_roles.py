@@ -1,4 +1,4 @@
-﻿"""
+"""
 Migration: tao bang users, roles, user_roles va seed 5 vai tro
 Tham chieu: SPRINT_1.md T-04
 """
@@ -19,7 +19,9 @@ def upgrade() -> None:
         "roles",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("name", sa.String(50), unique=True, nullable=False),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     # -- Bang users -------------------------------------------------------
@@ -30,18 +32,34 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.String(512), nullable=False),
         sa.Column("full_name", sa.String(255), nullable=False),
         sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
-        sa.Column("failed_login_count", sa.Integer(), server_default="0", nullable=False),
+        sa.Column(
+            "failed_login_count", sa.Integer(), server_default="0", nullable=False
+        ),
         sa.Column("locked_until", sa.DateTime(), nullable=True),
         sa.Column("last_failed_ip", sa.String(45), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     # -- Bang noi user_roles -----------------------------------------------
     op.create_table(
         "user_roles",
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("role_id", sa.Integer(), sa.ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "role_id",
+            sa.Integer(),
+            sa.ForeignKey("roles.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
     )
 
     # -- Seed 5 vai tro (T-04 AC: phai co dung 5 dong trong roles) --------

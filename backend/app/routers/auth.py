@@ -16,7 +16,9 @@ from app.models.login_ip_attempt import LoginIPAttempt
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse
 
-router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(deny_unannotated_route)])
+router = APIRouter(
+    prefix="/auth", tags=["auth"], dependencies=[Depends(deny_unannotated_route)]
+)
 
 # Thong bao loi GIONG HET NHAU -- khong tiet lo email co ton tai hay khong (SSD-1)
 _ERR_WRONG = "email hoặc mật khẩu không đúng"
@@ -43,7 +45,9 @@ def role_home_page(role_names: list[str]) -> str:
     "/login",
     response_model=LoginResponse,
     responses={
-        401: {"description": "Thông tin đăng nhập sai hoặc tài khoản/địa chỉ IP đang bị khóa"},
+        401: {
+            "description": "Thông tin đăng nhập sai hoặc tài khoản/địa chỉ IP đang bị khóa"
+        },
         403: {"description": "Tài khoản chưa được phân quyền"},
     },
 )
@@ -80,7 +84,11 @@ async def login(
             tracker.locked_until = None
 
     # --- Xac thuc ---
-    ok = user is not None and user.is_active and verify_password(body.password, user.password_hash)
+    ok = (
+        user is not None
+        and user.is_active
+        and verify_password(body.password, user.password_hash)
+    )
 
     if not ok:
         # Track failures by IP even for unknown emails, without creating fake users.
@@ -135,7 +143,14 @@ async def login(
     )
 
 
-@router.post("/logout", dependencies=[Depends(require_role("driver", "station_owner", "operator", "accountant", "admin"))])
+@router.post(
+    "/logout",
+    dependencies=[
+        Depends(
+            require_role("driver", "station_owner", "operator", "accountant", "admin")
+        )
+    ],
+)
 async def logout(request: Request):
     """Xoa session, chuyen ve trang dang nhap."""
     request.session.clear()

@@ -30,7 +30,9 @@ def db_session():
     )
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
-    owner = User(id=1, email="owner@test.local", password_hash="hash", full_name="Owner")
+    owner = User(
+        id=1, email="owner@test.local", password_hash="hash", full_name="Owner"
+    )
     owner.roles = [Role(name="driver")]
     station = Station(id=1, name="Station", owner_id=1, status="active")
     point = ChargePoint(id=1, code="CP-1", station_id=1, status="offline")
@@ -44,16 +46,30 @@ def db_session():
 
 def test_duplicate_message_id_is_scoped_to_charge_point(db_session):
     second_point = ChargePoint(id=2, code="CP-2", station_id=1, status="offline")
-    second_connector = Connector(id=2, charge_point_id=2, connector_id=1, status="unknown")
+    second_connector = Connector(
+        id=2, charge_point_id=2, connector_id=1, status="unknown"
+    )
     db_session.add_all([second_point, second_connector])
     db_session.commit()
 
-    raw_one = pack_call("reused-id", "StatusNotification", {
-        "connectorId": 1, "status": "Charging", "errorCode": "NoError",
-    })
-    raw_two = pack_call("reused-id", "StatusNotification", {
-        "connectorId": 1, "status": "Available", "errorCode": "NoError",
-    })
+    raw_one = pack_call(
+        "reused-id",
+        "StatusNotification",
+        {
+            "connectorId": 1,
+            "status": "Charging",
+            "errorCode": "NoError",
+        },
+    )
+    raw_two = pack_call(
+        "reused-id",
+        "StatusNotification",
+        {
+            "connectorId": 1,
+            "status": "Available",
+            "errorCode": "NoError",
+        },
+    )
 
     first_response = handle_ocpp_message(db_session, "CP-1", raw_one)
     second_response = handle_ocpp_message(db_session, "CP-2", raw_two)
@@ -61,7 +77,9 @@ def test_duplicate_message_id_is_scoped_to_charge_point(db_session):
     assert parse_message(first_response)[3] == {}
     assert parse_message(second_response)[3] == {}
     assert db_session.query(OcppMessage).count() == 2
-    assert db_session.query(Connector).filter_by(charge_point_id=2).one().status == "rảnh"
+    assert (
+        db_session.query(Connector).filter_by(charge_point_id=2).one().status == "rảnh"
+    )
 
 
 def test_authorize_blocks_driver_when_station_is_paused(db_session):
@@ -95,9 +113,15 @@ def test_unknown_connector_status_is_preserved_separately(db_session):
     response = handle_ocpp_message(
         db_session,
         "CP-1",
-        pack_call("unknown-status", "StatusNotification", {
-            "connectorId": 1, "status": "VendorSpecificState", "errorCode": "NoError",
-        }),
+        pack_call(
+            "unknown-status",
+            "StatusNotification",
+            {
+                "connectorId": 1,
+                "status": "VendorSpecificState",
+                "errorCode": "NoError",
+            },
+        ),
     )
 
     connector = db_session.query(Connector).filter_by(id=1).one()
@@ -119,10 +143,14 @@ def test_boot_uses_configured_heartbeat_interval(db_session, monkeypatch):
     assert parse_message(response)[3]["interval"] == 17
 
 
-def test_monitoring_derives_offline_and_unknown_connectors_from_last_seen(db_session, monkeypatch):
+def test_monitoring_derives_offline_and_unknown_connectors_from_last_seen(
+    db_session, monkeypatch
+):
     point = db_session.query(ChargePoint).filter_by(id=1).one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=20)
+    point.last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        seconds=20
+    )
     connector = db_session.query(Connector).filter_by(id=1).one()
     connector.status = "bận"
     db_session.commit()

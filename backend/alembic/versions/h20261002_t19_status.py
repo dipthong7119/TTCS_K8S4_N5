@@ -24,7 +24,9 @@ def upgrade() -> None:
     if "status" not in existing:
         op.add_column(
             "connectors",
-            sa.Column("status", sa.String(20), server_default="unavailable", nullable=False),
+            sa.Column(
+                "status", sa.String(20), server_default="unavailable", nullable=False
+            ),
         )
 
     # Thêm cột ocpp_status (raw_status) nếu chưa có

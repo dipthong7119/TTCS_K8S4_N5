@@ -82,6 +82,7 @@ def require_role(*allowed_roles: str):
     Mac dinh tu choi (deny-by-default): neu route khong khai bao thi se bi chặn
     bang cach khong dua dependency nay vao.
     """
+
     async def checker(current_user: User = Depends(get_current_user)) -> User:
         user_role_names = [r.name for r in current_user.roles]
         if not any(role in user_role_names for role in allowed_roles):

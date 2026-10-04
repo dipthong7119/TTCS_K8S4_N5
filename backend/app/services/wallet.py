@@ -110,7 +110,9 @@ def list_driver_wallet_summaries(
     )
     if query_text:
         search = f"%{query_text.strip()}%"
-        query = query.filter((User.full_name.ilike(search)) | (User.email.ilike(search)))
+        query = query.filter(
+            (User.full_name.ilike(search)) | (User.email.ilike(search))
+        )
     total = query.count()
     drivers = (
         query.order_by(User.full_name, User.id)
@@ -129,7 +131,10 @@ def list_driver_wallet_summaries(
             func.coalesce(
                 -func.sum(
                     case(
-                        (WalletLedgerEntry.amount_vnd < 0, WalletLedgerEntry.amount_vnd),
+                        (
+                            WalletLedgerEntry.amount_vnd < 0,
+                            WalletLedgerEntry.amount_vnd,
+                        ),
                         else_=0,
                     )
                 ),
@@ -142,7 +147,10 @@ def list_driver_wallet_summaries(
     )
     totals_by_user = {row.user_id: row for row in ledger_totals}
     last_charges = (
-        db.query(ChargingSession.user_id, func.max(ChargingSession.ended_at).label("last_charge"))
+        db.query(
+            ChargingSession.user_id,
+            func.max(ChargingSession.ended_at).label("last_charge"),
+        )
         .filter(
             ChargingSession.user_id.in_(driver_ids),
             ChargingSession.status == "completed",
@@ -164,7 +172,9 @@ def list_driver_wallet_summaries(
                 "is_active": driver.is_active,
                 "balance_vnd": int(totals_row.balance if totals_row else 0),
                 "total_spent_vnd": int(totals_row.spent if totals_row else 0),
-                "last_charge_at": last_charge.isoformat() + "Z" if last_charge else None,
+                "last_charge_at": last_charge.isoformat() + "Z"
+                if last_charge
+                else None,
             }
         )
     return {"items": items, "total": total, "page": page, "page_size": page_size}

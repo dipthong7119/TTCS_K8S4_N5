@@ -1,4 +1,4 @@
-﻿"""
+"""
 Migration: tao bang stations co khoa ngoai toi users
 Tham chieu: SPRINT_1.md T-08
 """
@@ -29,8 +29,12 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="RESTRICT"),
             nullable=False,
         ),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     # Chi muc tren owner_id -- moi truy van cua chu tram loc theo cot nay (T-08 NFR)
