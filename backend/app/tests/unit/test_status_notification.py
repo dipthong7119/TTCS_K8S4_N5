@@ -149,9 +149,9 @@ def test_status_notification_unknown_connector_throttles(db_session, caplog, mon
     from app.ocpp.warning_throttler import unknown_connector_throttler
     unknown_connector_throttler._last_warn_time.clear()
 
-    # Dùng đồng hồ giả tĩnh
-    current_time = 1000.0
-    monkeypatch.setattr(unknown_connector_throttler, "_get_time", lambda: current_time)
+    # Dùng list để lambda có thể thấy giá trị cập nhật (mutable container)
+    clock = [1000.0]
+    monkeypatch.setattr(unknown_connector_throttler, "_get_time", lambda: clock[0])
 
     caplog.clear()
     
@@ -169,7 +169,7 @@ def test_status_notification_unknown_connector_throttles(db_session, caplog, mon
     assert len(warnings) == 1
 
     # Dời đồng hồ qua khoảng gom (mặc định 300s, ta dời 301s)
-    current_time += 301.0
+    clock[0] += 301.0
     _send_status(
         db_session,
         {"connectorId": 3, "errorCode": "NoError", "status": "Available"},

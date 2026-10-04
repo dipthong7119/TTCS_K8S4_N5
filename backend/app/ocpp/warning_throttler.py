@@ -21,19 +21,21 @@ class WarningThrottler:
         now = self._get_time()
         key = (charge_point_code, connector_id)
 
-        # Dọn dẹp khoá cũ để tránh phình bộ nhớ vô hạn
-        self._cleanup(now, interval_seconds)
-
         last_warn = self._last_warn_time.get(key)
         if last_warn is None or now - last_warn >= interval_seconds:
             self._last_warn_time[key] = now
+            # Dọn dẹp khoá cũ sau khi đã quyết định (tránh xoá key hiện tại trước khi kiểm tra)
+            self._cleanup(now, interval_seconds, exclude_key=key)
             return True
         return False
 
-    def _cleanup(self, now: float, interval_seconds: int):
+
+    def _cleanup(self, now: float, interval_seconds: int, exclude_key: tuple | None = None):
         """Xoá các khoá đã quá thời gian interval_seconds khỏi bộ nhớ tiến trình."""
         # Dùng list(keys()) để tạo bản sao khoá, tránh lỗi "dictionary changed size during iteration"
         for k in list(self._last_warn_time.keys()):
+            if k == exclude_key:
+                continue
             if now - self._last_warn_time[k] >= interval_seconds:
                 del self._last_warn_time[k]
 
