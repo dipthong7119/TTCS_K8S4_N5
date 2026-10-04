@@ -12,12 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
-from app.models.id_tag import IdTag
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
-from app.models.user import User
 from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
@@ -541,39 +539,23 @@ def _warn_missing_connector(charge_point_code: str, connector_id: int) -> None:
 
 def publish_charge_point_status(db: Session, charge_point_id: int) -> None:
     point = db.query(ChargePoint).filter(ChargePoint.id == charge_point_id).first()
-    if point is None:
+    if point is None or point.station_id is None:
         return
-    station = db.query(Station).filter(Station.id == point.station_id).first()
+    from sqlalchemy.orm import joinedload
+
+    from app.services.ocpp_status import station_status_payload
+    station = (
+        db.query(Station)
+        .options(joinedload(Station.charge_points).joinedload(ChargePoint.connectors))
+        .filter(Station.id == point.station_id)
+        .first()
+    )
     if station is None:
         return
-    charge_points = []
-    for item in db.query(ChargePoint).filter(ChargePoint.station_id == station.id).all():
-        charge_points.append(
-            {
-                "id": item.id,
-                "code": item.code,
-                "status": item.status,
-                "ocpp_status": item.ocpp_status,
-                "vendor": item.vendor,
-                "model": item.model,
-                "firmware_version": item.firmware_version,
-                "last_seen_at": item.last_seen_at.isoformat() if item.last_seen_at else None,
-                "connectors": [
-                    {
-                        "id": connector.id,
-                        "connector_id": connector.connector_id,
-                        "status": connector.status,
-                        "ocpp_status": connector.ocpp_status,
-                        "error_code": connector.error_code,
-                        "updated_at": connector.updated_at.isoformat(),
-                    }
-                    for connector in db.query(Connector)
-                    .filter(Connector.charge_point_id == item.id)
-                    .order_by(Connector.connector_id)
-                    .all()
-                ],
-            }
-        )
+
+    payload = station_status_payload(station)
+    charge_points = payload["charge_points"]
+
     from app.routers.monitoring import notify_status_change
 
     notify_status_change(station.id, charge_points, station.owner_id)
