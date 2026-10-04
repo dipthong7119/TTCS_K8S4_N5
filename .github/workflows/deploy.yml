@@ -9,6 +9,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -26,11 +30,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
       - name: Run Linter (Ruff)
         run: ruff check app alembic ../tests
+      - name: Typecheck application (Mypy)
+        run: python -m mypy app
+      - name: Audit installed dependencies
+        run: python -m pip_audit --local --progress-spinner off
       - name: Run Unit Tests (Pytest)
         run: pytest app/tests ../tests
+      - name: Check frontend behavior
+        working-directory: .
+        run: node --test tests/frontend_behavior.cjs
 
   deploy-staging:
     runs-on: ubuntu-latest
@@ -88,45 +99,46 @@ jobs:
           key: ${{ secrets.STAGING_SSH_KEY }}
           port: ${{ secrets.STAGING_SSH_PORT }}
           script: |
-            echo "Bắt đầu triển khai trên Staging..."
-            
-            # Thư mục chứa project docker-compose trên server
+            set -eu
             cd /opt/csms-staging
-            
-            # Đăng nhập GHCR trên server (Sử dụng PAT)
-            echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Pull image mới nhất
+            printf '%s' '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
             NEW_IMAGE=ghcr.io/${{ github.repository_owner }}/csms-app:${{ github.sha }}
             PREVIOUS_IMAGE=$(docker inspect --format='{{.Config.Image}}' csms_app 2>/dev/null || true)
             docker pull "$NEW_IMAGE"
-            
-            # Chạy container lên (tái tạo lại container app)
-            CSMS_IMAGE="$NEW_IMAGE" docker-compose up -d --no-deps app
-            
-            echo "Đợi 10 giây để FastAPI khởi động..."
-            sleep 10
-            
-            # Gọi Health Check
-            HTTP_STATUS=000
-            for attempt in $(seq 1 15); do
-              HTTP_STATUS=$(curl --max-time 3 -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
-              [ "$HTTP_STATUS" = "200" ] && break
-              sleep 2
-            done
-            
-            if [ "$HTTP_STATUS" != "200" ]; then
-              echo "❌ Healthcheck THẤT BẠI (Status: $HTTP_STATUS)!"
-              echo "Tiến hành Rollback về phiên bản trước (Down ứng dụng để DevOps xử lý)..."
-              # Nếu ứng dụng lỗi, ta dừng container app lại. 
-              # Cách an toàn nhất là giữ container cũ (không down) nếu config kiểu blue-green, 
-              # nhưng do dùng chung docker-compose.yml, tạm thời ta tắt nó đi để không làm sai dữ liệu.
-              if [ -n "$PREVIOUS_IMAGE" ]; then
-                CSMS_IMAGE="$PREVIOUS_IMAGE" docker-compose up -d --no-deps app
-              else
-                echo "No previous container image was available to restore."
-              fi
+            docker compose -f docker-compose.yml up -d db
+
+            cleanup_candidate() {
+              docker rm -f csms_staging_candidate >/dev/null 2>&1 || true
+            }
+            trap cleanup_candidate EXIT
+            cleanup_candidate
+
+            # Validate the new image on a loopback-only port while the old app runs.
+            CSMS_IMAGE="$NEW_IMAGE" docker compose -f docker-compose.yml run -d --no-deps \
+              --name csms_staging_candidate -p 127.0.0.1:18000:8000 app
+            healthy() {
+              for attempt in $(seq 1 30); do
+                if curl --max-time 3 -fsS "$1/health" >/dev/null \
+                  && curl --max-time 3 -fsSL "$1/" >/dev/null; then
+                  return 0
+                fi
+                sleep 2
+              done
+              return 1
+            }
+            if ! healthy http://127.0.0.1:18000; then
+              docker logs --tail 80 csms_staging_candidate
+              echo "Candidate failed its health check; the previous app is still running."
               exit 1
             fi
-            
-            echo "✅ Triển khai thành công! Healthcheck OK (Status 200)."
+
+            if ! CSMS_IMAGE="$NEW_IMAGE" docker compose -f docker-compose.yml up -d --no-deps app \
+              || ! healthy http://127.0.0.1:8000; then
+              if [ -n "$PREVIOUS_IMAGE" ]; then
+                CSMS_IMAGE="$PREVIOUS_IMAGE" docker compose -f docker-compose.yml up -d --no-deps app
+                healthy http://127.0.0.1:8000
+              fi
+              echo "Deployment failed; restored the previous image where available."
+              exit 1
+            fi
+            echo "Staging deployment completed and health checks passed."

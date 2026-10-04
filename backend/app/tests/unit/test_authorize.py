@@ -3,7 +3,7 @@ Test tổng hợp cho story "Authorize xác thực thẻ tài xế" (SCRUM-132).
 Bao phủ toàn bộ 5 AC và các ca biên, bảo mật log, payload, idempotency.
 """
 
-import json
+import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -17,7 +17,7 @@ from app.models.charge_point import ChargePoint
 from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import Role, User
-from app.ocpp.handlers.authorize import decide_authorize_status, mask_id_tag
+from app.ocpp.handlers.authorize import mask_id_tag
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
@@ -79,6 +79,7 @@ def db_session():
     yield db
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def _auth(db, id_tag: str, cp_code: str = "CP-1", msg_id: str = "msg-1") -> tuple:
@@ -227,19 +228,19 @@ def test_missing_id_tag(db_session):
     """Ca 15: Payload thiếu idTag -> CALLERROR (FormationViolation)."""
     msg_type, msg_id, action, payload, _, _ = _auth(db_session, None)
     assert msg_type == 4
-    assert action == "FormationViolation"
+    assert payload == "FormationViolation"
 
 def test_empty_id_tag(db_session):
     """Ca 16: Payload idTag rỗng -> CALLERROR (FormationViolation)."""
     msg_type, msg_id, action, payload, _, _ = _auth(db_session, "")
     assert msg_type == 4
-    assert action == "FormationViolation"
+    assert payload == "FormationViolation"
 
 def test_long_id_tag(db_session):
     """Ca 17: Payload idTag > 20 ký tự -> CALLERROR (FormationViolation)."""
     msg_type, msg_id, action, payload, _, _ = _auth(db_session, "VERY-LONG-ID-TAG-OVER-20-CHARS")
     assert msg_type == 4
-    assert action == "FormationViolation"
+    assert payload == "FormationViolation"
 
 
 # ===========================================================================

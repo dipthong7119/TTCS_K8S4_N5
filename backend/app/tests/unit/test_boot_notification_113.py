@@ -10,20 +10,22 @@ Tổ chức:
   Phần E — Migration: upgrade/downgrade (smoke test idempotency)
 """
 
-import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models.charge_point import ChargePoint
 from app.models.station import Station
-from app.ocpp.handlers.boot_notification import decide_boot_status, handle_boot_notification
+from app.ocpp.handlers.boot_notification import (
+    decide_boot_status,
+)
 from app.services.ocpp_handlers import handle_ocpp_message
-from app.services.ocpp_parser import pack_call, pack_call_error, parse_message
+from app.services.ocpp_parser import pack_call, parse_message
 
 # ---------------------------------------------------------------------------
 # Fixture chung: SQLite in-memory với dữ liệu mẫu
@@ -64,6 +66,7 @@ def db_session():
     yield db
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +251,7 @@ class TestTask2AcceptReject:
     @pytest.mark.parametrize("interval", [60, 300, 900], ids=["60s", "300s", "900s"])
     def test_interval_follows_config(self, db_session, interval: int) -> None:
         """Đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo (T-17 AC)."""
-        with patch("app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval):
+        with patch("app.ocpp.handlers.boot_notification.settings.OCPP_HEARTBEAT_INTERVAL_SECONDS", interval):
             result = _boot(db_session, msg_id=f"msg-iv-{interval}")
         assert result["interval"] == interval
 
@@ -366,44 +369,35 @@ class TestMigrationIdempotency:
 
     def test_upgrade_on_existing_columns_no_error(self):
         """upgrade() trên DB đã có cột vendor/model/firmware_version → không lỗi."""
-        import importlib
-
         engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)  # cột đã tồn tại qua model
-
-        # Import migration và chạy upgrade()
-        from alembic.config import Config
+        from alembic.operations import Operations
         from alembic.runtime.migration import MigrationContext
+        from alembic.util import load_python_file
 
-        with engine.connect() as conn:
-            ctx = MigrationContext.configure(conn)
-            # Kiểm tra cột đã có trước upgrade
-            insp = ctx.impl.bind.dialect.inspector(conn)  # type: ignore[attr-defined]
-
-        # Kiểm tra trực tiếp qua SQLAlchemy inspect
-        with engine.connect() as conn:
-            from sqlalchemy import inspect as sa_inspect
-            columns = {c["name"] for c in sa_inspect(engine).get_columns("charge_points")}
-        assert "vendor" in columns
-        assert "model" in columns
-        assert "firmware_version" in columns
+        versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+        migration = load_python_file(versions_dir, "h20261004_boot_notification.py")
+        try:
+            with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
+                migration.upgrade()
+            columns = {c["name"] for c in inspect(engine).get_columns("charge_points")}
+            assert {"vendor", "model", "firmware_version"}.issubset(columns)
+        finally:
+            engine.dispose()
 
     def test_downgrade_migration_is_noop(self):
         """downgrade() không xoá cột vì chúng thuộc schema gốc (idempotent thiết kế)."""
-        from alembic.versions.h20261002_t16_boot_notification_fields import downgrade
+        from alembic.util import load_python_file
 
         engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
 
-        # downgrade() phải không raise exception (là no-op)
-        from alembic.runtime.migration import MigrationContext
-
-        with engine.begin() as conn:
-            ctx = MigrationContext.configure(conn)
-            downgrade()  # gọi trực tiếp — không dùng op.get_bind() nên sẽ skip
-
-        # Cột vẫn còn sau downgrade
-        from sqlalchemy import inspect as sa_inspect
-
-        cols = {c["name"] for c in sa_inspect(engine).get_columns("charge_points")}
-        assert "vendor" in cols
+        versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+        migration = load_python_file(versions_dir, "h20261004_boot_notification.py")
+        try:
+            migration.downgrade()
+            cols = {c["name"] for c in inspect(engine).get_columns("charge_points")}
+            assert "vendor" in cols
+        finally:
+            engine.dispose()

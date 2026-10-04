@@ -58,6 +58,19 @@ docker compose logs -f simulator
 
 Profile này không chạy trong cấu hình mặc định.
 
+### Kiểm thử bằng 20 trụ mẫu trên web (T-24/T-25/T-35)
+
+Mở `/monitoring`, chọn **Dữ liệu mẫu (20 trụ)**. Trạng thái của các đầu nối
+tự thay đổi mỗi 5–15 giây; lưới, số liệu tổng và ngăn chi tiết cập nhật cùng nhau.
+Nhãn **Đang mô phỏng** cho biết nguồn đang dùng là bộ mẫu trên giao diện.
+
+Đăng nhập bằng vai trò vận hành viên hoặc quản trị, mở chi tiết trạm rồi chọn
+**Khởi động lại** trên một trụ mẫu đang online. Sau khi xác nhận Reset mềm/cứng,
+trụ chuyển offline, đầu nối về chưa rõ, rồi trở lại online/rảnh sau khoảng 2 giây.
+Trụ offline báo lỗi ngay. Reset trong chế độ mẫu chỉ đổi dữ liệu mô phỏng trên
+trình duyệt; chọn **Dữ liệu máy chủ (API)** để thử Reset qua backend và simulator
+OCPP. Đổi nguồn dữ liệu sẽ dừng các sự kiện và Reset mô phỏng đang chạy.
+
 ### Sao lưu và khôi phục PostgreSQL
 
 Compose khởi chạy dịch vụ `backup`, tạo một bản sao lưu ngay khi dịch vụ bắt đầu,
@@ -89,7 +102,6 @@ lưu trữ riêng nếu muốn giữ bản sao ngoài máy chạy Docker.
 .\run.ps1
 ```
 
-<<<<<<< HEAD
 Lần đầu script tạo `.venv`, cài thư viện, lấy `.env` từ `.env.example` nếu chưa có,
 chạy Alembic rồi khởi động server. Tắt bằng `Ctrl+C`; ứng dụng thoát gọn không in
 traceback `KeyboardInterrupt`.
@@ -122,10 +134,6 @@ Push-Location backend
 Pop-Location
 
 .\.venv\Scripts\python.exe run.py
-=======
-```bash
-.\run.ps1
->>>>>>> 3787f4df84a36d0ca7d5adca9aaaa7805c5b1943
 ```
 
 ---
@@ -186,7 +194,10 @@ mình; tài xế chỉ xem phiên của mình. Nhật ký kiểm toán chỉ dà
 | `charging_invoices` | `20260928_wallet` | Chi phí và phân bổ kWh theo khung giá, lưu cùng phiên sạc |
 | `wallet_ledger` | `20260928_wallet` | Nạp/chi ví bằng VND nguyên, mã phiếu duy nhất và sổ chỉ ghi thêm |
 
-Đầu nối mới bắt đầu ở trạng thái `unavailable` cho tới khi nhận `StatusNotification`.
+Trạm mới bắt đầu ở trạng thái `inactive`; chủ trạm bật hoạt động sau khi khai báo xong.
+Đầu nối mới bắt đầu ở trạng thái `unknown` cho tới khi nhận `StatusNotification`.
+`OCPP_HEARTBEAT_INTERVAL_SECONDS` dùng chung cho BootNotification và phát hiện ngoại tuyến;
+biến cũ `HEARTBEAT_INTERVAL` vẫn được hỗ trợ nếu biến mới chưa được cấu hình.
 Đăng nhập trả trang chính theo vai trò; chủ trạm chỉ nhận danh sách dữ liệu thuộc sở hữu của mình.
 Một tiến trình ứng dụng quản lý các kết nối OCPP trong bộ nhớ; chạy nhiều worker/replica
 cần chuyển bộ quản lý kết nối sang thành phần dùng chung trước khi triển khai.
@@ -293,7 +304,7 @@ Pipeline GitHub Actions gồm 2 workflow:
 
 | File | Kích hoạt | Tác vụ |
 |---|---|---|
-| `.github/workflows/ci.yml` | Mọi push / PR; có thể chạy thủ công | Lint (ruff), test (pytest), build Docker image |
+| `.github/workflows/ci.yml` | Mọi push / PR; có thể chạy thủ công | Ruff, Mypy, audit phụ thuộc, pytest, build Docker image |
 | `.github/workflows/deploy.yml` | Merge vào `main` | Deploy lên staging server |
 
 **Secrets cần cấu hình** tại `Settings > Secrets and variables > Actions`:
@@ -305,6 +316,47 @@ Pipeline GitHub Actions gồm 2 workflow:
 | `STAGING_SSH_KEY` | Private key SSH |
 | `STAGING_SSH_PORT` | Cổng SSH (thường `22`) |
 | `GHCR_PAT` | GitHub Personal Access Token |
+
+Máy staging cần có `docker-compose.yml` của phiên bản này tại `/opt/csms-staging`
+và file `.env` đã cấu hình. Workflow dùng `docker compose -f docker-compose.yml`
+để lấy cả backend và frontend từ cùng image. Khi phát triển local,
+`docker-compose.override.yml` được nạp tự động để mount thư mục frontend.
+
+Image mới được kiểm tra `/health` và trang chủ trên cổng loopback `18000` trước
+khi thay ứng dụng đang chạy. Nếu bước kiểm tra này lỗi, container cũ vẫn chạy;
+nếu lỗi sau khi thay image, workflow phục hồi image trước đó khi có sẵn.
+
+Typecheck chạy `python -m mypy app` theo `backend/pyproject.toml`, gồm cả thân hàm
+chưa có annotation. Model ORM đang dùng `Column`/`declarative_base` được giữ tại
+ranh giới động; test và simulator không nằm trong phạm vi typecheck này.
+Quét phụ thuộc chạy `python -m pip_audit --local --progress-spinner off`;
+CI nâng pip trước khi cài dependencies và dừng khi typecheck/audit thất bại.
+
+Thư viện chạy ứng dụng nằm trong `backend/requirements.txt`; công cụ kiểm tra
+nằm trong `backend/requirements-dev.txt`. Cài file dev khi phát triển/chạy test:
+`python -m pip install -r backend/requirements-dev.txt`.
+CI lưu `backend/coverage.xml` thành artifact và chạy kiểm thử hành vi JS bằng Node.
+Image Docker chỉ cài thư viện chạy ứng dụng; CI nạp image vừa build để dùng lại
+trong kiểm thử Compose, không build lần hai.
+
+### Nghiệm thu Sprint 1–2 trên Docker/PostgreSQL
+
+Bộ Compose nghiệm thu dùng project riêng, database tạm trong RAM và cổng localhost
+được Docker chọn tự động. Nó không dùng `.env` hay volume dữ liệu của bộ ứng dụng.
+Các tài khoản/cấu hình trong file nghiệm thu chỉ dành cho bộ test này.
+
+```powershell
+docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --build --wait db app
+.\.venv\Scripts\python.exe -m pytest tests/sprint2_docker_acceptance.py -v -s
+# Giữ 50 kết nối và một SSE subscriber trong 10 phút:
+.\.venv\Scripts\python.exe -m pytest tests/sprint2_docker_acceptance.py -k 50_connections --sprint2-soak-seconds=600 -v -s
+docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml down -v --remove-orphans
+```
+
+Bộ này chạy migration tiến/lùi và kiểm FK/unique trên schema PostgreSQL riêng,
+chạy một client trong container báo giờ lệch 5 tiếng, và lặp dừng/bật container
+simulator ba lần với Heartbeat 5 giây. Đây là kiểm chứng local; staging cần chạy
+lại các AC trên máy chủ staging khi có môi trường đó.
 
 ---
 

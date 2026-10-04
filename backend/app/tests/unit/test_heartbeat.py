@@ -11,19 +11,18 @@ Bao phủ:
   CA2  — Heartbeat không phát sinh hai lần cập nhật (mỗi lần gửi chỉ 1 UPDATE).
   CA3  — Hai trụ khác nhau: chỉ trụ gửi tin được cập nhật last_seen_at.
   CA4  — Mã trụ không tồn tại: SecurityError, không tạo bản ghi.
-  CA5  — Gửi Heartbeat trước BootNotification → CALLERROR SecurityError,
-          last_seen_at không đổi.  [NOTE: khung chặn theo point.status, không
-          theo last_seen_at — đây là hành vi của security layer hiện tại]
+  CA5  — Trụ offline gửi Heartbeat vào handler → hồi phục online và cập nhật
+          last_seen_at. Gate BootNotification được kiểm ở tầng WebSocket.
   CA6  — Payload Heartbeat không rỗng: bỏ qua trường thừa, vẫn trả currentTime.
-  CA7  — Migration: upgrade/downgrade trên SQLite in-memory không lỗi.
+  CA7  — Migration: upgrade/downgrade trên SQLite tạm giữ nguyên cột có từ trước.
 """
 
-import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -32,7 +31,6 @@ from app.models.charge_point import ChargePoint
 from app.models.station import Station
 from app.services.ocpp_handlers import handle_ocpp_message, touch_last_seen
 from app.services.ocpp_parser import pack_call, parse_message
-
 
 # ---------------------------------------------------------------------------
 # Fixtures chung
@@ -48,8 +46,11 @@ def engine():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=eng)
-    yield eng
-    Base.metadata.drop_all(bind=eng)
+    try:
+        yield eng
+    finally:
+        Base.metadata.drop_all(bind=eng)
+        eng.dispose()
 
 
 @pytest.fixture()
@@ -187,7 +188,6 @@ def test_ac3_last_seen_follows_server_clock_not_payload_timestamp(db_session):
         mid="m-skew",
     )
 
-    t_after = datetime.now(UTC)
     cp = _reload(db_session, "CP-HB-1")
     assert cp.last_seen_at is not None
 
@@ -207,28 +207,24 @@ def test_ac3_last_seen_follows_server_clock_not_payload_timestamp(db_session):
 
 
 def test_ca1_touch_last_seen_only_updates_last_seen_at_column(db_session):
-    """CA1: Bắt sự kiện 'before_execute' của SQLAlchemy để xác nhận chỉ UPDATE một cột."""
+    """CA1: Bắt SQL thực tế để xác nhận chỉ UPDATE một cột."""
     captured_stmts: list[str] = []
 
-    @event.listens_for(db_session.bind, "before_execute")
-    def _capture(conn, clauseelement, multiparams, params, execution_options):
-        stmt_str = str(clauseelement).lower()
-        if "update" in stmt_str and "charge_points" in stmt_str:
+    @event.listens_for(db_session.bind, "before_cursor_execute")
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        stmt_str = statement.lower()
+        if stmt_str.startswith("update charge_points "):
             captured_stmts.append(stmt_str)
 
     touch_last_seen(db_session, "CP-HB-1")
     db_session.flush()
 
     # Phải có đúng 1 câu UPDATE đụng charge_points
-    assert len(captured_stmts) >= 1, "Phải có ít nhất 1 câu UPDATE trên charge_points"
+    assert len(captured_stmts) == 1, "Phải có đúng 1 câu UPDATE trên charge_points"
     for stmt in captured_stmts:
-        # Câu UPDATE phải chứa last_seen_at
-        assert "last_seen_at" in stmt, f"UPDATE không chứa last_seen_at: {stmt}"
-        # Không được đụng vendor, model, firmware_version, status, code
-        for forbidden in ("vendor", "firmware_version", "model", '"status"', "\"code\""):
-            assert forbidden not in stmt, (
-                f"UPDATE đụng cột không mong muốn '{forbidden}': {stmt}"
-            )
+        set_clause = stmt.split(" set ", 1)[1].split(" where ", 1)[0]
+        columns = [assignment.split("=", 1)[0].strip() for assignment in set_clause.split(",")]
+        assert columns == ["last_seen_at"], f"UPDATE phải chỉ ghi last_seen_at: {stmt}"
 
     # Giá trị các cột khác KHÔNG thay đổi
     cp = _reload(db_session, "CP-HB-1")
@@ -247,10 +243,10 @@ def test_ca2_heartbeat_does_not_double_update_last_seen(db_session):
     """CA2: Mỗi lần gửi Heartbeat chỉ phát ra đúng 1 câu UPDATE last_seen_at."""
     update_count: list[int] = [0]
 
-    @event.listens_for(db_session.bind, "before_execute")
-    def _count_updates(conn, clauseelement, multiparams, params, execution_options):
-        stmt_str = str(clauseelement).lower()
-        if "update" in stmt_str and "charge_points" in stmt_str and "last_seen_at" in stmt_str:
+    @event.listens_for(db_session.bind, "before_cursor_execute")
+    def _count_updates(conn, cursor, statement, parameters, context, executemany):
+        stmt_str = statement.lower()
+        if stmt_str.startswith("update charge_points ") and "last_seen_at" in stmt_str.split(" where ", 1)[0]:
             update_count[0] += 1
 
     _send(db_session, "Heartbeat", {}, mid="hb-ca2")
@@ -298,19 +294,18 @@ def test_ca4_unknown_charge_point_returns_security_error(db_session):
 
 
 # ---------------------------------------------------------------------------
-# CA5 — Heartbeat khi trụ chưa được Accepted (status != 'online')
+# CA5 — Handler nhận Heartbeat từ trụ đang offline
 # ---------------------------------------------------------------------------
 
 
 def test_ca5_heartbeat_before_boot_accepted_is_handled_gracefully(db_session):
-    """CA5: Trụ chưa Accepted (status='offline') gửi Heartbeat → xử lý theo khung.
+    """CA5: Handler nhận Heartbeat từ trụ offline thì hồi phục trạng thái.
 
-    Lưu ý: trong triển khai hiện tại, khung không chặn Heartbeat theo trạng thái
-    trụ (không có SecurityError gate riêng cho Heartbeat). Hành vi bình thường là
-    trả Heartbeat.conf và cập nhật last_seen_at. Nếu yêu cầu business thay đổi
-    (chặn khi offline), test này cần cập nhật theo.
+    Đây là test handler trực tiếp. Gate BootNotification được thực hiện trước
+    dispatch ở tầng WebSocket, có kiểm thử router/mạng riêng; offline không
+    đồng nghĩa với chưa BootNotification.
     """
-    # Đặt trụ về offline (chưa BootNotification)
+    # Đặt trụ về offline để kiểm tra hồi phục khi nhận tin mới.
     db_session.execute(
         sa.update(ChargePoint)
         .where(ChargePoint.code == "CP-HB-1")
@@ -323,6 +318,9 @@ def test_ca5_heartbeat_before_boot_accepted_is_handled_gracefully(db_session):
     # Khung hiện tại cho phép Heartbeat từ trụ offline → trả currentTime
     assert result is not None, "Phải nhận được CALLRESULT (không phải None)"
     assert "currentTime" in result
+    point = _reload(db_session, "CP-HB-1")
+    assert point.status == "online"
+    assert point.last_seen_at is not None
 
 
 # ---------------------------------------------------------------------------
@@ -344,50 +342,35 @@ def test_ca6_heartbeat_ignores_extra_fields_in_payload(db_session):
     ct = result["currentTime"]
     assert ct.endswith("Z"), f"currentTime phải kết thúc bằng Z, nhận: {ct}"
     # Parse để xác nhận đúng định dạng
-    datetime.strptime(ct, "%Y-%m-%dT%H:%M:%S.000Z")  # Không được raise
+    datetime.strptime(ct, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
-# CA7 — Migration: upgrade / downgrade trên SQLite in-memory
+# CA7 — Migration: upgrade / downgrade trên SQLite tạm
 # ---------------------------------------------------------------------------
 
 
-def test_ca7_migration_upgrade_and_downgrade():
-    """CA7: Smoke test migration h20261002_t17 chạy tiến và lùi thành công."""
-    from alembic import command
+def test_ca7_migration_upgrade_and_downgrade(tmp_path, monkeypatch):
+    """CA7: Guard migration không được xoá cột thuộc migration trước."""
     from alembic.config import Config
-    import os
 
-    # Tìm đường dẫn alembic.ini (tương đối từ thư mục backend)
-    backend_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-    alembic_ini = os.path.normpath(os.path.join(backend_dir, "alembic.ini"))
+    from alembic import command
+    from app.config import settings
 
-    if not os.path.exists(alembic_ini):
-        pytest.skip(f"alembic.ini không tìm thấy tại {alembic_ini} — bỏ qua smoke test migration")
-
-    cfg = Config(alembic_ini)
-    # Dùng SQLite file tạm thời để không ảnh hưởng csms.db
-    import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-        tmp_db = tmp.name
-
+    backend_dir = Path(__file__).resolve().parents[3]
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    # env.py dùng Settings, nên phải override đúng URL mà Alembic thực sự đọc.
+    database_url = f"sqlite:///{(tmp_path / 'heartbeat_migration.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", database_url)
+    eng = create_engine(database_url)
     try:
-        cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_db}")
-        # Upgrade đến revision h20261002_t17_heartbeat
+        command.upgrade(cfg, "h20261002_t16")
+        original_columns = {column["name"] for column in inspect(eng).get_columns("charge_points")}
+        assert "last_seen_at" in original_columns
         command.upgrade(cfg, "h20261002_t17_heartbeat")
-
-        # Xác nhận cột đã tồn tại
-        eng = create_engine(f"sqlite:///{tmp_db}")
-        with eng.connect() as conn:
-            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(charge_points)"))}
-        assert "last_seen_at" in cols, "Sau upgrade: cột last_seen_at phải có"
-
-        # Downgrade về revision trước
+        assert {column["name"] for column in inspect(eng).get_columns("charge_points")} == original_columns
         command.downgrade(cfg, "h20261002_t16")
-
-        eng2 = create_engine(f"sqlite:///{tmp_db}")
-        with eng2.connect() as conn:
-            cols2 = {row[1] for row in conn.execute(text("PRAGMA table_info(charge_points)"))}
-        assert "last_seen_at" not in cols2, "Sau downgrade: cột last_seen_at phải biến mất"
+        assert {column["name"] for column in inspect(eng).get_columns("charge_points")} == original_columns
     finally:
-        os.unlink(tmp_db)
+        eng.dispose()

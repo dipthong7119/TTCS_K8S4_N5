@@ -16,6 +16,7 @@ Kiểm chứng xác thực đăng nhập, khóa tài khoản/IP sau 5 lần sai,
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -28,6 +29,12 @@ from app.models.user import Role, User
 WRONG_ERR = "email hoặc mật khẩu không đúng"
 LOCKED_ERR = "tài khoản tạm khoá 15 phút"
 PASSWORD_DEFAULT = "ValidPassword123!"
+
+
+@pytest.fixture
+def db(db_session):
+    setup_users(db_session)
+    return db_session
 
 
 def setup_users(db):
@@ -271,13 +278,16 @@ def test_tc_135_09_ui_password_toggle():
     print("\n--- Chạy TC-135-09: Giao diện Form Toggle Password ---")
     template_path = Path("/app/frontend/templates/auth/login.html")
     if not template_path.exists():
-        template_path = Path("frontend/templates/auth/login.html")
+        template_path = Path(__file__).resolve().parents[1] / "frontend/templates/auth/login.html"
     content = template_path.read_text(encoding="utf-8")
 
     assert 'id="password-toggle"' in content, "Thiếu nút #password-toggle trong login.html"
     assert 'id="password"' in content, "Thiếu input #password trong login.html"
-    assert "pwdToggle.addEventListener('click'" in content or 'password-toggle' in content
-    assert "pwdInput.type = show ? 'text' : 'password'" in content or 'type' in content
+    script_path = Path(__file__).resolve().parents[1] / "frontend/static/js/pages/login.js"
+    script = script_path.read_text(encoding="utf-8")
+    assert '/static/js/pages/login.js' in content
+    assert "pwdToggle.addEventListener('click'" in script
+    assert "pwdInput.type = show ? 'text' : 'password'" in script
     print("Template login.html có nút #password-toggle và logic toggle giữa 'text' và 'password'.")
     print("TC-135-09 PASSED.")
 
@@ -287,12 +297,13 @@ def test_tc_135_10_ui_client_validation():
     print("\n--- Chạy TC-135-10: Client-side Validation ngăn submit rỗng ---")
     template_path = Path("/app/frontend/templates/auth/login.html")
     if not template_path.exists():
-        template_path = Path("frontend/templates/auth/login.html")
+        template_path = Path(__file__).resolve().parents[1] / "frontend/templates/auth/login.html"
     content = template_path.read_text(encoding="utf-8")
 
     assert 'id="email"' in content and "required" in content, "Input email thiếu thuộc tính required"
     assert 'id="password"' in content and "required" in content, "Input password thiếu thuộc tính required"
-    assert "FormGuard.protect" in content, "Form thiếu tích hợp FormGuard.protect"
+    script_path = Path(__file__).resolve().parents[1] / "frontend/static/js/pages/login.js"
+    assert "FormGuard.protect" in script_path.read_text(encoding="utf-8"), "Form thiếu tích hợp FormGuard.protect"
     print("Template login.html khai báo required cho cả email và password, tích hợp FormGuard.protect.")
     print("TC-135-10 PASSED.")
 

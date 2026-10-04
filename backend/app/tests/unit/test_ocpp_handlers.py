@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
-from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import Role, User
 from app.services.ocpp_handlers import handle_ocpp_message
@@ -43,6 +42,7 @@ def db_session():
     
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 def test_handle_invalid_json(db_session):
     resp = handle_ocpp_message(db_session, "CP001", "invalid json")

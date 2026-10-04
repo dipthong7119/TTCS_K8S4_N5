@@ -86,6 +86,7 @@
     }, {
       loadingText: isEdit ? 'Đang lưu...' : 'Đang tạo...',
       onError: handleServerErrors,
+      keepDisabledOnSuccess: true,
     });
   }
 

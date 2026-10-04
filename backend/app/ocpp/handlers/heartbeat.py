@@ -30,7 +30,7 @@ def handle_heartbeat(
     db: Session,
     charge_point_code: str,
     msg_id: str,
-    payload: dict,  # noqa: ARG001 — payload được nhận nhưng trường thừa bị bỏ qua
+    payload: dict,  # Payload được nhận nhưng trường thừa bị bỏ qua.
 ) -> str:
     """
     Xử lý một CALL Heartbeat.

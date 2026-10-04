@@ -1,6 +1,7 @@
 """OCPP 1.6J WebSocket endpoint for registered charge points (T-12–T-15)."""
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -40,7 +41,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
             charge_point_code,
             websocket.client.host if websocket.client else "unknown",
         )
-        await websocket.close(code=1008, reason="Charge point not found")
+        await websocket.close(code=1008, reason="Connection rejected")
         return
 
     await websocket.accept(subprotocol="ocpp1.6")
@@ -54,13 +55,16 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
             try:
                 message = parse_message(raw_msg)
             except OCPPError as exc:
+                with SessionLocal() as db:
+                    touch_last_seen(db, charge_point_code)
+                    db.commit()
                 await websocket.send_text(
                     pack_call_error(exc.message_id, exc.error_code, exc.description, exc.details)
                 )
                 continue
 
             msg_type, msg_id, action, payload, error_code, error_description, error_details = (
-                *_normalize_parsed_message(message),
+                _normalize_parsed_message(message)
             )
 
             if msg_type == 3:
@@ -90,6 +94,9 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 continue
 
             if not boot_accepted and action != "BootNotification":
+                with SessionLocal() as db:
+                    touch_last_seen(db, charge_point_code)
+                    db.commit()
                 await websocket.send_text(
                     pack_call_error(msg_id, "SecurityError", "BootNotification is required first")
                 )
@@ -102,7 +109,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 response_frame = parse_message(response) if response else None
             except OCPPError:
                 response_frame = None
-            if action == "BootNotification" and response_frame and response_frame[0] == 3:
+            if action == "BootNotification" and response_frame and response_frame[0] == 3 and isinstance(response_frame[3], dict):
                 boot_accepted = response_frame[3].get("status") == "Accepted"
 
             # Do not deliver work from a replaced socket to its successor.
@@ -131,7 +138,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                     publish_charge_point_status(db, point.id)
 
 
-def _normalize_parsed_message(message):
+def _normalize_parsed_message(message) -> tuple[int, str, Any, Any, Any, Any, Any]:
     """Give router dispatch a stable shape without re-parsing or coercing fields."""
     msg_type, msg_id, action, payload, error_description, error_details = message
     error_code = payload if msg_type == 4 else None

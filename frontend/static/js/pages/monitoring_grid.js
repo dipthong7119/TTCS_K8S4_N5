@@ -5,7 +5,10 @@
   let stations = [];
   let isMockMode = false;
   let mockModeSelected = false;
+  let dataSourceVersion = 0;
+  let isSseConnected = false;
   let loadRequestId = 0;
+  let loadError = '';
   const canReset = document.getElementById('monitoring-grid')?.dataset.canReset === 'true';
 
   // Bộ dữ liệu mẫu 20 trụ sạc đáp ứng tiêu chí nghiệm thu SCRUM-124 / T-24 (Story S-11)
@@ -239,6 +242,14 @@
     return `<span class="badge ${style}">${label}</span>`;
   }
 
+  function formatLastSeen(timestamp) {
+    // DB timestamps without an offset are UTC. Date otherwise interprets
+    // them in the browser's local zone and shifts the displayed instant.
+    const value = /(?:Z|[+-]\d{2}:\d{2})$/i.test(timestamp) ? timestamp : `${timestamp}Z`;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Không rõ' : date.toLocaleString('vi-VN');
+  }
+
   function internalStatus(ocppStatus) {
     if (ocppStatus === 'Available') return 'rảnh';
     if (['Preparing', 'Charging', 'SuspendedEV', 'SuspendedEVSE', 'Finishing'].includes(ocppStatus)) return 'bận';
@@ -254,6 +265,7 @@
     const label = document.getElementById('mock-btn-label');
     if (!btn || !label) return;
     if (isMockMode) {
+      loadError = '';
       btn.classList.add('is-active');
       label.textContent = 'Dữ liệu máy chủ (API)';
       btn.title = 'Đang xem dữ liệu mẫu 20 trụ. Bấm để chuyển sang dữ liệu máy chủ';
@@ -262,11 +274,21 @@
       label.textContent = 'Dữ liệu mẫu (20 trụ)';
       btn.title = 'Bấm để nạp bộ dữ liệu mẫu 20 trụ kiểm thử giao diện';
     }
+    updateRealtimeIndicator();
+  }
+
+  function updateRealtimeIndicator() {
+    const indicator = document.getElementById('sse-indicator');
+    const label = document.getElementById('sse-label');
+    if (indicator) indicator.className = `sse-indicator ${isMockMode || isSseConnected ? 'connected' : 'error'}`;
+    if (label) label.textContent = isMockMode ? 'Đang mô phỏng' : (isSseConnected ? 'Đang theo dõi' : 'Đang kết nối lại');
   }
 
   function toggleMockMode() {
     isMockMode = !isMockMode;
     mockModeSelected = isMockMode;
+    dataSourceVersion += 1;
+    closeDetail();
     loadRequestId += 1; // Ignore an in-flight API response after the user changes sources.
     if (isMockMode) {
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
@@ -274,7 +296,7 @@
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
       if (typeof RealtimeStatus !== 'undefined' && typeof RealtimeStatus.connect === 'function') {
-        RealtimeStatus.connect();
+        RealtimeStatus.connect(stations.flatMap(station => station.charge_points || []));
       }
       if (typeof showToast === 'function') {
         showToast('Đang hiển thị bộ dữ liệu mẫu 20 trụ kiểm thử giao diện (SCRUM-124 / T-24)', 'info');
@@ -292,10 +314,10 @@
     const requestId = ++loadRequestId;
     if (forceServer) {
       isMockMode = false;
+      mockModeSelected = false;
       updateMockBtnUI();
     }
     if (isMockMode && mockModeSelected) {
-      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
@@ -306,18 +328,9 @@
       const result = await ApiClient.getMonitoringTree();
       if (requestId !== loadRequestId) return;
       const serverStations = Array.isArray(result) ? result : (result?.stations || []);
-      const totalPoints = serverStations.reduce((sum, s) => sum + (s.charge_points || []).length, 0);
-
-      if (totalPoints > 0 || serverStations.length > 0) {
-        stations = serverStations;
-        isMockMode = false;
-      } else {
-        stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
-        isMockMode = true;
-        if (typeof showToast === 'function') {
-          showToast('Máy chủ chưa có trụ sạc. Đang hiển thị bộ dữ liệu mẫu 20 trụ (SCRUM-124 / T-24)', 'info');
-        }
-      }
+      stations = serverStations;
+      isMockMode = false;
+      loadError = '';
       render();
       if (activeDetailStationId) {
         const curStation = stations.find(s => s.id === activeDetailStationId);
@@ -327,13 +340,12 @@
       updateMockBtnUI();
     } catch (error) {
       if (requestId !== loadRequestId) return;
-      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
-      isMockMode = true;
+      loadError = 'Không tải được trạng thái từ máy chủ. Bấm Làm mới để thử lại.';
       render();
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
       if (typeof showToast === 'function') {
-        showToast('Chưa kết nối API máy chủ. Đang hiển thị dữ liệu mẫu 20 trụ (SCRUM-124)', 'warning');
+        showToast(stations.length ? 'Mất kết nối máy chủ. Đang giữ dữ liệu đã tải trước đó.' : loadError, 'warning');
       }
     }
   }
@@ -367,7 +379,7 @@
     const displayedStatus = point.status === 'offline' ? 'offline' : (point.ocpp_status || point.status);
     const connectorMarkupList = (point.connectors || []).map(connectorMarkup).join('');
     const lastSeen = point.status === 'offline' && point.last_seen_at
-      ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>`
+      ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>`
       : '';
     return `<section class="cp-tile" aria-label="Trụ ${escapeHtml(point.code)}" data-cp-code="${escapeHtml(point.code)}">
       <div class="cp-tile__header">
@@ -395,7 +407,7 @@
     if (!result.length) {
       const empty = document.createElement('div');
       empty.className = 'empty-state monitoring-empty';
-      empty.innerHTML = '<div class="empty-state__title">Không có kết quả</div><div class="empty-state__desc">Thử thay đổi bộ lọc</div>';
+      empty.innerHTML = `<div class="empty-state__title">${loadError ? 'Không tải được dữ liệu' : 'Không có kết quả'}</div><div class="empty-state__desc">${escapeHtml(loadError || 'Chưa có trụ sạc hoặc không có trụ phù hợp bộ lọc')}</div>`;
       grid.appendChild(empty);
     } else {
       result.forEach(station => {
@@ -443,13 +455,20 @@
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
         const lastSeen = point.last_seen_at
-          ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>` : '';
+          ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>` : '';
         const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
         return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(point.status)}</div>
           <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
           ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${restartMarkup}</section>`;
       }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
-    RestartButton.bindEvents(body);
+    const sourceVersion = dataSourceVersion;
+    const resetChargePoint = isMockMode
+      ? (code, type) => RealtimeStatus.resetChargePoint(code, type)
+      : (code, type) => ApiClient.resetChargePoint(code, type);
+    RestartButton.bindEvents(body, {
+      resetChargePoint,
+      isCurrentSource: () => sourceVersion === dataSourceVersion,
+    });
   }
 
   function openDetail(station) {
@@ -463,25 +482,19 @@
   }
 
   function connectSSE() {
-    const indicator = document.getElementById('sse-indicator');
-    const label = document.getElementById('sse-label');
     SseClient.on('_connected', () => {
-      if (indicator) indicator.className = 'sse-indicator connected';
-      if (label) label.textContent = 'Đang theo dõi';
+      isSseConnected = true;
+      updateRealtimeIndicator();
       if (!mockModeSelected) {
-        loadData(true); // Retry the server tree after initial connection or reconnect, including after mock fallback.
+        loadData(true); // Reload the complete server tree after initial connection or reconnect.
       }
     });
     SseClient.on('_error', () => {
-      if (indicator) indicator.className = 'sse-indicator error';
-      if (label) label.textContent = 'Đang kết nối lại';
+      isSseConnected = false;
+      updateRealtimeIndicator();
     });
     SseClient.on('status_update', payload => {
       if (mockModeSelected) return; // Giữ nguyên dữ liệu mẫu khi người dùng chủ động bật mock.
-      if (isMockMode) {
-        loadData(true); // An SSE update can arrive while the page is showing fallback mock data.
-        return;
-      }
       const station = stations.find(item => item.id === payload.station_id);
       if (station && payload.charge_points) {
         station.charge_points = payload.charge_points;
@@ -508,9 +521,12 @@
             for (const conn of (point.connectors || [])) {
               if (conn.connector_id === payload.connector_id) {
                 conn.status = internalStatus(payload.status);
+                conn.ocpp_status = payload.status;
               }
             }
+            point.status = 'online';
             point.ocpp_status = payload.status;
+            point.last_seen_at = payload.timestamp;
           }
         }
       }
@@ -527,6 +543,11 @@
         for (const point of (station.charge_points || [])) {
           if (point.code === payload.charge_point_code) {
             point.status = 'offline';
+            point.ocpp_status = 'offline';
+            (point.connectors || []).forEach(connector => {
+              connector.status = 'unknown';
+              connector.ocpp_status = 'unknown';
+            });
           }
         }
       }
@@ -544,6 +565,8 @@
         for (const point of (station.charge_points || [])) {
           if (point.code === payload.charge_point_code) {
             point.status = 'online';
+            point.ocpp_status = 'unknown';
+            point.last_seen_at = payload.timestamp;
           }
         }
       }
@@ -554,10 +577,6 @@
       }
       showToast(`Trụ ${payload.charge_point_code} đã trực tuyến trở lại`, 'success');
     });
-
-    if (isMockMode) {
-      RealtimeStatus.connect();
-    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {

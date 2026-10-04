@@ -10,7 +10,7 @@ Task 2 — Trả Accepted/Rejected kèm khoảng nhịp tim cấu hình được
   - Hàm thuần decide_boot_status() dễ unit-test độc lập.
   - Trạm locked → Rejected (trụ KHÔNG được online).
   - Trạm maintenance / active → Accepted.
-  - interval đọc từ settings.HEARTBEAT_INTERVAL, không hardcode.
+  - interval đọc từ settings.OCPP_HEARTBEAT_INTERVAL_SECONDS.
   - Khi Rejected vẫn trả interval (đặc tả OCPP bắt buộc có trường này).
   - Khi Rejected vẫn lưu vendor/model/firmware (vận hành viên cần biết thiết bị nào đang cố nối).
 """
@@ -91,7 +91,11 @@ def handle_boot_notification(
 
     if status == "Accepted":
         point.status = "online"
-    # Khi Rejected: trụ KHÔNG được coi là trực tuyến (giữ nguyên status hiện tại).
+    else:
+        point.status = "offline"
+        for connector in point.connectors:
+            connector.status = "unknown"
+    # Khi Rejected: trụ offline, connector trở về unknown.
     # Vendor/model/firmware VẪN được lưu để vận hành viên biết thiết bị nào đang cố nối.
 
     # flush() — đẩy UPDATE vendor/model/firmware/status xuống transaction hiện tại
@@ -100,7 +104,7 @@ def handle_boot_notification(
 
     # --- Chuẩn bị CALLRESULT ---
     current_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    interval: int = settings.HEARTBEAT_INTERVAL
+    interval: int = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS
 
     # Log ngắn gọn theo yêu cầu: mã trụ, vendor, model, firmware, status trả về
     logger.info(
