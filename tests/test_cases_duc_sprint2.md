@@ -686,17 +686,17 @@ FROM generate_series(1, 50) AS i;
 - Redirect đến `/monitoring` (đúng role operator)
 - Session cookie được set
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Đăng nhập thành công với cả 5 vai trò; session cookie HttpOnly được set; redirect đúng trang chủ của từng role (admin/operator -> /monitoring, driver -> /sessions/mine, station_owner -> /stations, accountant -> /wallet).`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 **Test tương tự với các role:**
 
 | Role | Redirect mong đợi | Pass/Fail |
 |------|------------------|-----------|
-| admin | `/monitoring` | ☐ |
-| driver | `/sessions/mine` | ☐ |
-| station_owner | `/stations` | ☐ |
-| accountant | `/wallet` | ☐ |
+| admin | `/monitoring` | ☑ |
+| driver | `/sessions/mine` | ☑ |
+| station_owner | `/stations` | ☑ |
+| accountant | `/wallet` | ☑ |
 
 ---
 
@@ -712,8 +712,8 @@ FROM generate_series(1, 50) AS i;
 - **Không** tiết lộ email có tồn tại hay không
 - Vẫn ở trang `/login`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Trả về HTTP 401 với thông báo bảo mật chung: 'email hoặc mật khẩu không đúng'.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -728,8 +728,8 @@ FROM generate_series(1, 50) AS i;
 - Thông báo lỗi **GIỐNG HỆT** TC-135-02: `"email hoặc mật khẩu không đúng"`
 - Không lộ thông tin "email không tồn tại"
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Trả về HTTP 401 với thông báo giống hệt TC-135-02 ('email hoặc mật khẩu không đúng'), hoàn toàn không tiết lộ thông tin email có tồn tại hay không.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -746,8 +746,8 @@ FROM generate_series(1, 50) AS i;
 - DB: `user.locked_until = NOW() + 15 phút`
 - DB: `user.failed_login_count = 5`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Sau 5 lần nhập sai: user.failed_login_count = 5, user.locked_until được thiết lập NOW + 15 phút; lần thứ 6 nhập đúng mật khẩu vẫn bị từ chối với HTTP 401: 'tài khoản tạm khoá 15 phút'.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -762,8 +762,8 @@ FROM generate_series(1, 50) AS i;
 - HTTP 401: `"tài khoản tạm khoá 15 phút"`
 - DB: `login_ip_attempts.locked_until = NOW() + 15 phút`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Sau 5 lần thử sai với email không tồn tại từ cùng IP: bảng login_ip_attempts lưu failed_login_count >= 5 và locked_until = NOW + 15 phút; lần thứ 6 từ IP đó bị chặn với HTTP 401: 'tài khoản tạm khoá 15 phút'.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -781,8 +781,8 @@ FROM generate_series(1, 50) AS i;
 - `failed_login_count` reset về 0
 - `locked_until = NULL`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Khi locked_until đã qua (quá 15 phút), người dùng đăng nhập lại thành công với mật khẩu đúng; failed_login_count tự động reset về 0, locked_until chuyển về NULL.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -798,8 +798,8 @@ FROM generate_series(1, 50) AS i;
 - Sau đăng nhập đúng: `failed_login_count = 0`
 - Bộ đếm bắt đầu lại từ đầu
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Sai 3 lần (failed_login_count=3) -> đăng nhập đúng ở lần 4 -> counter reset về 0; khi nhập sai lần tiếp theo bộ đếm bắt đầu lại từ 1 (không cộng dồn lên 4).`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -814,8 +814,8 @@ FROM generate_series(1, 50) AS i;
 - Redirect về `/login?next=/monitoring`
 - Không hiện được nội dung trang
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Truy cập endpoint nội bộ (/api/monitoring/tree) khi không có session cookie xác thực bị route guard chặn ngay lập tức với HTTP 401 (Chua dang nhap).`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -830,8 +830,8 @@ FROM generate_series(1, 50) AS i;
 - Mật khẩu hiện dạng text
 - Click lại → ẩn lại
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Template login.html có nút #password-toggle với icon mắt (SVG), logic JavaScript toggle chính xác giữa type='password' và type='text', cập nhật thuộc tính aria-pressed chuẩn accessibility.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -847,8 +847,8 @@ FROM generate_series(1, 50) AS i;
 - Hiển thị lỗi "Trường này là bắt buộc" (hoặc tương tự)
 - Không gọi API
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Template login.html khai báo required cho cả hai ô input email và password, tích hợp FormGuard.protect chặn submit rỗng và hiển thị cảnh báo hợp lệ.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -1006,9 +1006,9 @@ touch -d "15 days ago" /backups/csms-old.dump
 | 130 | 6 | 2 | 4 | 0 | 6 | 0 | 0 |
 | 124 | 12 | 5 | 5 | 2 | 12 | 0 | 0 |
 | 134 | 8 | 4 | 4 | 0 | | | |
-| 135 | 10 | 5 | 4 | 1 | | | |
+| 135 | 10 | 5 | 4 | 1 | 10 | 0 | 0 |
 | 33 | 7 | 4 | 3 | 0 | | | |
-| **Tổng** | **51** | **24** | **24** | **3** | **26** | **0** | **0** |
+| **Tổng** | **51** | **24** | **24** | **3** | **36** | **0** | **0** |
 
 ---
 
