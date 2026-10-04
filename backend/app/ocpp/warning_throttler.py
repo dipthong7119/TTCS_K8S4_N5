@@ -31,8 +31,9 @@ class WarningThrottler:
             return True
         return False
 
-
-    def _cleanup(self, now: float, interval_seconds: int, exclude_key: tuple | None = None):
+    def _cleanup(
+        self, now: float, interval_seconds: int, exclude_key: tuple | None = None
+    ):
         """Xoá các khoá đã quá thời gian interval_seconds khỏi bộ nhớ tiến trình."""
         # Dùng list(keys()) để tạo bản sao khoá, tránh lỗi "dictionary changed size during iteration"
         for k in list(self._last_warn_time.keys()):

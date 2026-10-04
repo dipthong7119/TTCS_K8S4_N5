@@ -45,14 +45,30 @@ async def test_check_offline_charge_points(db_session, monkeypatch):
     # timeout = HEARTBEAT_INTERVAL * MULTIPLIER = 300 * 2 = 600s = 10 phút
     # CP01 = 5 phút → online, CP02 = 15 phút → offline, CP03 đã offline sẵn
     from app.config import settings
+
     monkeypatch.setattr(settings, "OCPP_HEARTBEAT_INTERVAL_SECONDS", 300)
     monkeypatch.setattr(settings, "OCPP_HEARTBEAT_MULTIPLIER", 2)
 
     # Dùng naive UTC (không có tzinfo) để nhất quán với SQLite func.current_timestamp()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    cp1 = ChargePoint(code="CP01", station_id=1, status="online", last_seen_at=now - timedelta(minutes=5))
-    cp2 = ChargePoint(code="CP02", station_id=1, status="online", last_seen_at=now - timedelta(minutes=15))
-    cp3 = ChargePoint(code="CP03", station_id=1, status="offline", last_seen_at=now - timedelta(minutes=20))
+    cp1 = ChargePoint(
+        code="CP01",
+        station_id=1,
+        status="online",
+        last_seen_at=now - timedelta(minutes=5),
+    )
+    cp2 = ChargePoint(
+        code="CP02",
+        station_id=1,
+        status="online",
+        last_seen_at=now - timedelta(minutes=15),
+    )
+    cp3 = ChargePoint(
+        code="CP03",
+        station_id=1,
+        status="offline",
+        last_seen_at=now - timedelta(minutes=20),
+    )
     db_session.add_all([cp1, cp2, cp3])
     db_session.commit()
     db_session.add(Connector(charge_point_id=cp2.id, connector_id=1, status="bận"))
@@ -64,7 +80,7 @@ async def test_check_offline_charge_points(db_session, monkeypatch):
     original_sleep = asyncio.sleep
 
     async def mock_sleep(seconds):
-        raise asyncio.CancelledError() # Stop the loop
+        raise asyncio.CancelledError()  # Stop the loop
 
     app.services.jobs.asyncio.sleep = mock_sleep
 

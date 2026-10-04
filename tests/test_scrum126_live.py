@@ -11,10 +11,8 @@ Chạy trực tiếp với DB và services của CSMS để kiểm chứng hành
 - TC-126-08: Bật/dừng nhiều trụ cùng lúc
 """
 
-import asyncio
-import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app.config import settings
 from app.database import SessionLocal
@@ -29,7 +27,13 @@ def setup_test_data(db):
     """Khởi tạo trạm và các trụ phục vụ test."""
     station = db.query(Station).filter_by(id=999).first()
     if not station:
-        station = Station(id=999, name="Trạm Test E2E 126", address="Khu CNC", owner_id=1, status="active")
+        station = Station(
+            id=999,
+            name="Trạm Test E2E 126",
+            address="Khu CNC",
+            owner_id=1,
+            status="active",
+        )
         db.add(station)
         db.commit()
 
@@ -51,8 +55,11 @@ def setup_test_data(db):
 def cleanup_test_data(db):
     """Dọn dẹp dữ liệu test."""
     from app.models.ocpp_message import OcppMessage
+
     codes = ["CP-001", "CP-002", "CP-003"]
-    db.query(OcppMessage).filter(OcppMessage.charge_point_code.in_(codes)).delete(synchronize_session=False)
+    db.query(OcppMessage).filter(OcppMessage.charge_point_code.in_(codes)).delete(
+        synchronize_session=False
+    )
     for code in codes:
         cp = db.query(ChargePoint).filter_by(code=code).first()
         if cp:
@@ -73,16 +80,25 @@ def run_all_tests():
         # TC-126-01: Trụ online -> dừng -> trạng thái chuyển offline
         # -------------------------------------------------------------
         cp1 = db.query(ChargePoint).filter_by(code="CP-001").one()
-        timeout = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS * settings.OCPP_HEARTBEAT_MULTIPLIER
-        stale_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=timeout + 30)
+        timeout = (
+            settings.OCPP_HEARTBEAT_INTERVAL_SECONDS
+            * settings.OCPP_HEARTBEAT_MULTIPLIER
+        )
+        stale_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+            seconds=timeout + 30
+        )
         cp1.status = "online"
         cp1.last_seen_at = stale_time
         db.commit()
 
-        expired_count = expire_stale_charge_points_once(db)
+        expire_stale_charge_points_once(db)
         db.refresh(cp1)
-        assert cp1.status == "offline", f"CP-001 status should be offline, got {cp1.status}"
-        assert cp1.last_seen_at == stale_time, "last_seen_at không được đổi sau khi stale"
+        assert cp1.status == "offline", (
+            f"CP-001 status should be offline, got {cp1.status}"
+        )
+        assert cp1.last_seen_at == stale_time, (
+            "last_seen_at không được đổi sau khi stale"
+        )
         results["TC-126-01"] = {
             "status": "PASS",
             "detail": f"Trụ CP-001 tự động chuyển sang offline khi last_seen_at quá {timeout}s. last_seen_at được giữ nguyên.",
@@ -100,7 +116,9 @@ def run_all_tests():
         expire_stale_charge_points_once(db)
         db.refresh(cp1)
         for conn in cp1.connectors:
-            assert conn.status == "unknown", f"Connector status should be unknown, got {conn.status}"
+            assert conn.status == "unknown", (
+                f"Connector status should be unknown, got {conn.status}"
+            )
         results["TC-126-02"] = {
             "status": "PASS",
             "detail": "Tất cả các connector của CP-001 đều chuyển về trạng thái 'unknown' sau khi trụ bị đánh dấu offline.",
@@ -110,15 +128,22 @@ def run_all_tests():
         # TC-126-03: Bật lại trụ -> trạng thái trở về online
         # -------------------------------------------------------------
         import time
+
         old_seen = cp1.last_seen_at
         hb_call = pack_call(f"hb-{time.time_ns()}", "Heartbeat", {})
         resp = handle_ocpp_message(db, "CP-001", hb_call)
         parsed = parse_message(resp)
-        assert parsed[0] == 3, f"Phản hồi Heartbeat phải là CALLRESULT (3), nhận {parsed[0]}"
+        assert parsed[0] == 3, (
+            f"Phản hồi Heartbeat phải là CALLRESULT (3), nhận {parsed[0]}"
+        )
 
         db.refresh(cp1)
-        assert cp1.status == "online", f"CP-001 phải trở về online sau Heartbeat, nhận {cp1.status}"
-        assert cp1.last_seen_at > old_seen, "last_seen_at phải được cập nhật thời điểm mới"
+        assert cp1.status == "online", (
+            f"CP-001 phải trở về online sau Heartbeat, nhận {cp1.status}"
+        )
+        assert cp1.last_seen_at > old_seen, (
+            "last_seen_at phải được cập nhật thời điểm mới"
+        )
         results["TC-126-03"] = {
             "status": "PASS",
             "detail": f"Trụ CP-001 nhận Heartbeat -> status hồi phục về 'online', last_seen_at={cp1.last_seen_at}.",
@@ -127,18 +152,26 @@ def run_all_tests():
         # -------------------------------------------------------------
         # TC-126-04: Connector trở về trạng thái sau khi nhận StatusNotification
         # -------------------------------------------------------------
-        status_call = pack_call(f"sn-{time.time_ns()}", "StatusNotification", {
-            "connectorId": 1,
-            "errorCode": "NoError",
-            "status": "Available",
-        })
+        status_call = pack_call(
+            f"sn-{time.time_ns()}",
+            "StatusNotification",
+            {
+                "connectorId": 1,
+                "errorCode": "NoError",
+                "status": "Available",
+            },
+        )
         resp = handle_ocpp_message(db, "CP-001", status_call)
         parsed = parse_message(resp)
         assert parsed[0] == 3, "Phản hồi StatusNotification phải là CALLRESULT"
 
         db.expire_all()
-        conn1 = db.query(Connector).filter_by(charge_point_id=cp1.id, connector_id=1).one()
-        assert conn1.status == "rảnh", f"Connector 1 phải chuyển về 'rảnh', nhận {conn1.status}"
+        conn1 = (
+            db.query(Connector).filter_by(charge_point_id=cp1.id, connector_id=1).one()
+        )
+        assert conn1.status == "rảnh", (
+            f"Connector 1 phải chuyển về 'rảnh', nhận {conn1.status}"
+        )
         results["TC-126-04"] = {
             "status": "PASS",
             "detail": f"Connector 1 cập nhật thành công từ 'unknown' sang '{conn1.status}' (rảnh/Available) sau StatusNotification.",
@@ -169,7 +202,9 @@ def run_all_tests():
         # TC-126-06: Lần chạy job lặp lại là no-op (idempotent)
         # -------------------------------------------------------------
         second_run_count = expire_stale_charge_points_once(db)
-        assert second_run_count == 0, f"Lần chạy thứ 2 phải quét được 0 bản ghi, nhận {second_run_count}"
+        assert second_run_count == 0, (
+            f"Lần chạy thứ 2 phải quét được 0 bản ghi, nhận {second_run_count}"
+        )
         db.refresh(cp1)
         assert cp1.status == "offline"
         results["TC-126-06"] = {
@@ -186,12 +221,16 @@ def run_all_tests():
 
         with patch("app.routers.monitoring.notify_status_change") as mock_notify:
             expire_stale_charge_points_once(db)
-            assert mock_notify.called, "notify_status_change phải được gọi khi có trụ chuyển offline"
+            assert mock_notify.called, (
+                "notify_status_change phải được gọi khi có trụ chuyển offline"
+            )
             call_args = mock_notify.call_args[0]
-            assert call_args[0] == 999, f"Station ID phát SSE phải là 999, nhận {call_args[0]}"
+            assert call_args[0] == 999, (
+                f"Station ID phát SSE phải là 999, nhận {call_args[0]}"
+            )
         results["TC-126-07"] = {
             "status": "PASS",
-            "detail": f"SSE event notify_status_change được kích hoạt thành công cho station_id=999 khi trụ offline.",
+            "detail": "SSE event notify_status_change được kích hoạt thành công cho station_id=999 khi trụ offline.",
         }
 
         # -------------------------------------------------------------
