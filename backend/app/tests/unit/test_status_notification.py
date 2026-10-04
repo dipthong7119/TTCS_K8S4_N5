@@ -15,7 +15,8 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine, inspect as sa_inspect
+from sqlalchemy import create_engine
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -24,7 +25,6 @@ from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
 from app.models.station import Station
 from app.ocpp.status_mapping import InternalStatus, map_ocpp_status
-from app.ocpp.warning_throttler import WarningThrottler
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
@@ -327,7 +327,7 @@ class TestTask2ConnectorErrors:
         err = db_session.query(ConnectorError).first()
         assert err is not None
         # occurred_at phải khớp với timestamp trong payload (UTC, không có timezone)
-        assert err.occurred_at == datetime(2026, 9, 1, 10, 0, 0)
+        assert err.occurred_at == datetime(2026, 9, 1, 10, 0, 0, tzinfo=UTC).replace(tzinfo=None)
 
     def test_occurred_at_uses_server_time_when_missing(self, db_session):
         """Thiếu timestamp → occurred_at là giờ máy chủ (UTC, gần hiện tại)."""
@@ -512,14 +512,16 @@ class TestTask3UnknownConnector:
         fake_time = 1000.0
         monkeypatch.setattr(unknown_connector_throttler, "_get_time", lambda: fake_time)
 
-        with patch.object(settings, "UNKNOWN_CONNECTOR_WARN_INTERVAL", bad_interval):
-            with caplog.at_level(logging.WARNING):
-                for i in range(3):
-                    _sn_ok(
-                        db_session,
-                        {"connectorId": 7, "errorCode": "NoError", "status": "Available"},
-                        msg_id=f"cfg-{i}",
-                    )
+        with (
+            patch.object(settings, "UNKNOWN_CONNECTOR_WARN_INTERVAL", bad_interval),
+            caplog.at_level(logging.WARNING),
+        ):
+            for i in range(3):
+                _sn_ok(
+                    db_session,
+                    {"connectorId": 7, "errorCode": "NoError", "status": "Available"},
+                    msg_id=f"cfg-{i}",
+                )
 
         warnings = [r for r in caplog.records if "khai báo" in r.message and "7" in r.message]
         assert len(warnings) == expected_warn_count
@@ -607,6 +609,7 @@ class TestMigrationSmoke:
             # Gọi trực tiếp downgrade — nếu không crash là OK
             try:
                 downgrade()
-            except Exception:
+            except Exception as exc:
                 # Môi trường in-memory không có op.get_bind() — smoke test chỉ kiểm tra không raise TypeError
-                pass
+                logger = logging.getLogger(__name__)
+                logger.debug("Ignored expected downgrade error in in-memory test: %s", exc)
