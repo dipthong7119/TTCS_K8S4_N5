@@ -40,6 +40,26 @@ services:
       timeout: 10s
       retries: 3
 
+  simulator:
+    image: ${CSMS_IMAGE:-csms-app:local}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    profiles: ["ocpp-simulator"]
+    depends_on:
+      app:
+        condition: service_healthy
+    command:
+      - python
+      - -m
+      - app.dev_tools.ocpp_simulator.simulator
+      - SIM-01
+      - --host
+      - app
+      - --port
+      - "8000"
+    restart: "no"
+
   backup:
     image: postgres:15-alpine
     container_name: csms_backup

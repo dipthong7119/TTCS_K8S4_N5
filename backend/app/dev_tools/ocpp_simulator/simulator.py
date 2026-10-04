@@ -219,6 +219,11 @@ async def run_simulator(code: str = "TEST-01", host: str = "localhost", port: in
 
 # Để chạy trực tiếp từ dòng lệnh: python -m simulator
 if __name__ == "__main__":
-    import sys
-    code = sys.argv[1] if len(sys.argv) > 1 else "TEST-01"
-    asyncio.run(run_simulator(code=code))
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run a virtual OCPP 1.6J charge point")
+    parser.add_argument("code", nargs="?", default="TEST-01")
+    parser.add_argument("--host", default="localhost")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    asyncio.run(run_simulator(code=args.code, host=args.host, port=args.port))
