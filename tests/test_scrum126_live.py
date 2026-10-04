@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script kiểm thử tự động 8 Test Case của SCRUM-126 (T-27).
 Chạy trực tiếp với DB và services của CSMS để kiểm chứng hành vi:
