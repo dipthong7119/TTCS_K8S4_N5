@@ -1,3 +1,5 @@
+# Python 3.11 runners/images bundle 79.0.1; PYSEC-2026-3447 is fixed in 83.0.0.
+setuptools>=83.0.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 sqlalchemy>=2.0.23

@@ -1,6 +1,6 @@
 # Đối chiếu Sprint 1 và Sprint 2: Excel → code
 
-Ngày kiểm tra: 04/10/2026. Nhánh `main` local hiện ở commit hợp nhất `baf6256`, đã tích hợp `origin/main` tại `65d0b2f` và giữ lịch sử trước đó tại `ccc3a5d`; các bản sửa Sprint 1–2 và dọn file vẫn nằm trong working tree.
+Ngày kiểm tra: 04/10/2026. Nhánh `main` local và GitHub hiện ở `255bd32`, đã chứa các bản sửa Sprint 1–2, dọn file và commit hợp nhất `baf6256`. Bản sửa dependency cho lỗi audit CI/CD của lượt kiểm tra lại đang ở working tree.
 
 ## Kết luận
 
@@ -119,7 +119,7 @@ Riêng đợt sửa hai điểm bổ sung đạt **25 test JavaScript** và **2 
 
 ## Bằng chứng kiểm thử
 
-- Bộ Python sau đồng bộ main mới: **296 passed, 47 warnings**, **52,25 giây**, có coverage, Python **3.14.2** trên Windows, không skipped. Bộ Heartbeat mới có 10 bài đạt. Bỏ `test_placeholder.py` trùng bài health đã có trong `tests/test_health.py`; coverage tổng vẫn 62%, riêng handler Heartbeat đạt 100%. App và simulator Docker chạy **Python 3.11**; workflow GitHub của bản sửa chưa chạy.
+- Bộ Python sau đồng bộ main mới: **296 passed, 47 warnings**, **52,25 giây**, có coverage, Python **3.14.2** trên Windows, không skipped. Bộ Heartbeat mới có 10 bài đạt. Bỏ `test_placeholder.py` trùng bài health đã có trong `tests/test_health.py`; coverage tổng vẫn 62%, riêng handler Heartbeat đạt 100%. App và simulator Docker chạy **Python 3.11**. Workflow GitHub tại `255bd32` đã chạy nhưng dừng ở audit; kết quả kiểm tra lại trên Linux xem phần CI/CD bên dưới.
 - Bộ Docker sau dọn file dư: **5 passed**, **75,44 giây**; bên trong có **10 migration/seed tests trên PostgreSQL** qua trong 11,39 giây, đồng hồ trụ lệch +5h nhưng delta DB 0,509s, 50 socket + SSE smoke (latency 0,031s; tree HTTP 0,031s), ba vòng container stop/start, candidate lỗi giữ app cũ. Bài soak 600 giây trên Docker/PostgreSQL đã chạy riêng trong đợt kiểm thử trước; không chạy lại sau dọn file vì không đổi nghiệp vụ backend.
 - Node sau sửa chế độ mẫu: **25 tests passed**, thực thi JS của form/monitoring/Reset/SSE trong DOM/EventSource doubles, gồm 20 mã trụ/đầu nối, grid/drawer/tổng số, Reset mẫu Soft/Hard, offline, refresh, đổi nguồn, chặn lệnh trùng và click dùng đúng bộ gửi lệnh. Các test này không đo kích thước/layout/render trình duyệt.
 - Kiểm hồi quy mạng sau sửa frontend: **2 passed, 7 deselected, 1 warning**, **6,81 giây**; SSE đẩy thay đổi đầu nối dưới 1 giây và Reset qua HTTP/WebSocket vẫn khớp response, không chặn request khác, xử lý timeout/audit đúng.
@@ -178,9 +178,18 @@ Mặc định bài soak trong bộ test chỉ giữ ngắn để phù hợp CI; 
 - Sau hợp nhất: **296 Python tests** đạt trong **52,25 giây**, **25 JS tests** đạt, Ruff và Mypy đạt (41 source files). Docker image dựng lại thành công; **5 Docker tests** đạt trong **73,28 giây**, gồm **10 migration/seed tests PostgreSQL**, đồng hồ trụ lệch +5 giờ (DB delta **0,538 giây**), 50 socket/200 connector/SSE, ba vòng dừng/bật simulator và candidate lỗi giữ ứng dụng cũ healthy. SSE **0,030 giây**, API tree **0,041 giây** trong bài smoke.
 - Project Docker kiểm tra riêng là `csms-main-sync-check`, được dọn sau kiểm thử. Workbook vẫn cùng SHA256 đã ghi; `backend/csms.db` và hai file cấu hình local giữ nguyên nội dung. Không chỉnh trạng thái Todo trong Excel.
 
+## Kiểm tra lại CI/CD GitHub (T-02/T-03)
+
+- Đã đọc trạng thái job và log thật của commit `255bd32`: [CI Pipeline](https://github.com/dipthong7119/TTCS_K8S4_N5/actions/runs/37216225199/job/111477169097) và [CD Pipeline](https://github.com/dipthong7119/TTCS_K8S4_N5/actions/runs/37216225255/job/111477169229). Cả hai qua cài dependency, Ruff và Mypy, rồi fail tại **Audit installed dependencies**; pytest và các bước sau bị skip. Job deploy-staging chưa chạy.
+- Log audit chỉ ra `setuptools 79.0.1`, `PYSEC-2026-3447` (hai mục cùng ID cho một package), bản sửa từ `83.0.0`. Bản cũ có sẵn trên Python 3.11 của runner và image Docker; môi trường Windows Python 3.14 kiểm tra trước đó không tái hiện lỗi này.
+- Thêm `setuptools>=83.0.0` vào `backend/requirements.txt`. Cả CI và CD dùng `requirements-dev.txt` bao gồm file này; Docker cũng cài file này, nên một ràng buộc chung nâng đúng package ở cả ba môi trường. Giữ bước audit để chặn dependency có lỗ hổng.
+- Đã tái hiện audit thất bại với `79.0.1` trên Linux/Python **3.11.16**, rồi nâng bằng requirements đã sửa lên **84.0.0**. Sau sửa: audit không có lỗ hổng đã biết, Ruff qua, Mypy qua **41 source files**, **296 Python tests** qua trong **56,83 giây**, không skipped (coverage tổng trên Python 3.11 là **63%**). **25 JS tests** qua. Image `csms-app:ci-audit-fixed` dựng lại thành công, chứa setuptools **84.0.0**, app/db khởi động healthy trên project nghiệm thu riêng.
+- Bộ tích hợp trên image mới đạt **5/5** trong **70,71 giây**: 10 test migration/seed PostgreSQL, thời gian server khi trụ lệch +5 giờ, 50 socket/200 connector/SSE, ba vòng dừng/bật simulator và candidate lỗi giữ bản cũ healthy. Project `csms-ci-audit-check` được dọn sau kiểm tra; không dùng database ứng dụng có sẵn.
+- Bản sửa chưa commit/push; các run GitHub cũ vẫn đỏ vì chúng kiểm tra commit chưa có ràng buộc dependency mới. Cần push commit chứa bản sửa để có kết quả CI/CD trên GitHub mới; chạy lại run cũ sẽ dùng code cũ.
+
 ## Các điều kiện còn thiếu để chốt Done
 
-1. **GitHub CI:** chạy workflow của commit chứa bản sửa, đo <5 phút, chứng minh lint lỗi làm pipeline đỏ và bật required checks/branch protection để chặn merge. Local không chứng minh workflow GitHub đã chạy xanh. Build runtime lạnh trên máy này từng mất hơn 5 phút; việc tách dev tool và cache giúp giảm nhưng không đảm bảo SLA GitHub.
+1. **GitHub CI:** push bản sửa setuptools và chạy workflow của commit mới, đo <5 phút, chứng minh lint lỗi làm pipeline đỏ và bật required checks/branch protection để chặn merge. Đã xác nhận lint/typecheck GitHub của `255bd32` qua nhưng audit fail; kết quả local sau sửa không thay thế run GitHub mới. Build runtime lạnh trên máy này từng mất hơn 5 phút; việc tách dev tool và cache giúp giảm nhưng không đảm bảo SLA GitHub.
 2. **Staging:** người dùng xác nhận chưa có staging. Khi có server, cần cấu hình secrets, thử deploy <10 phút/failure và chạy lại các AC mạng. Các bài tương ứng đã có bộ kiểm tra local Docker chạy lại được.
 3. **Giao diện trực quan:** đo layout 20 trụ không cuộn ngang, tải <2 giây, update/restart bằng browser. Logic nguồn dữ liệu/form/Reset/reconnect/mô phỏng đã có 25 test JS; công cụ browser trước đó đã từ chối quyền localhost, nên chưa có chứng cứ quan sát UI.
 4. **DoD nhóm:** một thành viên khác duyệt code và so coverage phần sửa với baseline tương đương. Đã có coverage XML nhưng chưa có baseline để khẳng định tiêu chí “không giảm”.
