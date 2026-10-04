@@ -187,7 +187,8 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
 
         return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
-        return handle_authorize(db, point, msg_id, payload)
+        from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
+        return new_handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
         return handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
@@ -195,45 +196,6 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     if action == "StopTransaction":
         return handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
-
-
-def handle_authorize(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    id_tag_value = payload.get("idTag")
-    if not isinstance(id_tag_value, str) or not 1 <= len(id_tag_value) <= 20:
-        return pack_call_error(msg_id, "FormationViolation", "idTag must contain 1 to 20 characters")
-
-    tag, _, status = _authorize_tag(db, point, id_tag_value)
-
-    id_tag_info = {"status": status}
-    if tag and tag.expiry_date:
-        expiry = tag.expiry_date
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=UTC)
-        id_tag_info["expiryDate"] = expiry.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    return pack_call_result(msg_id, {"idTagInfo": id_tag_info})
-
-
-def _authorize_tag(db: Session, point: ChargePoint, id_tag_value: str):
-    tag = db.query(IdTag).filter(IdTag.id_tag == id_tag_value).first()
-    if tag is None:
-        logger.warning("Invalid OCPP idTag suffix=%s from %s", id_tag_value[-4:], point.code)
-        return None, None, "Invalid"
-
-    user = db.query(User).filter(User.id == tag.user_id).first()
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    is_driver = user is not None and any(role.name == "driver" for role in user.roles)
-    if (
-        tag.is_blocked
-        or user is None
-        or not user.is_active
-        or not is_driver
-        or station is None
-        or station.status != "active"
-    ):
-        return tag, user, "Blocked"
-    if _is_expired(tag.expiry_date):
-        return tag, user, "Expired"
-    return tag, user, "Accepted"
 
 
 def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
@@ -251,7 +213,9 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     connector = db.query(Connector).filter_by(
         charge_point_id=point.id, connector_id=connector_number
     ).first()
-    tag, user, auth_status = _authorize_tag(db, point, id_tag_value)
+    
+    from app.ocpp.handlers.authorize import authorize_tag
+    tag, user, auth_status = authorize_tag(db, point, id_tag_value)
     station = db.query(Station).filter(Station.id == point.station_id).first()
     effective_status = auth_status if connector is not None else "Invalid"
     accepted = effective_status == "Accepted"
@@ -541,15 +505,6 @@ def _save_orphan_message(
             payload=payload,
         )
     )
-
-
-def _is_expired(expiry: datetime | None) -> bool:
-    if expiry is None:
-        return False
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=UTC)
-    return expiry <= datetime.now(UTC)
-
 
 def _parse_timestamp(value: str | None) -> datetime | None:
     if not value:

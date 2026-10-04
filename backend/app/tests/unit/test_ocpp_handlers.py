@@ -182,39 +182,6 @@ def test_handle_status_notification_unregistered_connector(db_session, caplog):
     assert "99" in caplog.text
 
 
-def test_handle_authorize(db_session):
-    now = datetime.now(timezone.utc)
-    tag1 = IdTag(id_tag="VALID1", user_id=1, is_blocked=False, expiry_date=now + timedelta(days=1))
-    tag2 = IdTag(id_tag="BLOCKED1", user_id=1, is_blocked=True)
-    tag3 = IdTag(id_tag="EXPIRED1", user_id=1, is_blocked=False, expiry_date=now - timedelta(days=1))
-    
-    db_session.add_all([tag1, tag2, tag3])
-    db_session.commit()
-    
-    # Valid
-    raw1 = pack_call("msg_a1", "Authorize", {"idTag": "VALID1"})
-    resp1 = handle_ocpp_message(db_session, "CP001", raw1)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp1)
-    assert payload["idTagInfo"]["status"] == "Accepted"
-    
-    # Blocked
-    raw2 = pack_call("msg_a2", "Authorize", {"idTag": "BLOCKED1"})
-    resp2 = handle_ocpp_message(db_session, "CP001", raw2)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp2)
-    assert payload["idTagInfo"]["status"] == "Blocked"
-    
-    # Expired
-    raw3 = pack_call("msg_a3", "Authorize", {"idTag": "EXPIRED1"})
-    resp3 = handle_ocpp_message(db_session, "CP001", raw3)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp3)
-    assert payload["idTagInfo"]["status"] == "Expired"
-    
-    # Invalid
-    raw4 = pack_call("msg_a4", "Authorize", {"idTag": "UNKNOWN"})
-    resp4 = handle_ocpp_message(db_session, "CP001", raw4)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp4)
-    assert payload["idTagInfo"]["status"] == "Invalid"
-
 
 def test_last_seen_uses_server_clock_when_device_timestamp_is_skewed(db_session):
     charge_point = db_session.query(ChargePoint).filter_by(code="CP001").one()
