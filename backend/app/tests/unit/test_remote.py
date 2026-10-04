@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
-from app.models.charge_point import ChargePoint
+from app.models.charge_point import ChargePoint, Connector
 from app.models.station import Station
 from app.models.user import User
 from app.services.connection_manager import manager
@@ -54,7 +54,7 @@ def setup_db():
     Base.metadata.drop_all(bind=engine_test)
 
 
-def test_reset_offline():
+def test_reset_offline(monkeypatch):
     class MockRole:
         def __init__(self, name):
             self.name = name
@@ -67,10 +67,37 @@ def test_reset_offline():
             self.roles = [MockRole(r) for r in roles]
 
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
+    send_call = mock.AsyncMock()
+    monkeypatch.setattr(manager, "send_call", send_call)
 
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 409
     assert "ngoại tuyến" in resp.json()["detail"]
+    send_call.assert_not_awaited()
+
+
+def test_reset_denies_non_operator_role(monkeypatch):
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "owner@test.com"
+            self.full_name = "Station Owner"
+            self.roles = [MockRole(role) for role in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(
+        1, ["station_owner"]
+    )
+    send_call = mock.AsyncMock()
+    monkeypatch.setattr(manager, "send_call", send_call)
+
+    resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
+
+    assert resp.status_code == 403
+    send_call.assert_not_awaited()
 
 
 def test_reset_online(monkeypatch):
@@ -90,9 +117,18 @@ def test_reset_online(monkeypatch):
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
     point.last_seen_at = datetime.now(timezone.utc)
+    connector = Connector(
+        charge_point_id=point.id, connector_id=1, status="bận"
+    )
+    db.add(connector)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+
+    from app.routers import remote
+
+    publish_status = mock.Mock()
+    monkeypatch.setattr(remote, "publish_charge_point_status", publish_status)
 
     async def acknowledged(code, action, payload, timeout):
         assert code == "CP01"
@@ -106,6 +142,13 @@ def test_reset_online(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["status"] == "Accepted"
     assert "Reset" in resp.json()["message"]
+    publish_status.assert_called_once()
+
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    assert point.status == "offline"
+    assert point.connectors[0].status == "unknown"
+    db.close()
 
 
 @pytest.fixture(scope="function", autouse=True)

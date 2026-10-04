@@ -163,6 +163,32 @@ def test_connection_manager_fails_pending_on_reconnect():
     asyncio.run(exercise())
 
 
+def test_connection_manager_cleans_pending_call_after_timeout():
+    from unittest.mock import AsyncMock
+
+    from app.services.connection_manager import ConnectionManager
+
+    manager = ConnectionManager()
+    websocket = AsyncMock()
+
+    async def exercise():
+        await manager.connect("CP-1", websocket)
+        call = asyncio.create_task(
+            manager.send_call("CP-1", "Reset", {"type": "Soft"}, timeout=0.01)
+        )
+        await asyncio.sleep(0)
+        pending_future = next(iter(manager.pending_calls.values()))
+
+        with pytest.raises(asyncio.TimeoutError):
+            await call
+
+        assert pending_future.cancelled()
+        assert manager.pending_calls == {}
+        assert manager._pending_websockets == {}
+
+    asyncio.run(exercise())
+
+
 def test_connection_manager_resolves_call_error():
     import json
     from unittest.mock import AsyncMock
