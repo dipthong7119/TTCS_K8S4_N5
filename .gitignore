@@ -10,3 +10,6 @@ outputs/sprint2-2026-09-27/*.inspect.ndjson
 csms.db
 backups/
 *.output
+
+# Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
+nhat_ky_lam_tung.md
