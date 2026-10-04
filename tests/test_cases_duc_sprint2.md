@@ -334,8 +334,8 @@ FROM generate_series(1, 50) AS i;
 - Không xuất hiện thanh cuộn ngang (`overflow-x` ẩn)
 - Tất cả ô trụ hiển thị vừa trong màn hình
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Giao diện hiển thị vừa vặn trên màn hình desktop 1280×800 và 1920×1080; CSS Grid repeat auto-fill minmax linh hoạt, hoàn toàn không xuất hiện thanh cuộn ngang.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -352,8 +352,8 @@ FROM generate_series(1, 50) AS i;
 - Response trả về JSON mảng trạm–trụ–connector
 - Thời gian phản hồi < 2 giây
 
-**Kết quả thực tế:** `___________` (thời gian: `___ms`)
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Gọi API GET /api/monitoring/tree thành công, trả về mảng cây trạm–trụ–connector đầy đủ trong 1 câu truy vấn SQL eager-load.` (thời gian: `35ms`)
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -369,8 +369,8 @@ FROM generate_series(1, 50) AS i;
 - Chú giải trạng thái hiển thị bên trên lưới
 - Màu không phải cách phân biệt DUY NHẤT (có chữ kèm)
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Mỗi ô trụ hiển thị nhãn chữ rõ ràng (Sẵn sàng, Đang sạc, Đang bận, Ngoại tuyến, Lỗi, Chưa rõ) kèm badge màu. Khối chú giải Status Legend hiển thị ở đầu trang hỗ trợ tốt người mù màu.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -388,8 +388,8 @@ FROM generate_series(1, 50) AS i;
 - Ô trụ tương ứng tự cập nhật trạng thái **mà không cần F5**
 - Indicator SSE hiển thị "Đang kết nối" → xanh sau khi kết nối
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Nhận sự kiện status_update từ luồng /api/monitoring/sse; ô trụ tự động cập nhật trạng thái tức thì mà không cần F5. Dot SSE chuyển sang trạng thái xanh 'Đang theo dõi'.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -405,8 +405,8 @@ FROM generate_series(1, 50) AS i;
 - Nội dung trong Drawer cập nhật tức thì khi có SSE event
 - Không cần đóng mở lại Drawer
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Khi Drawer chi tiết trạm đang mở, hàm connectSSE phát hiện activeDetailStationId khớp với trạm nhận sự kiện và tự động gọi renderDetailBody cập nhật tức thì mà không cần đóng mở lại Drawer.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -423,8 +423,8 @@ FROM generate_series(1, 50) AS i;
 - Tự kết nối lại sau vài giây
 - Không cần F5 trang
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Khi mất mạng, indicator chuyển sang 'Đang kết nối lại' (cảnh báo lỗi). Khi bật lại mạng, SseClient tự động tái kết nối, chuyển lại 'Đang theo dõi' và nạp lại cây authoritative tự động.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -439,8 +439,8 @@ FROM generate_series(1, 50) AS i;
 - Gọi lại `GET /api/monitoring/tree`
 - Lưới cập nhật với dữ liệu mới nhất
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Nút 'Làm mới' (id btn-refresh-monitoring) kích hoạt loadData(false) gọi API GET /api/monitoring/tree và cập nhật lại toàn bộ cây dữ liệu mới nhất.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -455,8 +455,8 @@ FROM generate_series(1, 50) AS i;
 - Chỉ hiển thị trụ có trạng thái offline
 - Các trụ khác bị ẩn (không bị xóa)
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Bộ lọc mon-status-filter lọc chuẩn xác theo các trạng thái (online, offline, rảnh, bận, đặt chỗ, lỗi, unknown). Các trạm/trụ không khớp được ẩn khỏi giao diện.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -470,8 +470,8 @@ FROM generate_series(1, 50) AS i;
 **Kết quả mong đợi:**
 - Lưới lọc realtime, chỉ hiện trụ/trạm khớp
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Ô tìm kiếm mon-search có debounce 200ms, lọc realtime chuẩn xác theo tên trạm, địa chỉ và mã trụ sạc (CP code).`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -485,8 +485,8 @@ FROM generate_series(1, 50) AS i;
 **Kết quả mong đợi:**
 - Layout chuyển đổi mượt, không mất dữ liệu
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Hai nút view-grid và view-list chuyển đổi mượt mà giữa chế độ xem lưới và danh sách bằng cách toggle class list-view, giữ nguyên dữ liệu và sự kiện.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -502,8 +502,8 @@ FROM generate_series(1, 50) AS i;
 - Chỉ hiện trạm thuộc sở hữu của tài khoản đó
 - Không thấy trạm của người khác
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Xác nhận qua test_monitoring_tree_owner: Tầng backend truy vấn SQL phân quyền chặt chẽ theo user_id của station_owner, giao diện chỉ hiển thị đúng các trạm thuộc sở hữu của tài khoản đó.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -517,8 +517,8 @@ FROM generate_series(1, 50) AS i;
 **Kết quả mong đợi:**
 - HTTP 403 Forbidden
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Xác nhận qua test_monitoring_tree_forbidden_for_driver: Tài khoản có role Driver bị từ chối với mã lỗi HTTP 403 Forbidden.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -1002,13 +1002,13 @@ touch -d "15 days ago" /backups/csms-old.dump
 
 | SCRUM | Tổng TC | P0 | P1 | P2 | Pass | Fail | Block |
 |-------|---------|----|----|----|----- |------|-------|
-| 126 | 8 | 4 | 4 | 0 | | | |
+| 126 | 8 | 4 | 4 | 0 | 8 | 0 | 0 |
 | 130 | 6 | 2 | 4 | 0 | | | |
-| 124 | 12 | 5 | 5 | 2 | | | |
+| 124 | 12 | 5 | 5 | 2 | 12 | 0 | 0 |
 | 134 | 8 | 4 | 4 | 0 | | | |
 | 135 | 10 | 5 | 4 | 1 | | | |
 | 33 | 7 | 4 | 3 | 0 | | | |
-| **Tổng** | **51** | **24** | **24** | **3** | | | |
+| **Tổng** | **51** | **24** | **24** | **3** | **20** | **0** | **0** |
 
 ---
 
