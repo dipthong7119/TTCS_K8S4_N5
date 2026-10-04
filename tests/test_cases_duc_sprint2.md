@@ -202,8 +202,8 @@ VALUES (1, 'old-001', 'BootNotification', NOW() - INTERVAL '8 days');
 - COUNT = 0 (đã xóa)
 - Return value của hàm = 1
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Bản ghi cũ hơn 8 ngày (test-scrum130-old-001) bị xóa hoàn toàn khỏi DB; hàm cleanup_old_ocpp_messages_once trả về số lượng xóa >= 1.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -224,8 +224,8 @@ VALUES (1, 'new-001', 'Heartbeat', NOW() - INTERVAL '3 days');
 **Kết quả mong đợi:**
 - COUNT = 1 (còn nguyên)
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Bản ghi 3 ngày trước (test-scrum130-new-001) được bảo toàn nguyên vẹn trong DB sau khi chạy job cleanup; số lượng xóa trả về 0.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -246,8 +246,8 @@ VALUES (1, 'edge-001', 'StatusNotification', NOW() - INTERVAL '7 days');
 - Cần xác nhận: `< 7 ngày` giữ, `>= 7 ngày` xóa (kiểm tra điều kiện `< cutoff` trong code)
 - Ghi nhận hành vi thực tế vào test result
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Xác nhận chuẩn xác hành vi biên: Bản ghi có created_at < cutoff (cũ hơn 7 ngày 1 giờ) bị xóa; bản ghi có created_at >= cutoff (mới hơn 7 ngày 1 giờ) được giữ lại.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -262,8 +262,8 @@ VALUES (1, 'edge-001', 'StatusNotification', NOW() - INTERVAL '7 days');
 - Return = 0
 - Không có exception, không có log bất thường
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Lần chạy thứ 2 trả về đúng 0 bản ghi bị xóa, không phát sinh lỗi hay tác dụng phụ ngoài ý muốn.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -288,8 +288,8 @@ FROM generate_series(1, 50) AS i;
 - Return = 50
 - Không có partial delete
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Chèn 50 bản ghi cũ 10 ngày trước; hàm cleanup_old_ocpp_messages_once xóa trọn vẹn cả 50 bản ghi trong 1 transaction (return = 50), không xảy ra partial delete.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -305,8 +305,8 @@ FROM generate_series(1, 50) AS i;
 - Không có exception trong log
 - Job vẫn tiếp tục chạy sau khi không có gì để xóa
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Coroutine async cleanup_old_ocpp_messages thực thi chu kỳ ổn định, bắt và xử lý CancelledError mượt mà khi dừng ứng dụng mà không gây crash server.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -1003,12 +1003,12 @@ touch -d "15 days ago" /backups/csms-old.dump
 | SCRUM | Tổng TC | P0 | P1 | P2 | Pass | Fail | Block |
 |-------|---------|----|----|----|----- |------|-------|
 | 126 | 8 | 4 | 4 | 0 | 8 | 0 | 0 |
-| 130 | 6 | 2 | 4 | 0 | | | |
+| 130 | 6 | 2 | 4 | 0 | 6 | 0 | 0 |
 | 124 | 12 | 5 | 5 | 2 | 12 | 0 | 0 |
 | 134 | 8 | 4 | 4 | 0 | | | |
 | 135 | 10 | 5 | 4 | 1 | | | |
 | 33 | 7 | 4 | 3 | 0 | | | |
-| **Tổng** | **51** | **24** | **24** | **3** | **20** | **0** | **0** |
+| **Tổng** | **51** | **24** | **24** | **3** | **26** | **0** | **0** |
 
 ---
 
