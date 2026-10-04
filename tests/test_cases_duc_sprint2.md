@@ -32,12 +32,12 @@
 **Mức độ:** P0
 **Điều kiện:**
 - Trụ ảo CP-001 đang kết nối, `status = online`, `last_seen_at` được cập nhật mỗi heartbeat
-- Config: `OCPP_HEARTBEAT_INTERVAL_SECONDS=60`, `OCPP_HEARTBEAT_MULTIPLIER=2` (rút ngắn để test nhanh)
+- Config: `OCPP_HEARTBEAT_INTERVAL_SECONDS=5`, `OCPP_HEARTBEAT_MULTIPLIER=2` (timeout = 10s)
 
 **Bước thực hiện:**
 1. Xác nhận CP-001 `status = online` trong DB
 2. Dừng container/process của trụ ảo CP-001
-3. Chờ ≥ 120 giây + 60 giây (1 chu kỳ job) = 180 giây
+3. Chờ ≥ timeout (10s) + chu kỳ job
 4. Query DB: `SELECT status FROM charge_points WHERE code = 'CP-001'`
 
 **Kết quả mong đợi:**
@@ -45,8 +45,8 @@
 - `last_seen_at` không thay đổi sau khi dừng
 - Log backend có dòng: `Charge point marked offline after missed heartbeats: CP-001`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Trụ CP-001 tự động chuyển sang offline khi last_seen_at quá 10s. last_seen_at được giữ nguyên.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -61,8 +61,8 @@
 **Kết quả mong đợi:**
 - Tất cả connector của CP-001: `status = 'unknown'`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Tất cả các connector của CP-001 đều chuyển về trạng thái 'unknown' sau khi trụ bị đánh dấu offline.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -79,8 +79,8 @@
 - `status = 'online'`
 - `last_seen_at` được cập nhật (> thời điểm trước)
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Trụ CP-001 nhận Heartbeat -> status hồi phục về 'online', last_seen_at được cập nhật thời gian mới.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -96,8 +96,8 @@
 - Connector status = `available` (hoặc trạng thái thực tế trụ báo)
 - **Không** còn là `unknown` sau khi StatusNotification được xử lý
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Connector 1 cập nhật thành công từ 'unknown' sang 'rảnh' (tương ứng InternalStatus.IDLE / Available) sau khi nhận StatusNotification.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -114,8 +114,8 @@
 - CP-002 vẫn `status = 'online'`
 - CP-001 chuyển `offline`
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `CP-001 stale chuyển offline, CP-002 có heartbeat gần nhất vẫn giữ nguyên status 'online'.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -131,8 +131,8 @@
 - Status vẫn `offline`, không có thay đổi thêm
 - Không có lỗi exception, không có log bất thường
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `Lần chạy thứ 2 trả về 0 bản ghi thay đổi, không gây tác dụng phụ, tính idempotent được đảm bảo.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -150,8 +150,8 @@
 - Nhận event `status_update` với `station_id` của trạm chứa CP-001
 - UI lưới cập nhật ô CP-001 sang trạng thái offline **không cần F5**
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `SSE event notify_status_change được kích hoạt thành công cho station_id=999 khi trụ offline.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
@@ -169,8 +169,8 @@
 - CP-003 (nếu còn chạy) vẫn `online`
 - Không có trạng thái lẫn lộn
 
-**Kết quả thực tế:** `___________`
-**Pass/Fail:** ☐ PASS ☐ FAIL ☐ BLOCK
+**Kết quả thực tế:** `CP-001 và CP-002 đồng thời chuyển offline, CP-003 vẫn online chính xác, không nhầm lẫn.`
+**Pass/Fail:** ☑ PASS ☐ FAIL ☐ BLOCK
 
 ---
 
