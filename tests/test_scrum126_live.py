@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Script kiểm thử tự động 8 Test Case của SCRUM-126 (T-27).
 Chạy trực tiếp với DB và services của CSMS để kiểm chứng hành vi:
@@ -11,10 +12,9 @@ Chạy trực tiếp với DB và services của CSMS để kiểm chứng hành
 - TC-126-08: Bật/dừng nhiều trụ cùng lúc
 """
 
-import asyncio
-import json
+import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app.config import settings
 from app.database import SessionLocal
@@ -79,7 +79,7 @@ def run_all_tests():
         cp1.last_seen_at = stale_time
         db.commit()
 
-        expired_count = expire_stale_charge_points_once(db)
+        expire_stale_charge_points_once(db)
         db.refresh(cp1)
         assert cp1.status == "offline", f"CP-001 status should be offline, got {cp1.status}"
         assert cp1.last_seen_at == stale_time, "last_seen_at không được đổi sau khi stale"
@@ -109,7 +109,6 @@ def run_all_tests():
         # -------------------------------------------------------------
         # TC-126-03: Bật lại trụ -> trạng thái trở về online
         # -------------------------------------------------------------
-        import time
         old_seen = cp1.last_seen_at
         hb_call = pack_call(f"hb-{time.time_ns()}", "Heartbeat", {})
         resp = handle_ocpp_message(db, "CP-001", hb_call)
@@ -191,7 +190,7 @@ def run_all_tests():
             assert call_args[0] == 999, f"Station ID phát SSE phải là 999, nhận {call_args[0]}"
         results["TC-126-07"] = {
             "status": "PASS",
-            "detail": f"SSE event notify_status_change được kích hoạt thành công cho station_id=999 khi trụ offline.",
+            "detail": "SSE event notify_status_change được kích hoạt thành công cho station_id=999 khi trụ offline.",
         }
 
         # -------------------------------------------------------------
