@@ -156,8 +156,12 @@ def test_status_notification_unknown_connector_throttles(db_session, caplog, mon
     caplog.clear()
     
     # Gửi 5 lần
-    for _ in range(5):
-        res = _send_status(db_session, {"connectorId": 3, "errorCode": "NoError", "status": "Available"})
+    for attempt in range(5):
+        res = _send_status(
+            db_session,
+            {"connectorId": 3, "errorCode": "NoError", "status": "Available"},
+            msg_id=f"throttle-{attempt}",
+        )
         assert res == {}
 
     # Chỉ có 1 log warning
@@ -166,14 +170,22 @@ def test_status_notification_unknown_connector_throttles(db_session, caplog, mon
 
     # Dời đồng hồ qua khoảng gom (mặc định 300s, ta dời 301s)
     current_time += 301.0
-    _send_status(db_session, {"connectorId": 3, "errorCode": "NoError", "status": "Available"})
+    _send_status(
+        db_session,
+        {"connectorId": 3, "errorCode": "NoError", "status": "Available"},
+        msg_id="throttle-after-window",
+    )
     
     # Lần này phải có log thứ 2
     warnings_after = [rec for rec in caplog.records if "Đầu nối chưa khai báo" in rec.message]
     assert len(warnings_after) == 2
 
     # Hai trụ hoặc đầu nối khác nhau có khoá riêng
-    _send_status(db_session, {"connectorId": 4, "errorCode": "NoError", "status": "Available"})
+    _send_status(
+        db_session,
+        {"connectorId": 4, "errorCode": "NoError", "status": "Available"},
+        msg_id="throttle-other-connector",
+    )
     warnings_diff = [rec for rec in caplog.records if "Đầu nối chưa khai báo" in rec.message]
     assert len(warnings_diff) == 3
 
