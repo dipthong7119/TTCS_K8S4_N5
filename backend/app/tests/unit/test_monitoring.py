@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone
 from time import perf_counter
 from types import SimpleNamespace
@@ -187,3 +188,72 @@ def apply_override():
     app.dependency_overrides.clear()
 
 client = TestClient(app)
+
+def test_publish_charge_point_status_uses_station_payload(monkeypatch):
+    from app.routers import monitoring
+    from app.services.ocpp_handlers import publish_charge_point_status
+
+    queue = asyncio.Queue()
+    monkeypatch.setattr(
+        monitoring,
+        "sse_clients",
+        [{"owner_id": 2, "global_access": False, "queue": queue}],
+    )
+
+    db = SessionLocalTest()
+    # cp2 is offline, its connector cn2 has status 'bận'
+    # The payload should mark connector as 'unknown' due to station_status_payload logic.
+    publish_charge_point_status(db, 2)
+    db.close()
+
+    assert queue.qsize() == 1
+    event = queue.get_nowait()
+    assert event["event"] == "status_update"
+    data = json.loads(event["data"])
+    assert data["station_id"] == 2
+    assert len(data["charge_points"]) == 1
+    cp = data["charge_points"][0]
+    assert cp["status"] == "offline"
+    assert cp["connectors"][0]["status"] == "unknown"
+
+
+def test_sse_queue_limit_drops_oldest_event(monkeypatch):
+    from app.routers import monitoring
+
+    # queue size 10
+    queue = asyncio.Queue(maxsize=monitoring.SSE_QUEUE_LIMIT)
+    monkeypatch.setattr(
+        monitoring,
+        "sse_clients",
+        [{"owner_id": 1, "global_access": True, "queue": queue}],
+    )
+
+    # Fill the queue
+    for i in range(monitoring.SSE_QUEUE_LIMIT):
+        monitoring.notify_status_change(1, [{"id": i}], owner_id=1)
+
+    assert queue.qsize() == monitoring.SSE_QUEUE_LIMIT
+
+    # Add one more
+    monitoring.notify_status_change(1, [{"id": 999}], owner_id=1)
+    assert queue.qsize() == monitoring.SSE_QUEUE_LIMIT
+
+    # The first event was dropped. The oldest now should be id=1.
+    event = queue.get_nowait()
+    data = json.loads(event["data"])
+    assert data["charge_points"][0]["id"] == 1
+
+
+def test_status_updates_are_not_sent_to_drivers(monkeypatch):
+    from app.routers import monitoring
+
+    driver_queue = asyncio.Queue()
+    monkeypatch.setattr(
+        monitoring,
+        "sse_clients",
+        [{"owner_id": None, "driver_id": 3, "global_access": False, "queue": driver_queue}],
+    )
+
+    monitoring.notify_status_change(1, [{"code": "CP-1"}], owner_id=1)
+
+    assert driver_queue.empty()

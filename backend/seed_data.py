@@ -16,7 +16,11 @@ from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import User
 from app.models.wallet_ledger import WalletLedgerEntry
-from app.services.pricing import DEMO_TARIFF_BANDS, DEMO_TARIFF_TIMEZONE, calculate_session_price
+from app.services.pricing import (
+    DEMO_TARIFF_BANDS,
+    DEMO_TARIFF_TIMEZONE,
+    calculate_session_price,
+)
 
 SIMULATOR_CODES = tuple(f"SIM-{number:02d}" for number in range(1, 21))
 
@@ -237,8 +241,7 @@ def _ensure_connector_error(db: Session, connector: Connector, counts: dict[str,
                 connector_id=connector.id,
                 error_code="GroundFailure",
                 vendor_error_code="DEMO-GND-01",
-                info="Bản ghi lỗi giả lập để minh họa trạng thái đầu nối; không phải lỗi thiết bị thật.",
-                timestamp=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+                occurred_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
             )
         )
         counts["connector_errors"] += 1
@@ -401,7 +404,7 @@ def _ensure_audit_samples(
 
 
 def _ensure_demo_tariffs(db: Session, stations: list[Station], counts: dict[str, int]) -> None:
-    effective_from = datetime(2000, 1, 1)
+    effective_from = datetime(2000, 1, 1, tzinfo=UTC).replace(tzinfo=None)
     for station in stations:
         tariff = (
             db.query(StationTariff)

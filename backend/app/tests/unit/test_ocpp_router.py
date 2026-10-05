@@ -149,3 +149,90 @@ def test_websocket_rejects_unsupported_protocol():
     ):
         websocket.receive_text()
     assert exc.value.code == 1002
+
+def test_websocket_disconnect_publishes_offline_status():
+    import json
+
+    from app.services import connection_manager
+    
+    with patch("app.services.ocpp_handlers.publish_charge_point_status") as mock_publish:
+        with client.websocket_connect("/ocpp/CP_VALID", subprotocols=["ocpp1.6"]) as ws:
+            ws.send_text(
+                json.dumps(
+                    [
+                        2,
+                        "boot1",
+                        "BootNotification",
+                        {
+                            "chargePointVendor": "VendorX",
+                            "chargePointModel": "ModelY",
+                        },
+                    ]
+                )
+            )
+            # Receive response
+            ws.receive_text()
+            # Active connections should have CP_VALID
+            assert "CP_VALID" in connection_manager.manager.active_connections
+        
+        # When context exits, the websocket is closed and disconnected.
+        # It should have called publish_charge_point_status
+        mock_publish.assert_called()
+        # Verify it went offline in the DB
+        db = SessionLocalTest()
+        cp = db.query(ChargePoint).filter_by(code="CP_VALID").first()
+        assert cp.status == "offline"
+        db.close()
+
+
+def test_replaced_websocket_does_not_send_inflight_response(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from starlette.websockets import WebSocketDisconnect
+
+    from app.services.connection_manager import ConnectionManager
+    from app.services.ocpp_parser import pack_call_result
+
+    manager = ConnectionManager()
+    replacement = object()
+    monkeypatch.setattr(ocpp_router_mod, "manager", manager)
+
+    class FakeWebSocket:
+        def __init__(self):
+            self.headers = {"sec-websocket-protocol": "ocpp1.6"}
+            self.client = SimpleNamespace(host="testclient")
+            self.accepted = False
+            self.sent = []
+            self.received = False
+
+        async def accept(self, subprotocol=None):
+            self.accepted = subprotocol == "ocpp1.6"
+
+        async def receive_text(self):
+            if not self.received:
+                self.received = True
+                return '[2,"race-boot","BootNotification",{}]'
+            raise WebSocketDisconnect(code=1000)
+
+        async def send_text(self, text):
+            self.sent.append(text)
+
+        async def close(self, code=1000, reason=None):
+            return None
+
+    websocket = FakeWebSocket()
+
+    def finish_after_reconnect(db, charge_point_code, raw_message):
+        manager.active_connections[charge_point_code] = replacement
+        return pack_call_result("race-boot", {"status": "Accepted"})
+
+    monkeypatch.setattr(
+        ocpp_router_mod, "handle_ocpp_message", finish_after_reconnect
+    )
+
+    asyncio.run(ocpp_router_mod.ocpp_websocket_endpoint(websocket, "CP_VALID"))
+
+    assert websocket.accepted
+    assert websocket.sent == []
+    assert manager.active_connections["CP_VALID"] is replacement

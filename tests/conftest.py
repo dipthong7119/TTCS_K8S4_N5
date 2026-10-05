@@ -12,6 +12,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
+# Bỏ qua các script live test của Tester khi chạy unit test CI tự động
+collect_ignore = [
+    "test_scrum126_live.py",
+    "test_scrum130_live.py",
+    "test_scrum135_live.py",
+]
+
 from app.core.security import hash_password
 from app.database import Base, get_db
 from app.main import app
@@ -35,6 +42,11 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
+
+
+@pytest.fixture
+def db(db_session: Session) -> Session:
+    return db_session
 
 
 @pytest.fixture

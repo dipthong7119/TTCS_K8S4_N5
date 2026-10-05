@@ -177,6 +177,8 @@ def test_second_boot_does_not_create_new_charge_point(db_session):
     """Gửi BootNotification 2 lần → bảng charge_points vẫn 1 dòng (S-08 AC3)."""
     _boot(db_session, FULL_PAYLOAD, msg_id="boot-a")
     _boot(db_session, {**FULL_PAYLOAD, "firmwareVersion": "2.0"}, msg_id="boot-b")
+    cp = db_session.query(ChargePoint).filter_by(code="CP-TEST").one()
+    assert cp.firmware_version == "2.0"
     count = db_session.query(ChargePoint).filter_by(code="CP-TEST").count()
     assert count == 1
 
@@ -198,8 +200,7 @@ def test_second_boot_still_accepted(db_session):
     ids=["60s", "300s", "600s"],
 )
 def test_interval_follows_config(db_session, interval):
-    """interval trong CALLRESULT phải bằng OCPP_HEARTBEAT_INTERVAL_SECONDS (T-17 AC)."""
-    with patch("app.services.ocpp_handlers.settings") as mock_settings:
-        mock_settings.OCPP_HEARTBEAT_INTERVAL_SECONDS = interval
+    """interval trong CALLRESULT phải bằng HEARTBEAT_INTERVAL (T-17 AC)."""
+    with patch("app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval):
         _, _, result = _boot(db_session, FULL_PAYLOAD, msg_id=f"boot-iv-{interval}")
     assert result["interval"] == interval

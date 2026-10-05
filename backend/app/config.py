@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     LOCKOUT_DURATION_MINUTES: int = 15
 
     # OCPP 1.6J and background job settings
+    HEARTBEAT_INTERVAL: int = 300
     OCPP_HEARTBEAT_INTERVAL_SECONDS: int = 300
     OCPP_HEARTBEAT_MULTIPLIER: int = 2
     OCPP_MESSAGE_RETENTION_DAYS: int = 7
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     OCPP_REMOTE_CALL_TIMEOUT_SECONDS: int = 30
     SESSION_OFFLINE_GRACE_SECONDS: int = 21600
     REMOTE_STOP_REVIEW_SECONDS: int = 120
+    UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
 
     model_config = {
         "env_file": str(ENV_FILE),

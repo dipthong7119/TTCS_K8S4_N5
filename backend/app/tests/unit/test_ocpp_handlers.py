@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
-from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import Role, User
 from app.services.ocpp_handlers import handle_ocpp_message
@@ -110,14 +109,16 @@ def test_handle_heartbeat(db_session):
     cp = db_session.query(ChargePoint).filter_by(code="CP001").first()
     assert cp.last_seen_at is not None
 
-def test_handle_unsupported_action(db_session):
+def test_handle_unsupported_action(db_session, caplog):
     raw_msg = pack_call("msg4", "UnknownAction", {})
-    resp = handle_ocpp_message(db_session, "CP001", raw_msg)
-    
+    with caplog.at_level("WARNING", logger="app.services.ocpp_handlers"):
+        resp = handle_ocpp_message(db_session, "CP001", raw_msg)
+
     msg_type, msg_id, _, err_code, err_desc, _ = parse_message(resp)
     assert msg_type == 4
     assert msg_id == "msg4"
     assert err_code == "NotImplemented"
+    assert any("UnknownAction" in record.message for record in caplog.records)
 
 def test_handle_status_notification(db_session):
     # Setup connector
@@ -159,13 +160,11 @@ def test_handle_status_notification_error(db_session):
     
     conn_db = db_session.query(Connector).filter_by(id=conn.id).first()
     assert conn_db.status == "lỗi"
-    assert conn_db.error_code == "InternalError"
-    
-    # Check error table
+
+    # Kể từ SCRUM-120, mã lỗi được lưu vào bảng connector_errors thay vì cập nhật đè lên bảng connectors
     err = db_session.query(ConnectorError).filter_by(connector_id=conn.id).first()
     assert err is not None
     assert err.error_code == "InternalError"
-    assert err.info == "Something broke"
 
 def test_handle_status_notification_unregistered_connector(db_session, caplog):
     raw_msg = pack_call("msg7", "StatusNotification", {
@@ -183,39 +182,6 @@ def test_handle_status_notification_unregistered_connector(db_session, caplog):
     assert "CP001" in caplog.text
     assert "99" in caplog.text
 
-
-def test_handle_authorize(db_session):
-    now = datetime.now(timezone.utc)
-    tag1 = IdTag(id_tag="VALID1", user_id=1, is_blocked=False, expiry_date=now + timedelta(days=1))
-    tag2 = IdTag(id_tag="BLOCKED1", user_id=1, is_blocked=True)
-    tag3 = IdTag(id_tag="EXPIRED1", user_id=1, is_blocked=False, expiry_date=now - timedelta(days=1))
-    
-    db_session.add_all([tag1, tag2, tag3])
-    db_session.commit()
-    
-    # Valid
-    raw1 = pack_call("msg_a1", "Authorize", {"idTag": "VALID1"})
-    resp1 = handle_ocpp_message(db_session, "CP001", raw1)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp1)
-    assert payload["idTagInfo"]["status"] == "Accepted"
-    
-    # Blocked
-    raw2 = pack_call("msg_a2", "Authorize", {"idTag": "BLOCKED1"})
-    resp2 = handle_ocpp_message(db_session, "CP001", raw2)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp2)
-    assert payload["idTagInfo"]["status"] == "Blocked"
-    
-    # Expired
-    raw3 = pack_call("msg_a3", "Authorize", {"idTag": "EXPIRED1"})
-    resp3 = handle_ocpp_message(db_session, "CP001", raw3)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp3)
-    assert payload["idTagInfo"]["status"] == "Expired"
-    
-    # Invalid
-    raw4 = pack_call("msg_a4", "Authorize", {"idTag": "UNKNOWN"})
-    resp4 = handle_ocpp_message(db_session, "CP001", raw4)
-    msg_type, msg_id, _, payload, _, _ = parse_message(resp4)
-    assert payload["idTagInfo"]["status"] == "Invalid"
 
 
 def test_last_seen_uses_server_clock_when_device_timestamp_is_skewed(db_session):

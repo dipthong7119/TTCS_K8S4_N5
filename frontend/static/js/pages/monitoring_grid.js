@@ -4,6 +4,8 @@
 
   let stations = [];
   let isMockMode = false;
+  let mockModeSelected = false;
+  let loadRequestId = 0;
   const canReset = document.getElementById('monitoring-grid')?.dataset.canReset === 'true';
 
   // Bộ dữ liệu mẫu 20 trụ sạc đáp ứng tiêu chí nghiệm thu SCRUM-124 / T-24 (Story S-11)
@@ -245,6 +247,8 @@
     return 'unknown';
   }
 
+  let activeDetailStationId = null;
+
   function updateMockBtnUI() {
     const btn = document.getElementById('btn-toggle-mock');
     const label = document.getElementById('mock-btn-label');
@@ -262,22 +266,35 @@
 
   function toggleMockMode() {
     isMockMode = !isMockMode;
+    mockModeSelected = isMockMode;
+    loadRequestId += 1; // Ignore an in-flight API response after the user changes sources.
     if (isMockMode) {
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
+      if (typeof RealtimeStatus !== 'undefined' && typeof RealtimeStatus.connect === 'function') {
+        RealtimeStatus.connect();
+      }
       if (typeof showToast === 'function') {
         showToast('Đang hiển thị bộ dữ liệu mẫu 20 trụ kiểm thử giao diện (SCRUM-124 / T-24)', 'info');
       }
     } else {
+      if (typeof RealtimeStatus !== 'undefined' && typeof RealtimeStatus.disconnect === 'function') {
+        RealtimeStatus.disconnect();
+      }
       updateMockBtnUI();
-      loadData();
+      loadData(true);
     }
   }
 
-  async function loadData() {
-    if (isMockMode) {
+  async function loadData(forceServer = false) {
+    const requestId = ++loadRequestId;
+    if (forceServer) {
+      isMockMode = false;
+      updateMockBtnUI();
+    }
+    if (isMockMode && mockModeSelected) {
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       render();
       document.getElementById('mon-loading')?.remove();
@@ -287,10 +304,11 @@
 
     try {
       const result = await ApiClient.getMonitoringTree();
+      if (requestId !== loadRequestId) return;
       const serverStations = Array.isArray(result) ? result : (result?.stations || []);
       const totalPoints = serverStations.reduce((sum, s) => sum + (s.charge_points || []).length, 0);
 
-      if (totalPoints > 0) {
+      if (totalPoints > 0 || serverStations.length > 0) {
         stations = serverStations;
         isMockMode = false;
       } else {
@@ -301,9 +319,14 @@
         }
       }
       render();
+      if (activeDetailStationId) {
+        const curStation = stations.find(s => s.id === activeDetailStationId);
+        if (curStation) renderDetailBody(curStation);
+      }
       document.getElementById('mon-loading')?.remove();
       updateMockBtnUI();
     } catch (error) {
+      if (requestId !== loadRequestId) return;
       stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
       isMockMode = true;
       render();
@@ -319,7 +342,7 @@
     if (!wanted) return true;
     return (station.charge_points || []).some(point =>
       point.status === wanted || internalStatus(point.ocpp_status) === wanted ||
-      (point.connectors || []).some(connector => connector.status === wanted)
+      (point.connectors || []).some(connector => connector.status === wanted || internalStatus(connector.ocpp_status) === wanted)
     );
   }
 
@@ -346,7 +369,7 @@
     const lastSeen = point.status === 'offline' && point.last_seen_at
       ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>`
       : '';
-    return `<section class="cp-tile" aria-label="Trụ ${escapeHtml(point.code)}">
+    return `<section class="cp-tile" aria-label="Trụ ${escapeHtml(point.code)}" data-cp-code="${escapeHtml(point.code)}">
       <div class="cp-tile__header">
         <strong class="cp-tile__code">${escapeHtml(point.code)}</strong>${statusBadge(displayedStatus)}
       </div>
@@ -359,7 +382,7 @@
     const points = station.charge_points || [];
     if (!points.length) return station.status || 'unknown';
     if (points.every(point => point.status === 'offline')) return 'offline';
-    if (points.some(point => internalStatus(point.ocpp_status) === 'lỗi' || (point.connectors || []).some(connector => connector.status === 'lỗi'))) return 'lỗi';
+    if (points.some(point => point.status === 'lỗi' || internalStatus(point.ocpp_status) === 'lỗi' || (point.connectors || []).some(connector => connector.status === 'lỗi' || internalStatus(connector.ocpp_status) === 'lỗi'))) return 'lỗi';
     return 'online';
   }
 
@@ -386,6 +409,13 @@
           ${(station.charge_points || []).map(chargePointMarkup).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}
         </div></div>`;
         card.querySelector('.station-card__open').addEventListener('click', () => openDetail(station));
+        card.querySelectorAll('.cp-tile').forEach(tile => {
+          tile.style.cursor = 'pointer';
+          tile.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openDetail(station);
+          });
+        });
         grid.appendChild(card);
       });
     }
@@ -395,18 +425,21 @@
   function updateStats() {
     const points = stations.flatMap(station => station.charge_points || []);
     const connectors = points.flatMap(point => point.connectors || []);
-    document.getElementById('mon-total').textContent = points.length;
-    document.getElementById('mon-charging').textContent = connectors.filter(connector => connector.status === 'bận').length;
-    document.getElementById('mon-offline').textContent = points.filter(point => point.status === 'offline').length;
-    document.getElementById('mon-fault').textContent =
-      connectors.filter(connector => connector.status === 'lỗi').length +
-      points.filter(point => internalStatus(point.ocpp_status) === 'lỗi').length;
+    const totalEl = document.getElementById('mon-total');
+    const chargingEl = document.getElementById('mon-charging');
+    const offlineEl = document.getElementById('mon-offline');
+    const faultEl = document.getElementById('mon-fault');
+    if (totalEl) totalEl.textContent = points.length;
+    if (chargingEl) chargingEl.textContent = connectors.filter(connector => connector.status === 'bận' || connector.ocpp_status === 'Charging').length;
+    if (offlineEl) offlineEl.textContent = points.filter(point => point.status === 'offline').length;
+    if (faultEl) faultEl.textContent =
+      connectors.filter(connector => connector.status === 'lỗi' || connector.ocpp_status === 'Faulted').length +
+      points.filter(point => internalStatus(point.ocpp_status) === 'lỗi' || point.status === 'lỗi').length;
   }
 
-  function openDetail(station) {
-    const backdrop = document.getElementById('detail-backdrop');
-    const body = document.getElementById('detail-body');
-    document.getElementById('detail-title').textContent = station.name;
+  function renderDetailBody(station, body) {
+    if (!body) body = document.getElementById('detail-body');
+    if (!body) return;
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
         const lastSeen = point.last_seen_at
@@ -416,38 +449,59 @@
           <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
           ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${restartMarkup}</section>`;
       }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
-    // Gắn sự kiện cho RestartButton (SCRUM-134)
     RestartButton.bindEvents(body);
+  }
+
+  function openDetail(station) {
+    activeDetailStationId = station.id;
+    const backdrop = document.getElementById('detail-backdrop');
+    const body = document.getElementById('detail-body');
+    document.getElementById('detail-title').textContent = station.name;
+    renderDetailBody(station, body);
     backdrop.classList.remove('is-hidden');
     document.getElementById('detail-close').focus();
   }
-
-  // resetPoint đã được thay thế bởi RestartButton.handleRestart (SCRUM-134)
 
   function connectSSE() {
     const indicator = document.getElementById('sse-indicator');
     const label = document.getElementById('sse-label');
     SseClient.on('_connected', () => {
-      indicator.className = 'sse-indicator connected';
-      label.textContent = 'Đang theo dõi';
-      loadData(); // Refresh authoritative state after the initial connection or reconnect.
+      if (indicator) indicator.className = 'sse-indicator connected';
+      if (label) label.textContent = 'Đang theo dõi';
+      if (!mockModeSelected) {
+        loadData(true); // Retry the server tree after initial connection or reconnect, including after mock fallback.
+      }
     });
     SseClient.on('_error', () => {
-      indicator.className = 'sse-indicator error';
-      label.textContent = 'Đang kết nối lại';
+      if (indicator) indicator.className = 'sse-indicator error';
+      if (label) label.textContent = 'Đang kết nối lại';
     });
     SseClient.on('status_update', payload => {
+      if (mockModeSelected) return; // Giữ nguyên dữ liệu mẫu khi người dùng chủ động bật mock.
+      if (isMockMode) {
+        loadData(true); // An SSE update can arrive while the page is showing fallback mock data.
+        return;
+      }
       const station = stations.find(item => item.id === payload.station_id);
-      if (station && payload.charge_points) station.charge_points = payload.charge_points;
-      render();
+      if (station && payload.charge_points) {
+        station.charge_points = payload.charge_points;
+        render();
+        // Cập nhật tức thời Drawer chi tiết trạm nếu đang mở (realtime detail sync)
+        if (activeDetailStationId === station.id) {
+          renderDetailBody(station);
+        }
+      } else {
+        // Trạm mới hoặc cây chưa có trạm này -> tải lại cây authoritative
+        loadData(false);
+      }
     });
     SseClient.connect('/api/monitoring/sse');
   }
 
-  // ── Hook RealtimeStatus (SCRUM-134) ─────────────────────────────────
+  // ── Hook RealtimeStatus (Dành cho kiểm thử giao diện & mock) ───────────
   function connectRealtimeHook() {
     RealtimeStatus.subscribe('status_change', (payload) => {
-      // Cập nhật trạng thái đầu nối trong dữ liệu local khi nhận sự kiện mock/thật
+      if (!isMockMode) return;
       for (const station of stations) {
         for (const point of (station.charge_points || [])) {
           if (point.code === payload.charge_point_code) {
@@ -456,15 +510,19 @@
                 conn.status = internalStatus(payload.status);
               }
             }
-            // Cập nhật ocpp_status của trụ nếu phù hợp
             point.ocpp_status = payload.status;
           }
         }
       }
       render();
+      if (activeDetailStationId) {
+        const cur = stations.find(s => s.id === activeDetailStationId);
+        if (cur) renderDetailBody(cur);
+      }
     });
 
     RealtimeStatus.subscribe('cp_offline', (payload) => {
+      if (!isMockMode) return;
       for (const station of stations) {
         for (const point of (station.charge_points || [])) {
           if (point.code === payload.charge_point_code) {
@@ -473,10 +531,15 @@
         }
       }
       render();
+      if (activeDetailStationId) {
+        const cur = stations.find(s => s.id === activeDetailStationId);
+        if (cur) renderDetailBody(cur);
+      }
       showToast(`Trụ ${payload.charge_point_code} đã mất kết nối`, 'warning');
     });
 
     RealtimeStatus.subscribe('cp_online', (payload) => {
+      if (!isMockMode) return;
       for (const station of stations) {
         for (const point of (station.charge_points || [])) {
           if (point.code === payload.charge_point_code) {
@@ -485,10 +548,16 @@
         }
       }
       render();
+      if (activeDetailStationId) {
+        const cur = stations.find(s => s.id === activeDetailStationId);
+        if (cur) renderDetailBody(cur);
+      }
       showToast(`Trụ ${payload.charge_point_code} đã trực tuyến trở lại`, 'success');
     });
 
-    RealtimeStatus.connect();
+    if (isMockMode) {
+      RealtimeStatus.connect();
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -525,6 +594,7 @@
   }
 
   function closeDetail() {
+    activeDetailStationId = null;
     const backdrop = document.getElementById('detail-backdrop');
     if (backdrop && !backdrop.classList.contains('is-hidden')) {
       backdrop.classList.add('is-hidden');

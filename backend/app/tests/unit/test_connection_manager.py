@@ -82,6 +82,31 @@ def test_duplicate_connection(caplog):
 
     asyncio.run(run_test())
 
+def test_reconnect_succeeds_when_old_websocket_close_raises(caplog):
+    from unittest.mock import AsyncMock
+
+    from app.services.connection_manager import ConnectionManager
+
+    manager = ConnectionManager()
+    old_websocket = AsyncMock()
+    old_websocket.close.side_effect = RuntimeError("socket already closed")
+    new_websocket = AsyncMock()
+
+    async def exercise():
+        await manager.connect("CP-1", old_websocket)
+
+        with caplog.at_level("DEBUG", logger="app.services.connection_manager"):
+            await manager.connect("CP-1", new_websocket)
+
+        assert manager.active_connections["CP-1"] is new_websocket
+        old_websocket.close.assert_awaited_once_with(
+            code=1000, reason="New connection opened"
+        )
+        assert "Could not close the previous charge point websocket" in caplog.text
+
+    asyncio.run(exercise())
+
+
 @pytest.fixture(scope="function", autouse=True)
 def apply_override():
     app.dependency_overrides[get_db] = override_get_db
@@ -128,6 +153,32 @@ def test_connection_manager_fails_pending_on_reconnect():
             await pending
 
     asyncio.run(exercise())
+
+def test_connection_manager_cleans_pending_call_after_timeout():
+    from unittest.mock import AsyncMock
+
+    from app.services.connection_manager import ConnectionManager
+
+    manager = ConnectionManager()
+    websocket = AsyncMock()
+
+    async def exercise():
+        await manager.connect("CP-1", websocket)
+        call = asyncio.create_task(
+            manager.send_call("CP-1", "Reset", {"type": "Soft"}, timeout=0.01)
+        )
+        await asyncio.sleep(0)
+        pending_future = next(iter(manager.pending_calls.values()))
+
+        with pytest.raises(asyncio.TimeoutError):
+            await call
+
+        assert pending_future.cancelled()
+        assert manager.pending_calls == {}
+        assert manager._pending_websockets == {}
+
+    asyncio.run(exercise())
+
 
 def test_connection_manager_resolves_call_error():
     import json

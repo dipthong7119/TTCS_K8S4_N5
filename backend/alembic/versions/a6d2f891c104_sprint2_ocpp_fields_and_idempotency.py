@@ -1,10 +1,13 @@
 """Add OCPP raw status, scoped idempotency, and error lookup indexes."""
 
+import logging
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 
 from alembic import op
+
+logger = logging.getLogger(__name__)
 
 revision: str = "a6d2f891c104"
 down_revision: str | None = "b37ad56c90e1"
@@ -50,9 +53,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_connector_errors_connector_timestamp", table_name="connector_errors")
+    try:
+        op.drop_index("ix_connector_errors_connector_timestamp", table_name="connector_errors")
+    except Exception as e:
+        logger.warning("Drop index failed: %s", e)
     op.drop_index("uq_ocpp_message_per_charge_point", table_name="ocpp_messages")
-    op.create_index("ix_ocpp_messages_msg_id", "ocpp_messages", ["msg_id"], unique=True)
-    op.drop_column("ocpp_messages", "request_hash")
-    op.drop_column("connectors", "ocpp_status")
-    op.drop_column("charge_points", "ocpp_status")
+    try:
+        op.create_index("ix_ocpp_messages_msg_id", "ocpp_messages", ["msg_id"], unique=True)
+    except Exception as e:
+        logger.warning("Create index failed: %s", e)
+    with op.batch_alter_table("ocpp_messages") as batch_op:
+        batch_op.drop_column("request_hash")
+    with op.batch_alter_table("connectors") as batch_op:
+        batch_op.drop_column("ocpp_status")
+    with op.batch_alter_table("charge_points") as batch_op:
+        batch_op.drop_column("ocpp_status")

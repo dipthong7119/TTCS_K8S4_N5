@@ -62,7 +62,7 @@
             id="station-name" name="name" type="text"
             class="form-input"
             placeholder="VD: Trạm sạc Quận 1 — Tòa nhà ABC"
-            value="{{ station.name | default('') }}"
+            value="{{ station.name | default('') if is_edit else '' }}"
             maxlength="255"
             required aria-required="true" aria-describedby="name-error"
           />
@@ -80,7 +80,7 @@
             placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
             rows="3"
             required aria-required="true" aria-describedby="address-error"
-          >{{ station.address | default('') }}</textarea>
+          >{{ station.address | default('') if is_edit else '' }}</textarea>
           <p class="form-error" id="address-error" data-error="address" role="alert"></p>
         </div>
 
@@ -92,7 +92,7 @@
               id="station-lat" name="latitude" type="number" step="any"
               class="form-input"
               placeholder="VD: 10.762622"
-              value="{{ station.latitude | default('') }}"
+              value="{{ station.latitude | default('') if is_edit else '' }}"
               aria-describedby="lat-hint"
               min="-90" max="90"
             />
@@ -104,7 +104,7 @@
               id="station-lng" name="longitude" type="number" step="any"
               class="form-input"
               placeholder="VD: 106.660172"
-              value="{{ station.longitude | default('') }}"
+              value="{{ station.longitude | default('') if is_edit else '' }}"
               aria-describedby="lng-error"
               min="-180" max="180"
             />
