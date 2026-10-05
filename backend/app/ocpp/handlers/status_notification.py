@@ -29,9 +29,20 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
         logger.error("Invalid status %s from %s", status_raw, charge_point_code)
         return pack_call_error(msg_id, "FormationViolation", "status must be a non-empty string")
 
-    # connectorId = 0 reports the charge point status, not a connector row.
+    # connectorId = 0 báo trạng thái cả trụ, không cập nhật bảng connectors.
     if connector_id == 0:
-        logger.info("Charge point %s global status: %s", charge_point_code, status_raw)
+        db.execute(
+            update(ChargePoint)
+            .where(ChargePoint.code == charge_point_code)
+            .values(ocpp_status=status_raw)
+            .execution_options(synchronize_session=False)
+        )
+        logger.info(
+            "Trụ %s trạng thái toàn cục: status=%s errorCode=%s",
+            charge_point_code,
+            status_raw,
+            payload.get("errorCode", "NoError"),
+        )
         return pack_call_result(msg_id, {})
 
     internal_status = map_ocpp_status(status_raw).value
@@ -43,6 +54,8 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     if isinstance(timestamp_raw, str) and timestamp_raw:
         try:
             parsed_timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            if parsed_timestamp.tzinfo is None:
+                parsed_timestamp = parsed_timestamp.replace(tzinfo=UTC)
             occurred_at = parsed_timestamp.astimezone(UTC).replace(tzinfo=None)
         except ValueError:
             pass
@@ -58,7 +71,7 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
             Connector.charge_point_id == charge_point_id,
             Connector.connector_id == connector_id,
         )
-        .values(status=internal_status, ocpp_status=status_raw)
+        .values(status=internal_status, ocpp_status=status_raw, error_code=error_code)
         .returning(Connector.id)
         .execution_options(synchronize_session=False)
     )
@@ -83,15 +96,30 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
             )
         return pack_call_result(msg_id, {})
 
+    # Log ngắn gọn khi cập nhật đầu nối thành công (mã trụ, connectorId, status, errorCode)
+    logger.info(
+        "StatusNotification charge_point=%s connector=%s status=%s errorCode=%s",
+        charge_point_code,
+        connector_id,
+        status_raw,
+        error_code,
+    )
+
     if error_code != "NoError":
         db.add(
             ConnectorError(
                 connector_id=connector[0],
                 error_code=error_code,
-                vendor_error_code=vendor_error_code,
+                vendor_error_code=vendor_error_code if vendor_error_code else None,
                 occurred_at=occurred_at,
             )
         )
-        logger.warning("Connector error %s-%s: %s", charge_point_code, connector_id, error_code)
+        logger.warning(
+            "Lỗi đầu nối charge_point=%s connector=%s errorCode=%s vendorError=%s",
+            charge_point_code,
+            connector_id,
+            error_code,
+            vendor_error_code,
+        )
 
     return pack_call_result(msg_id, {})

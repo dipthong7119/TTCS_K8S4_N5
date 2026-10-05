@@ -3,6 +3,7 @@
 from datetime import date, datetime, time, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from itertools import pairwise
+from typing import TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEMO_TARIFF_BANDS = (
@@ -13,6 +14,12 @@ DEMO_TARIFF_BANDS = (
 )
 DEMO_TARIFF_TIMEZONE = "Asia/Ho_Chi_Minh"
 CALCULATION_VERSION = "time-band-v1"
+
+
+class _EnergySegment(TypedDict):
+    start: datetime
+    end: datetime
+    energy_wh: Decimal
 
 
 def validate_daily_bands(bands) -> None:
@@ -75,7 +82,7 @@ def calculate_session_price(
     points.sort(key=lambda item: (item[0], item[1]))
 
     # At the same instant retain the highest cumulative register value.
-    distinct_points = []
+    distinct_points: list[tuple[datetime, Decimal]] = []
     for point in points:
         if distinct_points and distinct_points[-1][0] == point[0]:
             distinct_points[-1] = point
@@ -95,7 +102,7 @@ def calculate_session_price(
         boundary_minutes.add(int(_band_value(band, "start_minute")))
         boundary_minutes.add(int(_band_value(band, "end_minute")))
 
-    grouped_segments = {}
+    grouped_segments: dict[tuple[datetime, datetime, str, int], _EnergySegment] = {}
     for (interval_start, wh_start), (interval_end, wh_end) in pairwise(monotonic_points):
         duration_seconds = Decimal(str((interval_end - interval_start).total_seconds()))
         if duration_seconds <= 0 or wh_end < wh_start:

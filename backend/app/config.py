@@ -6,7 +6,7 @@ Tham chiếu: SPRINT_1.md mục "Biến môi trường cần thiết"
 import os
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings
 
 ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     CSMS_DB_NAME: str = "csms"
     CSMS_DB_USER: str = "csms"
     CSMS_DB_PASSWORD: str = "csms"
+    CSMS_BACKUP_RETENTION_DAYS: int = Field(14, ge=1)
 
     # Bảo mật
     SECRET_KEY: str = "change-me-in-production"
@@ -34,8 +35,11 @@ class Settings(BaseSettings):
     LOCKOUT_DURATION_MINUTES: int = 15
 
     # OCPP 1.6J and background job settings
-    HEARTBEAT_INTERVAL: int = 300
-    OCPP_HEARTBEAT_INTERVAL_SECONDS: int = 300
+    OCPP_HEARTBEAT_INTERVAL_SECONDS: int = Field(
+        300,
+        gt=0,
+        validation_alias=AliasChoices("OCPP_HEARTBEAT_INTERVAL_SECONDS", "HEARTBEAT_INTERVAL"),
+    )
     OCPP_HEARTBEAT_MULTIPLIER: int = 2
     OCPP_MESSAGE_RETENTION_DAYS: int = 7
     OCPP_JOB_POLL_SECONDS: int = 60
@@ -43,6 +47,15 @@ class Settings(BaseSettings):
     SESSION_OFFLINE_GRACE_SECONDS: int = 21600
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
+
+    @property
+    def HEARTBEAT_INTERVAL(self) -> int:
+        """Keep the legacy name synchronized with the offline detection interval."""
+        return self.OCPP_HEARTBEAT_INTERVAL_SECONDS
+
+    @HEARTBEAT_INTERVAL.setter
+    def HEARTBEAT_INTERVAL(self, value: int) -> None:
+        self.OCPP_HEARTBEAT_INTERVAL_SECONDS = value
 
     model_config = {
         "env_file": str(ENV_FILE),

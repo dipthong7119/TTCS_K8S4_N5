@@ -63,6 +63,7 @@ def setup_db():
     
     yield
     Base.metadata.drop_all(bind=engine_test)
+    engine_test.dispose()
 
 def test_monitoring_tree_admin():
     from app.core.deps import get_current_user

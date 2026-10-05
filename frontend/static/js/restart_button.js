@@ -8,11 +8,11 @@
  *   - Loading state khi đang gửi lệnh
  *   - Tự disable khi trụ offline
  *
- * Giai đoạn mock: gọi mock API thay vì ApiClient.resetChargePoint thật.
- * Khi backend SCRUM-107 & API SCRUM-134 sẵn sàng: bỏ mock, dùng ApiClient thật.
+ * Gửi lệnh qua ApiClient hoặc bộ mô phỏng được trang truyền vào; chặn lệnh trùng.
  *
  * Sử dụng:
- *   RestartButton.createButton(chargePoint, container);
+ *   RestartButton.createMarkup(chargePoint);
+ *   RestartButton.bindEvents(container, options);
  *   RestartButton.handleRestart(chargePointCode, resetType);
  */
 
@@ -23,6 +23,7 @@ const RestartButton = (() => {
   const MODAL_ID = 'restart-confirm-modal';
   let _modalEl = null;
   let _pendingResolve = null;
+  const _pendingCodes = new Set();
 
   /**
    * Tạo modal xác nhận (lazy — chỉ tạo 1 lần, tái sử dụng)
@@ -116,6 +117,8 @@ const RestartButton = (() => {
    * @returns {Promise<boolean>} true nếu người dùng xác nhận
    */
   function showConfirm(cpCode, resetType) {
+    // Opening another point's dialog must release the previous waiter.
+    if (_pendingResolve) _resolveConfirm(false);
     const modal = _ensureModal();
     const typeLabel = resetType === 'Hard' ? 'cứng (Hard)' : 'mềm (Soft)';
     const msg = modal.querySelector('#restart-confirm-msg');
@@ -136,8 +139,9 @@ const RestartButton = (() => {
    * @param {string} resetType  - 'Soft' | 'Hard'
    * @param {boolean} isOffline - trụ đang ngoại tuyến?
    * @param {HTMLButtonElement} [buttonEl] - nút gốc để cập nhật trạng thái
+   * @param {Object} [options] - bộ gửi Reset và kiểm tra nguồn dữ liệu hiện tại
    */
-  async function handleRestart(cpCode, resetType, isOffline, buttonEl) {
+  async function handleRestart(cpCode, resetType, isOffline, buttonEl, options = {}) {
     // Kiểm tra trạng thái ngoại tuyến
     if (isOffline) {
       if (typeof showToast === 'function') {
@@ -146,19 +150,21 @@ const RestartButton = (() => {
       return;
     }
 
-    // Hiển thị hộp xác nhận
-    const confirmed = await showConfirm(cpCode, resetType);
-    if (!confirmed) return;
-
-    // Cập nhật trạng thái nút
-    if (buttonEl) {
-      buttonEl.disabled = true;
-      buttonEl.classList.add('btn--loading');
-      buttonEl.querySelector('.restart-btn__label').textContent = 'Đang gửi…';
-    }
-
+    if (_pendingCodes.has(cpCode)) return;
+    _pendingCodes.add(cpCode);
     try {
-      const result = await ApiClient.resetChargePoint(cpCode, resetType);
+      const confirmed = await showConfirm(cpCode, resetType);
+      if (!confirmed) return;
+      if (options.isCurrentSource && !options.isCurrentSource()) {
+        throw new Error('Nguồn dữ liệu đã thay đổi. Vui lòng chọn lại trụ cần khởi động.');
+      }
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.classList.add('btn--loading');
+        buttonEl.querySelector('.restart-btn__label').textContent = 'Đang gửi…';
+      }
+      const sendReset = options.resetChargePoint || ApiClient.resetChargePoint;
+      const result = await sendReset(cpCode, resetType);
 
       if (typeof showToast === 'function') {
         showToast(result.message || 'Lệnh khởi động lại đã được gửi', 'success');
@@ -168,8 +174,9 @@ const RestartButton = (() => {
         showToast(error.message || 'Không gửi được lệnh khởi động lại', 'error');
       }
     } finally {
+      _pendingCodes.delete(cpCode);
       if (buttonEl) {
-        buttonEl.disabled = false;
+        buttonEl.disabled = buttonEl.dataset.cpOffline === 'true';
         buttonEl.classList.remove('btn--loading');
         buttonEl.querySelector('.restart-btn__label').textContent = 'Khởi động lại';
       }
@@ -226,7 +233,7 @@ const RestartButton = (() => {
    * Gắn sự kiện click cho tất cả nút restart trong một container.
    * @param {HTMLElement} container - phần tử cha chứa các nút
    */
-  function bindEvents(container) {
+  function bindEvents(container, options = {}) {
     container.querySelectorAll('.restart-btn').forEach(btn => {
       btn.addEventListener('click', function () {
         const cpCode = this.dataset.cpCode;
@@ -234,7 +241,7 @@ const RestartButton = (() => {
         const wrapper = this.closest('.restart-controls');
         const select = wrapper?.querySelector('.restart-controls__type');
         const resetType = select ? select.value : 'Soft';
-        handleRestart(cpCode, resetType, isOffline, this);
+        handleRestart(cpCode, resetType, isOffline, this, options);
       });
     });
   }

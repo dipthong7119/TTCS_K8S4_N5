@@ -38,6 +38,7 @@ def db_session():
 
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def _send_status(db, payload: dict, cp_code: str = "CP-120", msg_id: str = "msg-120"):

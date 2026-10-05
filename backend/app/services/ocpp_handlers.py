@@ -6,18 +6,16 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func, update
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
-from app.models.id_tag import IdTag
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
-from app.models.user import User
 from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
@@ -25,6 +23,7 @@ from app.services.ocpp_parser import (
     pack_call_result,
     parse_message,
 )
+from app.services.ocpp_status import is_charge_point_stale, station_status_payload
 from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
@@ -63,6 +62,12 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
     point = db.query(ChargePoint).filter(ChargePoint.code == charge_point_code).first()
     if point is None:
         return pack_call_error(msg_id, "SecurityError", "Charge point not found")
+
+    # A returning device must report fresh connector states even if the offline
+    # sweep has not run since the heartbeat deadline expired.
+    if point.status == "offline" or is_charge_point_stale(point.last_seen_at):
+        for connector in point.connectors:
+            connector.status = "unknown"
 
     canonical_request = json.dumps(
         {"action": action, "payload": payload},
@@ -154,20 +159,13 @@ def _parse_for_handler(raw_msg: str):
 def touch_last_seen(db: Session, charge_point_code: str) -> None:
     """Cập nhật last_seen_at cho mọi tin nhắn từ trụ bằng 1 câu UPDATE (không đọc-sửa-ghi)."""
     db.execute(
-        update(ChargePoint)
-        .where(ChargePoint.code == charge_point_code)
-        .values(last_seen_at=func.current_timestamp())
-        .execution_options(synchronize_session=False)
+        text("UPDATE charge_points SET last_seen_at = CURRENT_TIMESTAMP WHERE code = :code"),
+        {"code": charge_point_code},
     )
 
 
 def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
-    db.execute(
-        update(ChargePoint)
-        .where(ChargePoint.code == charge_point_code)
-        .values(last_seen_at=func.current_timestamp())
-        .execution_options(synchronize_session=False)
-    )
+    touch_last_seen(db, charge_point_code)
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
@@ -187,7 +185,8 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
 
         return new_handle_status_notification(db, point.code, msg_id, payload)
     if action == "Authorize":
-        return handle_authorize(db, point, msg_id, payload)
+        from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
+        return new_handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
         return handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
@@ -195,45 +194,6 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
     if action == "StopTransaction":
         return handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
-
-
-def handle_authorize(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    id_tag_value = payload.get("idTag")
-    if not isinstance(id_tag_value, str) or not 1 <= len(id_tag_value) <= 20:
-        return pack_call_error(msg_id, "FormationViolation", "idTag must contain 1 to 20 characters")
-
-    tag, _, status = _authorize_tag(db, point, id_tag_value)
-
-    id_tag_info = {"status": status}
-    if tag and tag.expiry_date:
-        expiry = tag.expiry_date
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=UTC)
-        id_tag_info["expiryDate"] = expiry.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    return pack_call_result(msg_id, {"idTagInfo": id_tag_info})
-
-
-def _authorize_tag(db: Session, point: ChargePoint, id_tag_value: str):
-    tag = db.query(IdTag).filter(IdTag.id_tag == id_tag_value).first()
-    if tag is None:
-        logger.warning("Invalid OCPP idTag suffix=%s from %s", id_tag_value[-4:], point.code)
-        return None, None, "Invalid"
-
-    user = db.query(User).filter(User.id == tag.user_id).first()
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    is_driver = user is not None and any(role.name == "driver" for role in user.roles)
-    if (
-        tag.is_blocked
-        or user is None
-        or not user.is_active
-        or not is_driver
-        or station is None
-        or station.status != "active"
-    ):
-        return tag, user, "Blocked"
-    if _is_expired(tag.expiry_date):
-        return tag, user, "Expired"
-    return tag, user, "Accepted"
 
 
 def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
@@ -251,7 +211,9 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     connector = db.query(Connector).filter_by(
         charge_point_id=point.id, connector_id=connector_number
     ).first()
-    tag, user, auth_status = _authorize_tag(db, point, id_tag_value)
+    
+    from app.ocpp.handlers.authorize import authorize_tag
+    tag, user, auth_status = authorize_tag(db, point, id_tag_value)
     station = db.query(Station).filter(Station.id == point.station_id).first()
     effective_status = auth_status if connector is not None else "Invalid"
     accepted = effective_status == "Accepted"
@@ -542,15 +504,6 @@ def _save_orphan_message(
         )
     )
 
-
-def _is_expired(expiry: datetime | None) -> bool:
-    if expiry is None:
-        return False
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=UTC)
-    return expiry <= datetime.now(UTC)
-
-
 def _parse_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -585,43 +538,23 @@ def _warn_missing_connector(charge_point_code: str, connector_id: int) -> None:
 
 
 def publish_charge_point_status(db: Session, charge_point_id: int) -> None:
-    point = db.query(ChargePoint).filter(ChargePoint.id == charge_point_id).first()
-    if point is None:
+    from app.routers.monitoring import notify_status_change, sse_clients
+
+    if not sse_clients:
         return
-    station = db.query(Station).filter(Station.id == point.station_id).first()
+    # A heartbeat must not issue a separate connector query for every point.
+    # Load the authoritative station snapshot in one query, as the tree API does.
+    station_id = db.query(ChargePoint.station_id).filter(ChargePoint.id == charge_point_id).scalar_subquery()
+    station = (
+        db.query(Station)
+        .options(joinedload(Station.charge_points).joinedload(ChargePoint.connectors))
+        .filter(Station.id == station_id)
+        .first()
+    )
     if station is None:
         return
-    charge_points = []
-    for item in db.query(ChargePoint).filter(ChargePoint.station_id == station.id).all():
-        charge_points.append(
-            {
-                "id": item.id,
-                "code": item.code,
-                "status": item.status,
-                "ocpp_status": item.ocpp_status,
-                "vendor": item.vendor,
-                "model": item.model,
-                "firmware_version": item.firmware_version,
-                "last_seen_at": item.last_seen_at.isoformat() if item.last_seen_at else None,
-                "connectors": [
-                    {
-                        "id": connector.id,
-                        "connector_id": connector.connector_id,
-                        "status": connector.status,
-                        "ocpp_status": connector.ocpp_status,
-                        "error_code": connector.error_code,
-                        "updated_at": connector.updated_at.isoformat(),
-                    }
-                    for connector in db.query(Connector)
-                    .filter(Connector.charge_point_id == item.id)
-                    .order_by(Connector.connector_id)
-                    .all()
-                ],
-            }
-        )
-    from app.routers.monitoring import notify_status_change
-
-    notify_status_change(station.id, charge_points, station.owner_id)
+    snapshot = station_status_payload(station)
+    notify_status_change(station.id, snapshot["charge_points"], station.owner_id)
 
 
 def publish_session_update(

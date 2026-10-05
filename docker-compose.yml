@@ -26,9 +26,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      # Mount frontend for local editing; the production image also contains this directory.
-      - ./frontend:/app/frontend
     env_file:
       - .env
     environment:

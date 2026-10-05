@@ -3,10 +3,27 @@ __pycache__/
 .pytest_cache/
 .pytest-*/
 .ruff_cache/
+.mypy_cache/
 outputs/sprint2-2026-09-27/*.png
 outputs/sprint2-2026-09-27/*.inspect.ndjson
 .venv/
 .env
+.env.*
+!.env.example
 csms.db
+csms.db-*
 backups/
 *.output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local copies of AI tools and generated inspection artifacts
+/backend/skillbackend/
+/frontend/skillfrontend/
+/prompts/ke_hoach_sprint2_extracted/
+/baseline_test_results.txt
+
+# Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
+nhat_ky_lam_tung.md

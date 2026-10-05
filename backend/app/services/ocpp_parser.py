@@ -37,6 +37,8 @@ def parse_message(
 
     if not isinstance(data, list):
         raise OCPPError("FormationViolation", "Message must be a JSON array")
+    if not data:
+        raise OCPPError("FormationViolation", "Message cannot be empty")
 
     message_id = data[1] if len(data) > 1 else ""
     if not isinstance(message_id, str) or len(message_id) > 50:

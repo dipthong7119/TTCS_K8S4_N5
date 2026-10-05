@@ -109,6 +109,7 @@ async def login(
         # Tra ve cung thong bao loi (khong tiet lo email co ton tai hay khong)
         raise HTTPException(status_code=401, detail=_ERR_WRONG)
 
+    assert user is not None  # A successful password check requires an existing user.
     # --- Dang nhap thanh cong: reset dem sai ---
     if ip_attempt:
         ip_attempt.failed_login_count = 0

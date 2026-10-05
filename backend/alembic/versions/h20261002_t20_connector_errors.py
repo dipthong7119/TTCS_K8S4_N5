@@ -29,6 +29,12 @@ def upgrade() -> None:
     with op.batch_alter_table("connector_errors", schema=None) as batch_op:
         if "occurred_at" not in columns:
             batch_op.add_column(sa.Column("occurred_at", sa.DateTime(), nullable=False, server_default=sa.func.now()))
+
+    if "timestamp" in columns:
+        # Keep the original event time before removing the legacy column.
+        op.execute(sa.text("UPDATE connector_errors SET occurred_at = COALESCE(timestamp, occurred_at)"))
+
+    with op.batch_alter_table("connector_errors", schema=None) as batch_op:
         if "info" in columns:
             batch_op.drop_column("info")
         if "timestamp" in columns:
@@ -55,6 +61,11 @@ def downgrade() -> None:
             batch_op.add_column(sa.Column("timestamp", sa.DateTime(), nullable=True))
         if "updated_at" not in columns:
             batch_op.add_column(sa.Column("updated_at", sa.DateTime(), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False))
+
+    if "occurred_at" in columns:
+        op.execute(sa.text("UPDATE connector_errors SET timestamp = occurred_at"))
+
+    with op.batch_alter_table("connector_errors", schema=None) as batch_op:
         if "occurred_at" in columns:
             batch_op.drop_column("occurred_at")
 

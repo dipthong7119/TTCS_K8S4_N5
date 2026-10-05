@@ -18,6 +18,12 @@ from app.main import app
 from app.models.user import Role, User
 
 
+def pytest_addoption(parser):
+    parser.addoption("--sprint2-soak-seconds", type=int, default=1, help="Duration of the 50-connection OCPP soak check")
+    parser.addoption("--migration-database-url", default=None, help="PostgreSQL URL for isolated migration tests")
+    parser.addoption("--docker-project", default="csms-sprint12-acceptance", help="Isolated Compose acceptance project")
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     engine = create_engine(

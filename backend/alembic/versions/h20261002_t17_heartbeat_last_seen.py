@@ -29,8 +29,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    existing = {col["name"] for col in inspector.get_columns("charge_points")}
-
-    if "last_seen_at" in existing:
-        op.drop_column("charge_points", "last_seen_at")
+    # last_seen_at belongs to 0003_create_charge_points, not this schema guard.
+    pass

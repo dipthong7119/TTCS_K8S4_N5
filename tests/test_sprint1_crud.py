@@ -38,7 +38,7 @@ def test_station_create_read_update_delete_ten_times(client, user_factory) -> No
         )
         assert created_response.status_code == 201, created_response.text
         station = created_response.json()
-        assert station["status"] == "active"
+        assert station["status"] == "inactive"
 
         listing = client.get("/api/stations")
         assert listing.status_code == 200
@@ -81,7 +81,7 @@ def test_charge_point_create_read_update_delete_ten_times(client, user_factory) 
         assert created_response.status_code == 201, created_response.text
         charge_point = created_response.json()
         assert [item["connector_id"] for item in charge_point["connectors"]] == [1, 2]
-        assert [item["status"] for item in charge_point["connectors"]] == ["unavailable", "unavailable"]
+        assert [item["status"] for item in charge_point["connectors"]] == ["unknown", "unknown"]
 
         duplicate_create = client.post(
             "/api/charge-points",

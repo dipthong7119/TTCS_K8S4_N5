@@ -24,6 +24,7 @@ const FormGuard = (() => {
       // Ghi nhớ text gốc
       const origText = btn.textContent.trim();
       _setLoading(btn, true, loadingText);
+      let succeeded = false;
 
       // Xoá lỗi cũ
       form.querySelectorAll('.form-error.is-visible').forEach(el => el.classList.remove('is-visible'));
@@ -33,12 +34,13 @@ const FormGuard = (() => {
       try {
         const data = Object.fromEntries(new FormData(form).entries());
         await onSubmit(data, form);
+        succeeded = true;
       } catch (err) {
         // Hiển thị lỗi tại ô nhập hoặc alert chung
         if (typeof opts.onError === 'function') opts.onError(err, form);
         else _showError(form, err);
       } finally {
-        _setLoading(btn, false, origText);
+        if (!(succeeded && opts.keepDisabledOnSuccess)) _setLoading(btn, false, origText);
       }
     });
   }

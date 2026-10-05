@@ -201,6 +201,6 @@ def test_second_boot_still_accepted(db_session):
 )
 def test_interval_follows_config(db_session, interval):
     """interval trong CALLRESULT phải bằng HEARTBEAT_INTERVAL (T-17 AC)."""
-    with patch("app.ocpp.handlers.boot_notification.settings.HEARTBEAT_INTERVAL", interval):
+    with patch("app.ocpp.handlers.boot_notification.settings.OCPP_HEARTBEAT_INTERVAL_SECONDS", interval):
         _, _, result = _boot(db_session, FULL_PAYLOAD, msg_id=f"boot-iv-{interval}")
     assert result["interval"] == interval

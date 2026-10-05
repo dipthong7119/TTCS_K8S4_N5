@@ -237,8 +237,7 @@ def _ensure_connector_error(db: Session, connector: Connector, counts: dict[str,
                 connector_id=connector.id,
                 error_code="GroundFailure",
                 vendor_error_code="DEMO-GND-01",
-                info="Bản ghi lỗi giả lập để minh họa trạng thái đầu nối; không phải lỗi thiết bị thật.",
-                timestamp=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+                occurred_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
             )
         )
         counts["connector_errors"] += 1

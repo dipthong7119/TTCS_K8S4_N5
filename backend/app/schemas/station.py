@@ -14,7 +14,7 @@ class StationCreate(BaseModel):
     address: str = Field(..., json_schema_extra={"example": "123 Đường Chính, Phường A, Quận 1"})
     latitude: float | None = Field(None, ge=-90, le=90, json_schema_extra={"example": 10.762622})
     longitude: float | None = Field(None, ge=-180, le=180, json_schema_extra={"example": 106.660172})
-    status: str = Field("active", pattern="^(active|inactive|maintenance|locked)$")
+    status: str = Field("inactive", pattern="^(active|inactive|maintenance|locked)$")
 
 
 class StationUpdate(BaseModel):

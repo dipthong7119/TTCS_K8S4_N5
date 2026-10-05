@@ -23,3 +23,4 @@ def db_session():
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
+        engine.dispose()
