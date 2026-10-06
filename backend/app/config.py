@@ -1,6 +1,6 @@
 """
-config.py — nơi DUY NHẤT đọc biến môi trường (02_CODING_STANDARDS.md quy tắc 1)
-Tham chiếu: SPRINT_1.md mục "Biến môi trường cần thiết"
+config.py — nơi DUY NHẤT đọc biến môi trường.
+Tham chiếu: prompts/00_QUY_TAC_AGENT.md và bảng cấu hình trong README.md.
 """
 
 import os
@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     CSMS_DB_USER: str = "csms"
     CSMS_DB_PASSWORD: str = "csms"
     CSMS_BACKUP_RETENTION_DAYS: int = Field(14, ge=1)
+
+    # Compose-only options declared here so shared .env files remain valid.
+    # The independent simulator receives CLI arguments, never imports Settings.
+    CSMS_SIMULATOR_COUNT: int = Field(20, ge=1, le=20)
+    CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS: bool = False
+    CSMS_SIMULATOR_URL: str = "ws://app:8000/ocpp"
+    CSMS_SIMULATOR_IMAGE: str | None = None
 
     # Bảo mật
     SECRET_KEY: str = "change-me-in-production"

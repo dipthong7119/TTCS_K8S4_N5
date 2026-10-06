@@ -1,4 +1,4 @@
-"""T-01/T-19/T-27: opt-in checks of the isolated Compose stack, also run by CI.
+"""T-01/T-19/T-27/T-55: isolated Compose checks, also run by existing CI.
 
 This filename is deliberately outside default pytest discovery: Docker checks
 require docker-compose.acceptance.yml to be running. No application logic is
@@ -7,6 +7,7 @@ used by the simulated charge point or the HTTP/WebSocket clients.
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import time
@@ -29,8 +30,9 @@ def docker_stack(request):
     command = ["docker", "compose", "--env-file", str(ROOT / ".env.example"),
                "-p", project, "-f", str(ROOT / "docker-compose.acceptance.yml")]
 
-    def compose(*arguments, timeout=60):
-        result = subprocess.run(command + list(arguments), capture_output=True, text=True, timeout=timeout, check=False)
+    def compose(*arguments, timeout=60, environment=None):
+        result = subprocess.run(command + list(arguments), capture_output=True, text=True, timeout=timeout, check=False,
+                                env=None if environment is None else {**os.environ, **environment})
         assert result.returncode == 0, result.stdout + result.stderr
         return result.stdout.strip()
 
@@ -218,3 +220,127 @@ def test_failed_candidate_leaves_previous_container_healthy(docker_stack):
         assert httpx.get(f"{docker_stack['http']}/", follow_redirects=True, timeout=3).status_code == 200
     finally:
         subprocess.run(["docker", "rm", "-f", candidate], capture_output=True, text=True, timeout=10, check=False)
+
+
+@pytest.mark.parametrize("count", [1, 3, 20])
+def test_t55_configured_fleet_online_in_monitoring_within_one_minute(docker_stack, count):
+    compose = docker_stack["compose"]
+    expected = {f"SIM-{number:02d}" for number in range(1, count + 1)}
+    dependencies = {service: compose("ps", "-q", service) for service in ("app", "db")}
+    with docker_stack["db"].connect() as db:
+        registered = dict(db.execute(text("SELECT code,id FROM charge_points WHERE code LIKE 'SIM-%'")).all())
+        previous_message_id = db.execute(text("SELECT COALESCE(MAX(id),0) FROM ocpp_messages")).scalar_one()
+    assert len(registered) == 20 and expected <= registered.keys()
+
+    with httpx.Client(base_url=docker_stack["http"], timeout=5) as client:
+        login = client.post("/api/auth/login", json={"email": "owner@csms.local", "password": "Owner@2024!"})
+        assert login.status_code == 200
+
+        def online_codes():
+            response = client.get("/api/monitoring/tree")
+            assert response.status_code == 200, response.text
+            return {point["code"] for station in response.json() for point in station["charge_points"]
+                    if point["code"].startswith("SIM-") and point["status"] == "online"}
+
+        def wait_for(expected_codes, deadline):
+            while time.monotonic() < deadline:
+                observed = online_codes()
+                if observed == expected_codes:
+                    return
+                time.sleep(0.1)
+            pytest.fail(f"Expected {sorted(expected_codes)}, observed {sorted(observed)}")
+
+        # Previous test sizes must be offline before measuring the new fleet.
+        wait_for(set(), time.monotonic() + 15)
+        try:
+            started = time.monotonic()
+            compose("--profile", "ocpp-simulator", "up", "-d", "--no-build", "--no-deps", "simulator",
+                    environment={"CSMS_SIMULATOR_COUNT": str(count), "CSMS_SIMULATOR_URL": "ws://app:8000/ocpp/"})
+            wait_for(expected, started + 60)
+            elapsed = time.monotonic() - started
+            assert elapsed < 60
+            for service, container in dependencies.items():
+                assert compose("ps", "-q", service) == container, f"Starting fleet recreated {service}"
+            # The negotiated heartbeat is 5s; verify connections stay online.
+            time.sleep(6)
+            assert online_codes() == expected
+            assert len(compose("ps", "-q", "simulator").splitlines()) == 1
+            with docker_stack["db"].connect() as db:
+                assert dict(db.execute(text("SELECT code,id FROM charge_points WHERE code LIKE 'SIM-%'")).all()) == registered
+                heartbeats = set(db.execute(text(
+                    "SELECT DISTINCT charge_point_code FROM ocpp_messages "
+                    "WHERE action='Heartbeat' AND id>:previous_id AND charge_point_code LIKE 'SIM-%'"
+                ), {"previous_id": previous_message_id}).scalars())
+                assert heartbeats == expected, f"Missing fleet Heartbeats: {sorted(expected - heartbeats)}"
+            print(f"T-55: {count} seeded points online in monitoring API after {elapsed:.3f}s; heartbeat maintained; app/db unchanged")
+        finally:
+            compose("rm", "-sf", "simulator")
+
+
+def test_t55_demo_stations_report_all_registered_connectors(docker_stack):
+    compose = docker_stack["compose"]
+    expected = {f"SIM-{number:02d}": (2, "Available", "NoError") for number in range(1, 21)}
+    expected.update({
+        "CP_VINCOM_01": (2, "Available", "NoError"),
+        "CP_VINCOM_02": (1, "Available", "NoError"),
+        "CP_AEON_01": (3, "Available", "NoError"),
+        "CP_AEON_FAULT": (1, "Faulted", "GroundFailure"),
+        "CP_DEMO_MAINT_01": (2, "Unavailable", "NoError"),
+    })
+    dependencies = {service: compose("ps", "-q", service) for service in ("app", "db")}
+    with docker_stack["db"].connect() as db:
+        registered = dict(db.execute(text("SELECT code,id FROM charge_points")).all())
+        previous_message_id = db.execute(text("SELECT COALESCE(MAX(id),0) FROM ocpp_messages")).scalar_one()
+    assert set(expected) <= set(registered)
+
+    with httpx.Client(base_url=docker_stack["http"], timeout=5) as client:
+        login = client.post("/api/auth/login", json={"email": "admin@csms.local", "password": "Admin@2024!"})
+        assert login.status_code == 200
+
+        def read_points():
+            result = client.get("/api/monitoring/tree")
+            assert result.status_code == 200, result.text
+            return {point["code"]: point for station in result.json() for point in station["charge_points"]
+                    if point["code"] in expected}
+
+        def matches_inventory(points):
+            return set(points) == set(expected) and all(
+                points[code]["status"] == "online"
+                and len(points[code]["connectors"]) == count
+                and {item["connector_id"] for item in points[code]["connectors"]} == set(range(1, count + 1))
+                and all(item["ocpp_status"] == status and item["error_code"] == error
+                        for item in points[code]["connectors"])
+                for code, (count, status, error) in expected.items()
+            )
+
+        try:
+            compose("--profile", "ocpp-simulator", "up", "-d", "--no-build", "--no-deps", "simulator",
+                    environment={"CSMS_SIMULATOR_COUNT": "20", "CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS": "true",
+                                 "CSMS_SIMULATOR_URL": "ws://app:8000/ocpp"})
+            deadline = time.monotonic() + 60
+            points = read_points()
+            while not matches_inventory(points) and time.monotonic() < deadline:
+                time.sleep(0.1)
+                points = read_points()
+            assert matches_inventory(points), points
+            assert sum(len(point["connectors"]) for point in points.values()) == 49
+            time.sleep(6)
+            assert matches_inventory(read_points())
+            for service, container in dependencies.items():
+                assert compose("ps", "-q", service) == container
+            with docker_stack["db"].connect() as db:
+                assert dict(db.execute(text("SELECT code,id FROM charge_points")).all()) == registered
+                heartbeats = set(db.execute(text(
+                    "SELECT DISTINCT charge_point_code FROM ocpp_messages WHERE action='Heartbeat' AND id>:previous_id"
+                ), {"previous_id": previous_message_id}).scalars())
+                assert heartbeats == set(expected)
+            result = client.post("/api/charge_points/CP_AEON_FAULT/reset", json={"type": "Soft"})
+            assert result.status_code == 200, result.text
+            deadline = time.monotonic() + 15
+            time.sleep(1.5)
+            while not matches_inventory(read_points()) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            assert matches_inventory(read_points()), "Reset must preserve the seeded fault/maintenance profiles"
+            print("T-55: all 25 seeded points online, 49 connectors reported, fault/maintenance preserved after Reset")
+        finally:
+            compose("rm", "-sf", "simulator")

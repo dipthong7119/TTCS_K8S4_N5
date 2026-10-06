@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/sessions.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -75,5 +75,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/audit.js"></script>
+<script src="{{ asset_url('js/pages/audit.js') }}"></script>
 {% endblock %}

@@ -8,7 +8,7 @@
  *   - Loading state khi đang gửi lệnh
  *   - Tự disable khi trụ offline
  *
- * Gửi lệnh qua ApiClient hoặc bộ mô phỏng được trang truyền vào; chặn lệnh trùng.
+ * Gửi lệnh qua ApiClient (hoặc transport được truyền vào); chặn lệnh trùng.
  *
  * Sử dụng:
  *   RestartButton.createMarkup(chargePoint);

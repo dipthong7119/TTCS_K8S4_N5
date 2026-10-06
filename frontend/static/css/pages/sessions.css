@@ -244,12 +244,6 @@
   flex-shrink: 0;
 }
 
-/* ── Mock Mode Indicator ─────────────────────────────────────────────────── */
-.mock-mode-indicator.is-active {
-  background: hsl(150, 85%, 45%) !important;
-  box-shadow: 0 0 6px hsl(150, 85%, 45%);
-}
-
 /* ── Audit and Tables ────────────────────────────────────────────────────── */
 .audit-filters { align-items: end; gap: var(--space-3); margin-bottom: var(--space-4); }
 .audit-filter { display: grid; gap: 6px; min-width: 160px; color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 600; }

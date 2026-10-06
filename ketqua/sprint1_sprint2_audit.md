@@ -8,6 +8,10 @@ Ngày kiểm tra: 04/10/2026. Nhánh `main` local và GitHub hiện ở `255bd32
 
 Nguồn đối chiếu là workbook **Nền tảng vận hành trạm sạc xe điện (CSMS).xlsx**, các sheet `Tasks`, `Backlog`, `DoD-DoR`; lọc theo cột `Sprint` bằng 1 hoặc 2, không lấy một khoảng dòng liên tiếp. Các task Sprint 3 xen giữa trong sheet đã được loại khỏi phạm vi.
 
+Ngày 06/10/2026 đã sắp xếp thư mục: workbook giữ nguyên nội dung, chuyển vào
+`huongdan/`; unit test chuyển từ `backend/app/tests` sang `backend/tests`.
+Các lệnh chạy lại dưới đây dùng đường dẫn mới; kết quả lịch sử được giữ nguyên.
+
 - **35 task:** T-01–T-35. Trạng thái Excel: 6 Done, 3 In Progress, 26 Todo.
 - **17 backlog:** S-01–S-16 và K-01. Trạng thái Excel: 4 Done, 1 In Progress, 12 Todo.
 - Trạng thái Excel chưa phản ánh đầy đủ code hiện có: nhiều dòng Todo đã có implementation và test. Ngược lại, một số dòng Done vẫn có lỗi so với AC.
@@ -142,10 +146,10 @@ Chạy lại từ PowerShell tại thư mục repo:
 
 ```powershell
 Push-Location backend
-..\.venv\Scripts\python.exe -m ruff check app alembic ../tests
+..\.venv\Scripts\python.exe -m ruff check app tests alembic ../tests
 ..\.venv\Scripts\python.exe -m mypy app
 ..\.venv\Scripts\python.exe -m pip_audit --local --progress-spinner off
-..\.venv\Scripts\python.exe -m pytest app/tests ../tests --tb=short -q
+..\.venv\Scripts\python.exe -m pytest tests ../tests --tb=short -q
 ..\.venv\Scripts\python.exe -m pytest ../tests/test_sprint2_network.py::test_50_real_connections_with_heartbeat_and_200_connectors --sprint2-soak-seconds=600 -q -s
 Pop-Location
 node --test tests/frontend_behavior.cjs
@@ -195,3 +199,82 @@ Mặc định bài soak trong bộ test chỉ giữ ngắn để phù hợp CI; 
 4. **DoD nhóm:** một thành viên khác duyệt code và so coverage phần sửa với baseline tương đương. Đã có coverage XML nhưng chưa có baseline để khẳng định tiêu chí “không giảm”.
 
 Theo yêu cầu người dùng, giữ nguyên workbook và bỏ qua cột trạng thái khi đánh giá nội dung. Không dùng các tài liệu nghiệm thu cũ trong `ketqua` để tự khẳng định CI/staging của phiên bản mới đã qua.
+
+## Cập nhật giám sát ngày 06/10/2026 — T-24/T-25/T-35
+
+Theo yêu cầu lọc **trụ** bị lỗi và xem lại dữ liệu mô phỏng:
+
+- Bỏ nút chuyển sang bộ mẫu 20 trụ trên trình duyệt, dataset và các timer/Reset giả.
+  Xóa module `frontend/static/js/realtime_status.js` cùng import và CSS không còn dùng.
+  Trang luôn lấy dữ liệu API/SSE. Giữ simulator OCPP Docker và dữ liệu seed để
+  kiểm thử toàn bộ backend khi không có phần cứng.
+- Bộ lọc trạng thái và tìm mã trụ lọc từng charge point, giữ trạm làm nhóm hiển thị.
+  Trụ khỏe trong cùng trạm không bị kéo vào kết quả lỗi. Ngăn chi tiết, dạng lưới
+  và danh sách dùng cùng kết quả; SSE/API refresh giữ bộ lọc. Nếu trạm không còn
+  trụ khớp, ngăn chi tiết của trạm đó đóng lại.
+- Tách `Unavailable` thành **Tạm ngừng / Bảo trì** ở frontend, dù trạng thái nội bộ
+  API vẫn ánh xạ thành `lỗi`. `Faulted` hoặc error code khác `NoError` được tính là lỗi.
+  Ô lỗi đếm số trụ một lần, không cộng trụ và đầu nối gây đếm trùng.
+  Các ô tổng thống kê toàn bộ dữ liệu, không bị thay đổi bởi bộ lọc.
+- Trụ offline hiển thị đầu nối chưa rõ, không dùng trạng thái OCPP cũ để hiện sẵn
+  sàng/đang bận. HTTP response cũ không ghi đè sự kiện SSE mới.
+
+Bằng chứng kiểm tra phiên bản hiện tại:
+
+- `node --test tests/frontend_behavior.cjs`: **30/30 passed**. Các test mock cũ
+  được thay bằng ca lỗi nhiều đầu nối, phân biệt bảo trì, từng trạng thái, tìm mã,
+  debounce, ngăn chi tiết, SSE/reconnect và HTTP trả muộn. Các ca form, xác nhận
+  Reset, chặn lệnh trùng, thời gian UTC và EventSource reconnect vẫn đạt.
+- HTTP login và `/monitoring` trả **200**. HTML phục vụ thực tế không còn nút
+  mẫu hoặc import module đã xóa, có lựa chọn `unavailable`; JavaScript mới đã
+  được Docker phục vụ qua frontend mount.
+- API local trả **25 trụ online / 49 đầu nối**. Thực thi JS giám sát với snapshot
+  API này trong DOM test harness: **Lỗi → chỉ `CP_AEON_FAULT`**, **Tạm ngừng /
+  Bảo trì → chỉ `CP_DEMO_MAINT_01`**, **Sẵn sàng → 23 trụ**, tổng lỗi **1**.
+  Ngăn chi tiết lỗi không có `CP_AEON_01`; tìm `SIM-01` chỉ có đúng mã đó.
+- `git diff --check` đạt. App/DB/simulator vẫn chạy để kiểm thử web local;
+  không commit/push trong lượt này. Tài liệu hướng dẫn web và codebase map đã cập nhật.
+
+Các con số 25 test JS và mô tả bộ mẫu ở những mục trước là kết quả lịch sử.
+Lượt này chỉ sửa frontend và tài liệu, không chạy lại bộ Python/Docker acceptance
+đã ghi ở báo cáo T-55. Kiểm thử DOM/HTTP không thay thế quan sát layout trên browser;
+các điều kiện GitHub/staging/duyệt nhóm phía trên vẫn cần bằng chứng riêng.
+Mở `/monitoring`, nhấn **Ctrl+F5** để thử bộ lọc với JavaScript mới.
+
+### Sửa lỗi bộ lọc/nút đóng sau cập nhật — kiểm tra lại ngày 06/10/2026
+
+Người dùng báo bộ lọc không chạy và không đóng được chi tiết. Đã tái hiện đúng
+triệu chứng khi bộ nạp dùng JS giám sát cũ từ cache cùng HTML mới đã bỏ module
+mẫu: `ReferenceError: RealtimeStatus is not defined` ngắt callback khởi tạo trước
+khi gắn sự kiện lọc/đóng. Bộ test 30 bài trước chưa có trường hợp lệch phiên bản này.
+
+- Router trang cung cấp `asset_url(...)`, gắn phiên bản theo mtime và size của file.
+  Các template đăng nhập/trang nội bộ dùng helper cho JS/CSS. URL mới khiến cache
+  của script cũ không khớp, không yêu cầu người dùng xóa cache sau mỗi lần cập nhật.
+- Gắn sự kiện của giám sát trước khi khởi tạo SSE. Nếu transport realtime không
+  khởi tạo được, lọc/tìm kiếm/đổi dạng xem/đóng/Làm mới vẫn hoạt động.
+- Bổ sung test nút đóng, bấm ngoài, Escape, mở lại chi tiết, giữ đóng sau SSE,
+  Hủy/đóng Reset không gửi lệnh, SSE không khởi tạo và form đăng xuất xóa session.
+
+Kết quả:
+
+- **39/39 test JavaScript** và **14/14 test Python tài nguyên/trang/đăng xuất** đạt.
+  Ruff đạt; Mypy đạt **43 source files**; `git diff --check` đạt.
+- Rebuild/restart riêng app thành công; giữ DB/volume. Bật lại simulator sau khi
+  app khởi động để 25 trụ kết nối lại. HTML thực tế có phiên bản cho mọi JS/CSS.
+- Kiểm tra DOM bằng jsdom với HTML, CSS và toàn bộ script do Docker phục vụ:
+  **14 kiểm tra khi SSE khả dụng**, **13 kiểm tra khi khởi tạo SSE lỗi**, tất cả đạt,
+  không có lỗi script. Có cache giả lập chứa JS cũ tại URL không phiên bản;
+  trang mới không dùng bản cache đó (`oldCacheHits=0`).
+- DOM thực tế lọc Lỗi chỉ `CP_AEON_FAULT`, bảo trì chỉ `CP_DEMO_MAINT_01`,
+  sẵn sàng 23 trụ; tìm `SIM-01` trả đúng mã. Lưới/danh sách, làm mới và SSE giữ
+  bộ lọc; ngăn chi tiết không hiện trụ khỏe cùng trạm.
+- Đóng chi tiết bằng nút × (click phần SVG), bấm ngoài và Escape đều thành công.
+  Hủy Reset bằng ×/Hủy/bấm ngoài/Escape đều đóng modal, không gọi API Reset.
+  Nút đăng xuất phát submit; HTTP thực tế trả 302 về login và API bảo vệ trả 401
+  với session đã xóa.
+
+Công cụ browser bị chặn khi mở localhost (`ERR_BLOCKED_BY_CLIENT`), nên đây là
+bằng chứng DOM/CSS/HTTP, không phải chứng nhận layout hoặc thao tác trên browser
+của người dùng. Dependency jsdom chỉ dùng trong thư mục tạm ngoài dự án.
+Trang đang mở từ trước cần **F5 một lần** để nạp HTML/script có phiên bản mới.

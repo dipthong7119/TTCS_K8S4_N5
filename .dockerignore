@@ -18,6 +18,6 @@ prompts/
 huongdan/
 ketqua/
 tests/
-backend/app/tests/
+backend/tests/
 backend/skillbackend/
 frontend/skillfrontend/

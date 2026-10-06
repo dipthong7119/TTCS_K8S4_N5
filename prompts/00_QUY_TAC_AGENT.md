@@ -31,6 +31,9 @@ Nếu một yêu cầu của người dùng mâu thuẫn với 3 file này, **d�
 - Biến môi trường **chỉ được đọc ở `app/config.py`**; không rải `os.getenv` khắp nơi, không hardcode secret trong mã nguồn.
 - Frontend: **cấm** `<script>` nghiệp vụ inline trong `.html`; logic JS của từng trang để ở `static/js/pages/`; **mọi** lời gọi API đi qua `static/js/api_client.js`, cấm `fetch()` rải rác.
 - Không viết script debug/test dùng một lần rồi commit lên nhánh chính.
+- Unit test backend đặt ở `backend/tests/`; test toàn hệ thống ở `tests/` tại gốc.
+  Prompt nằm trong `prompts/`, báo cáo trong `ketqua/`, kế hoạch/phân công và
+  kịch bản test thủ công trong `huongdan/`. Tra đường dẫn hiện hành ở codebase map.
 
 ## 3. Quy tắc nghiệp vụ xuyên suốt (rút ra từ đặc tả, áp dụng cho mọi story liên quan)
 

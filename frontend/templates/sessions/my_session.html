@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/sessions.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -112,12 +112,6 @@
       <option value="anomaly">Bất thường</option>
       <option value="needs_review">Cần xem xét</option>
     </select>
-  </div>
-  <div style="display:flex;align-items:center;gap:var(--space-2);">
-    <button class="btn btn--secondary btn--sm" id="btn-toggle-session-mock" type="button" title="Bật/tắt chế độ mô phỏng kiểm thử giao diện T-48 / T-50">
-      <span class="mock-mode-indicator" id="mock-mode-indicator" style="width:8px;height:8px;border-radius:50%;background:var(--color-text-muted);display:inline-block;margin-right:6px;"></span>
-      <span id="mock-mode-text">Mô phỏng sạc mẫu</span>
-    </button>
   </div>
 </div>
 
@@ -220,5 +214,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/my_session.js"></script>
+<script src="{{ asset_url('js/pages/my_session.js') }}"></script>
 {% endblock %}

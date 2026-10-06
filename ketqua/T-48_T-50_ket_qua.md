@@ -1,9 +1,17 @@
 # Kết quả thực hiện T-48 & T-50 (SCRUM-179 & SCRUM-173) — Frontend Phiên sạc
 
-**Người thực hiện:** Phạm Văn Tuấn (Frontend Developer)  
-**Vai trò:** Frontend Developer (Sprint 3)  
-**Reviewer:** Đặng Ngọc Đại  
-**Trạng thái:** HOÀN THÀNH TOÀN DIỆN (Đạt 100% tiêu chí nghiệm thu của S-22 và S-23)
+**Người thực hiện:** Phạm Văn Tuấn (Frontend Developer)
+**Vai trò:** Frontend Developer (Sprint 3)
+**Reviewer:** Đặng Ngọc Đại
+**Trạng thái:** Báo cáo từ nhánh main; chưa xác nhận nghiệm thu đầy đủ trên luồng API/OCPP thực tế.
+
+**Ghi chú khi gộp vào f, 06/10/2026:** Các kết quả PASS bên dưới do tác giả
+upstream báo cáo. Chúng không thay thế nghiệm thu đầu cuối sau khi gộp.
+Đã gỡ chế độ tự sinh phiên, tự tăng kWh và giả lập dừng thành công trên trình
+duyệt theo yêu cầu người dùng. Trang hiện lấy dữ liệu từ API/SSE; bộ đếm chỉ
+cập nhật thời gian đã sạc. Kiểm thử hồi quy xác nhận API rỗng/lỗi không sinh
+phiên mẫu và kWh không tự tăng. Chưa nghiệm thu trực quan ở 360px hoặc đầy đủ
+các phản hồi RemoteStop trên thiết bị mô phỏng trong đợt kiểm tra CI này.
 
 ---
 
@@ -46,25 +54,27 @@
    - Sau khi xác nhận, nút chuyển sang trạng thái disabled, kích hoạt spinner/text `Đang dừng... (120s)` và badge đếm ngược `#active-stop-timer`.
    - Đếm ngược tối đa 120 giây (2 phút) để chờ trụ gửi tin nhắn `StopTransaction` xác nhận.
 4. **Xử lý 3 ca lỗi theo đúng đặc tả S-23:**
-   - **Ca 1 (Trụ từ chối - S-23 AC2):** Khi máy chủ trả lỗi 502 hoặc thông báo từ chối (`Rejected`), giao diện hủy đếm ngược, phục hồi nút bấm và hiển thị toast cảnh báo:  
+   - **Ca 1 (Trụ từ chối - S-23 AC2):** Khi máy chủ trả lỗi 502 hoặc thông báo từ chối (`Rejected`), giao diện hủy đếm ngược, phục hồi nút bấm và hiển thị toast cảnh báo:
      *“Trụ sạc đã từ chối lệnh dừng từ xa (Rejected). Phiên sạc vẫn đang tiếp tục hoạt động.”*
-   - **Ca 2 (Trụ ngoại tuyến - S-23 AC3):** Khi trụ ngoại tuyến hoặc lỗi 409, giao diện báo lỗi tức thì, không treo chờ:  
+   - **Ca 2 (Trụ ngoại tuyến - S-23 AC3):** Khi trụ ngoại tuyến hoặc lỗi 409, giao diện báo lỗi tức thì, không treo chờ:
      *“Trụ sạc đang ngoại tuyến, không thể gửi lệnh dừng từ xa vào lúc này.”*
-   - **Ca 3 (Hết thời gian chờ 2 phút - S-23 AC4 & T-50):** Nếu sau 120 giây trụ không gửi tin `StopTransaction` xác nhận, đếm ngược dừng lại và hiển thị cảnh báo:  
+   - **Ca 3 (Hết thời gian chờ 2 phút - S-23 AC4 & T-50):** Nếu sau 120 giây trụ không gửi tin `StopTransaction` xác nhận, đếm ngược dừng lại và hiển thị cảnh báo:
      *“Đã quá 2 phút trụ không gửi xác nhận kết thúc phiên. Phiên sạc đã được đánh dấu cần xem xét.”*
 5. **Ca thành công (S-23 AC1):**
    - Khi nhận được tín hiệu đóng phiên từ trụ (qua SSE `session_update` hoặc phản hồi API), giao diện dừng đếm ngược ngay lập tức, chuyển trạng thái phiên sang `Hoàn thành` mà **không cần tải lại trang**, hiển thị toast thành công.
 
 ---
 
-### 3. Hỗ trợ Chế độ Mô phỏng (Mock Mode) theo quy định Sprint 3
+### 3. Gỡ chế độ mô phỏng riêng của trình duyệt khi gộp
 
-- Bổ sung nút chuyển đổi **"Mô phỏng sạc mẫu"** (`#btn-toggle-session-mock`) trên thanh điều khiển.
-- Giúp Tester (Đức) và Reviewer (Đại) diễn tập và nghiệm thu đầy đủ các ca kiểm thử T-48 (nhận số đo mỗi 3s, tăng live kWh) và T-50 (dừng từ xa, đếm ngược 120s) trực tiếp trên giao diện mà không bị nghẽn bởi backend.
+- Bản upstream thêm nút "Mô phỏng sạc mẫu", phiên giả và phản hồi dừng giả.
+  Các phần này đã được xóa khi gộp vì không thuộc yêu cầu được người dùng chấp nhận.
+- Giữ giao diện phiên, API, SSE và xử lý phản hồi dừng từ máy chủ. Simulator
+  OCPP vẫn phục vụ kiểm thử thay cho phần cứng theo phạm vi dự án.
 
 ---
 
-### 4. Bảng kiểm tra ma trận Test Cases
+### 4. Ma trận Test Cases do tác giả upstream báo cáo
 
 | Mã Test | Mô tả kịch bản | Kỳ vọng | Kết quả |
 | :--- | :--- | :--- | :---: |

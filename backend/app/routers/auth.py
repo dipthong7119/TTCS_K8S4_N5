@@ -9,12 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.deps import deny_unannotated_route, public_route, require_role
+from app.core.deps import (
+    CurrentUser,
+    deny_unannotated_route,
+    public_route,
+    require_role,
+)
 from app.core.security import verify_password
 from app.database import get_db
 from app.models.login_ip_attempt import LoginIPAttempt
 from app.models.user import User
-from app.schemas.user import LoginRequest, LoginResponse
+from app.schemas.user import LoginRequest, LoginResponse, MeResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(deny_unannotated_route)])
 
@@ -141,3 +146,38 @@ async def logout(request: Request):
     """Xoa session, chuyen ve trang dang nhap."""
     request.session.clear()
     return {"message": "Da dang xuat"}
+
+
+# Nhan hien thi tieng Viet theo do uu tien vai tro
+_ROLE_LABEL_MAP = {
+    "admin":         "Quản trị viên",
+    "operator":      "Vận hành viên",
+    "station_owner": "Chủ trạm",
+    "accountant":    "Kế toán",
+    "driver":        "Tài xế",
+}
+_ROLE_PRIORITY = ["admin", "operator", "station_owner", "accountant", "driver"]
+
+
+@router.get("/me", response_model=MeResponse,
+            dependencies=[Depends(require_role(
+                "admin", "operator", "station_owner", "accountant", "driver"
+            ))])
+async def get_me(current_user: CurrentUser):
+    """
+    Tra ve thong tin nguoi dung dang dang nhap.
+    Duoc goi boi route_guard.js (SCRUM-135) de kiem tra phien va quyen.
+    """
+    role_names = [r.name for r in current_user.roles]
+    # Lay nhan cua role co uu tien cao nhat
+    main_role = next(
+        (r for r in _ROLE_PRIORITY if r in role_names),
+        role_names[0] if role_names else "unknown",
+    )
+    return MeResponse(
+        user_id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name or "",
+        roles=role_names,
+        role_label=_ROLE_LABEL_MAP.get(main_role, main_role),
+    )

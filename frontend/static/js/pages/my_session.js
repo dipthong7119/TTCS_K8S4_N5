@@ -22,10 +22,6 @@
   let _stopRemainingSec = 0;
   let _activeStopButton = null;
 
-  // Chế độ mô phỏng dữ liệu mẫu (Mock Mode) theo quy định Sprint 3
-  let _isMockMode = false;
-  let _mockMeterInterval = null;
-
   const _pageRoot = document.getElementById('sessions-page');
   const _isGlobal = _pageRoot?.dataset.scope === 'all';
   const _columnCount = Number(_pageRoot?.dataset.columnCount || 8);
@@ -70,7 +66,6 @@
 
   // ── T-48: Hiển thị và Cập nhật Phiên đang sạc ──────────────────────────────
   async function loadCurrentActiveSession() {
-    if (_isMockMode) return;
     try {
       // Ưu tiên gọi API phiên hiện tại cho driver (T-47)
       if (!_isGlobal && ApiClient.getCurrentSession) {
@@ -247,24 +242,6 @@
       }
     }, 1000);
 
-    // Kịch bản Mock Mode
-    if (_isMockMode) {
-      setTimeout(() => {
-        clearInterval(_stopCountdownTimer);
-        _stopCountdownTimer = null;
-        setStoppingUI(buttonEl, false, 0);
-        // Mô phỏng thành công
-        showToast(`Phiên #${sessionId} đã kết thúc thành công từ xa.`, 'success');
-        if (_activeSession && _activeSession.id == sessionId) {
-          _activeSession.status = 'completed';
-          _activeSession.ended_at = new Date().toISOString();
-          renderActiveBanner(null);
-        }
-        loadSessions();
-      }, 3000);
-      return;
-    }
-
     try {
       const result = await ApiClient.remoteStop(sessionId);
       // Khi server trả status Accepted
@@ -308,11 +285,6 @@
   async function loadSessions() {
     const period = document.getElementById('session-period')?.value || '30';
     const status = document.getElementById('session-status-filter')?.value || '';
-
-    if (_isMockMode) {
-      renderMockData();
-      return;
-    }
 
     try {
       const listFn = _isGlobal ? ApiClient.listAllSessions : ApiClient.listMySessions;
@@ -468,112 +440,6 @@
     if (modal) modal.classList.remove('is-hidden');
   }
 
-  // ── Chế độ Mô phỏng / Dữ liệu mẫu (Mock Mode) ───────────────────────────
-  function toggleMockMode() {
-    _isMockMode = !_isMockMode;
-    const indicator = document.getElementById('mock-mode-indicator');
-    const text = document.getElementById('mock-mode-text');
-
-    if (_isMockMode) {
-      if (indicator) indicator.classList.add('is-active');
-      if (text) text.textContent = 'Đang mô phỏng sạc';
-      showToast('Đã bật chế độ mô phỏng kiểm thử giao diện T-48 / T-50.', 'info');
-      startMockSimulation();
-    } else {
-      if (indicator) indicator.classList.remove('is-active');
-      if (text) text.textContent = 'Mô phỏng sạc mẫu';
-      stopMockSimulation();
-      showToast('Đã tắt chế độ mô phỏng; quay về dữ liệu hệ thống.', 'default');
-      loadSessions();
-    }
-  }
-
-  function startMockSimulation() {
-    const mockSession = {
-      id: 8888,
-      station_name: 'Trạm EcoCharge Cầu Giấy',
-      charge_point_code: 'CP-CG-01',
-      connector_number: 1,
-      driver_name: 'Nguyễn Văn Tuấn',
-      started_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-      live_kwh: 12.450,
-      status: 'active',
-      is_demo: true,
-    };
-
-    renderActiveBanner(mockSession);
-    renderMockData();
-
-    // Giả lập nhận MeterValues mỗi 3 giây (kiểm chứng T-48 AC2: cập nhật số kWh dưới 2s)
-    clearInterval(_mockMeterInterval);
-    _mockMeterInterval = setInterval(() => {
-      if (!_isMockMode || !_activeSession) return;
-      _currentLiveKwh += 0.052;
-      _activeSession.live_kwh = _currentLiveKwh;
-      updateLiveKwhDisplay(_currentLiveKwh, true);
-    }, 3000);
-  }
-
-  function stopMockSimulation() {
-    clearInterval(_mockMeterInterval);
-    _mockMeterInterval = null;
-  }
-
-  function renderMockData() {
-    const mockItems = [
-      {
-        id: 8888,
-        station_name: 'Trạm EcoCharge Cầu Giấy',
-        charge_point_code: 'CP-CG-01',
-        driver_name: 'Nguyễn Văn Tuấn',
-        started_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        ended_at: null,
-        duration_seconds: 900,
-        live_kwh: _currentLiveKwh || 12.450,
-        cost_vnd: null,
-        status: 'active',
-        is_demo: true,
-      },
-      {
-        id: 8887,
-        station_name: 'Trạm EcoCharge Ba Đình',
-        charge_point_code: 'CP-BD-02',
-        driver_name: 'Nguyễn Văn Tuấn',
-        started_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-        ended_at: new Date(Date.now() - 1.2 * 3600 * 1000).toISOString(),
-        duration_seconds: 2880,
-        kwh: 35.820,
-        cost_vnd: 135000,
-        status: 'completed',
-        stop_reason: 'EVDisconnected',
-        is_demo: true,
-      },
-      {
-        id: 8885,
-        station_name: 'Trạm EcoCharge Mỹ Đình',
-        charge_point_code: 'CP-MD-01',
-        driver_name: 'Trần Thị Mai',
-        started_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-        ended_at: new Date(Date.now() - 23 * 3600 * 1000).toISOString(),
-        duration_seconds: 3600,
-        kwh: 42.100,
-        cost_vnd: 160000,
-        status: 'completed',
-        stop_reason: 'Local',
-        is_demo: true,
-      },
-    ];
-
-    renderTable(mockItems);
-    renderStats({
-      total: 3,
-      total_kwh: 90.37,
-      total_cost_vnd: 295000,
-    });
-    const countEl = document.getElementById('session-count');
-    if (countEl) countEl.textContent = '3 phiên (mô phỏng)';
-  }
-
   // ── Khởi tạo trang ────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadSessions();
@@ -604,14 +470,10 @@
       if (e.target === e.currentTarget) closeStopConfirmation();
     });
 
-    // Nút chuyển đổi Mock Mode
-    document.getElementById('btn-toggle-session-mock')?.addEventListener('click', toggleMockMode);
-
     // Kênh realtime SSE (T-48 & T-50)
     if (_pageRoot?.dataset.liveUpdates === 'true' && window.SseClient) {
       SseClient.connect('/api/monitoring/sse');
       SseClient.on('session_update', payload => {
-        if (_isMockMode) return;
 
         // Cập nhật live kWh tức thì (< 2s) nếu phiên đang hiển thị nhận được số đo mới
         if (_activeSession && payload?.session_id == _activeSession.id) {
@@ -628,4 +490,3 @@
     }
   });
 })();
-

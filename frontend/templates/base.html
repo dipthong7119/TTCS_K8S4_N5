@@ -12,8 +12,8 @@
   <!-- Fonts + CSS -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="/static/css/base.css" />
-  <link rel="stylesheet" href="/static/css/components.css" />
+  <link rel="stylesheet" href="{{ asset_url('css/base.css') }}" />
+  <link rel="stylesheet" href="{{ asset_url('css/components.css') }}" />
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -202,13 +202,14 @@
 </div><!-- /app-shell -->
 
 <!-- Shared JS -->
-<script src="/static/js/api_client.js"></script>
-<script src="/static/js/sse_client.js"></script>
-<script src="/static/js/realtime_status.js"></script>
-<script src="/static/js/restart_button.js"></script>
-<script src="/static/js/form_guard.js"></script>
+<script id="auth-context" type="application/json">{{ current_user | tojson }}</script>
+<script src="{{ asset_url('js/api_client.js') }}"></script>
+<script src="{{ asset_url('js/auth_guard.js') }}"></script>
+<script src="{{ asset_url('js/sse_client.js') }}"></script>
+<script src="{{ asset_url('js/restart_button.js') }}"></script>
+<script src="{{ asset_url('js/form_guard.js') }}"></script>
 
-<script src="/static/js/layout.js"></script>
+<script src="{{ asset_url('js/layout.js') }}"></script>
 
 {% block extra_js %}{% endblock %}
 </body>
