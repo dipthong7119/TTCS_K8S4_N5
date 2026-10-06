@@ -95,10 +95,24 @@ def reconcile_single_session(
     # Cả hai bên đều có bản ghi
     session_id = system_record.get("session_id", sim_record.get("session_id", "N/A"))
     code = str(system_record.get("charge_point_code") or sim_record.get("charge_point_code") or "UNKNOWN")
-    connector_id = int(system_record.get("connector_id") or sim_record.get("connector_id") or 1)
-    start_wh = float(system_record.get("meter_start_wh") if system_record.get("meter_start_wh") is not None else sim_record.get("meter_start_wh", 0))
-    stop_wh = float(system_record.get("meter_stop_wh") if system_record.get("meter_stop_wh") is not None else sim_record.get("meter_stop_wh", 0))
-    disconnect_count = int(sim_record.get("disconnect_count") if sim_record.get("disconnect_count") is not None else system_record.get("disconnect_count", 0))
+    raw_conn = system_record.get("connector_id")
+    if raw_conn is None:
+        raw_conn = sim_record.get("connector_id")
+    connector_id = int(raw_conn) if raw_conn is not None else 1
+    raw_start = system_record.get("meter_start_wh")
+    if raw_start is None:
+        raw_start = sim_record.get("meter_start_wh")
+    start_wh = float(raw_start) if raw_start is not None else 0.0
+
+    raw_stop = system_record.get("meter_stop_wh")
+    if raw_stop is None:
+        raw_stop = sim_record.get("meter_stop_wh")
+    stop_wh = float(raw_stop) if raw_stop is not None else 0.0
+
+    raw_disc = sim_record.get("disconnect_count")
+    if raw_disc is None:
+        raw_disc = system_record.get("disconnect_count")
+    disconnect_count = int(raw_disc) if raw_disc is not None else 0
 
     sys_kwh = float(system_record.get("system_kwh", 0.0))
     sim_kwh = float(sim_record.get("simulator_kwh", 0.0))
