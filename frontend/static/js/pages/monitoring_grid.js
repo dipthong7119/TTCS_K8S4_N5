@@ -262,41 +262,97 @@
   // SCRUM-191: lưu trạng thái chờ theo mã trụ.
   const startRequests = new Map();
 
+  function connectorAvailable(point, connector) {
+    return point?.status === 'online' && Boolean(connector) &&
+      (connector.ocpp_status ? connector.ocpp_status === 'Available' : connector.status === 'rảnh');
+  }
+
+  function findStartPoint(code) {
+    return stations.flatMap(station => station.charge_points || []).find(point => point.code === code);
+  }
+
   function updateStartWaitingUI() {
+    for (const [code, request] of startRequests) {
+      if (!['sending', 'waiting'].includes(request.phase)) continue;
+      const point = isMockMode ? null : findStartPoint(code);
+      const connector = point?.connectors?.find(item => String(item.connector_id) === request.connectorId);
+      if (connector?.ocpp_status === 'Charging') {
+        request.phase = 'success';
+        request.message = 'Đầu nối đã chuyển sang trạng thái đang sạc.';
+        request.controller.abort();
+      } else if (point?.status === 'offline') {
+        request.phase = 'error';
+        request.message = 'Trụ đã mất kết nối. Hãy kiểm tra trạng thái trước khi thử lại.';
+        request.controller.abort();
+      } else if (Date.now() >= request.deadline) {
+        request.phase = 'error';
+        request.message = 'Hết thời gian chờ 60 giây. Chưa xác nhận được phiên sạc; hãy kiểm tra trạng thái trước khi thử lại.';
+        request.controller.abort();
+      }
+    }
     document.querySelectorAll('.start-charging-controls').forEach(controls => {
       const select = controls.querySelector('[data-start-connector]');
+      const tag = controls.querySelector('[data-start-id-tag]');
       const button = controls.querySelector('[data-start-charging]');
       const message = controls.querySelector('[data-start-message]');
       const request = startRequests.get(button.dataset.cpCode);
-
-      if (!request) return;
-
-      const seconds = Math.max(
-        0,
-        Math.ceil((request.deadline - Date.now()) / 1000)
-      );
-
-      select.value = request.connectorId;
-      select.disabled = seconds > 0;
-      button.disabled = seconds > 0 || !select.value;
-
-      if (seconds > 0) {
-        button.textContent = 'Đang chờ...';
-        message.textContent =
-          `Đang chờ trụ xác nhận… còn ${seconds} giây (bản thử).`;
-      } else {
-        button.textContent = 'Bắt đầu sạc';
-        message.textContent =
-          'Hết thời gian chờ 60 giây (bản thử). Chưa gửi lệnh sạc thật.';
+      const pending = request && ['sending', 'waiting'].includes(request.phase);
+      if (request) {
+        select.value = request.connectorId;
+        tag.value = request.idTag;
+        const seconds = Math.max(0, Math.ceil((request.deadline - Date.now()) / 1000));
+        message.textContent = pending
+          ? `${request.phase === 'sending' ? 'Đang gửi yêu cầu' : 'Trụ đã chấp nhận lệnh, đang chờ bắt đầu sạc'}… còn ${seconds} giây.`
+          : request.message;
       }
+      const point = findStartPoint(button.dataset.cpCode);
+      const connector = point?.connectors?.find(item => String(item.connector_id) === select.value);
+      select.disabled = Boolean(pending);
+      tag.disabled = Boolean(pending);
+      button.disabled = Boolean(pending) || isMockMode || !connectorAvailable(point, connector) ||
+        !tag.value.trim() || tag.value.trim().length > 20;
+      button.textContent = pending ? 'Đang chờ...' : 'Bắt đầu sạc';
+      if (isMockMode && !request) message.textContent = 'Đang xem dữ liệu mẫu. Chuyển sang dữ liệu máy chủ để gửi lệnh sạc.';
     });
   }
 
-  // Cập nhật số giây, kể cả khi phần chi tiết được vẽ lại.
-  const startWaitingTimer = window.setInterval(updateStartWaitingUI, 1000);
+  async function submitRemoteStart(code, connectorId, idTag) {
+    const previous = startRequests.get(code);
+    if (previous && ['sending', 'waiting'].includes(previous.phase)) return;
+    const point = findStartPoint(code);
+    const connector = point?.connectors?.find(item => String(item.connector_id) === connectorId);
+    if (isMockMode || !connectorAvailable(point, connector) || !idTag || idTag.length > 20) return;
+    const request = {
+      connectorId, idTag, phase: 'sending', deadline: Date.now() + 60000,
+      controller: new AbortController(), message: ''
+    };
+    startRequests.set(code, request);
+    updateStartWaitingUI();
+    try {
+      const result = await ApiClient.remoteStartChargePoint(code, Number(connectorId), idTag,
+        { signal: request.controller.signal });
+      if (request.phase !== 'sending') return;
+      if (result?.status === 'Accepted') {
+        request.phase = 'waiting';
+      } else {
+        request.phase = 'error';
+        request.message = result?.status === 'Rejected'
+          ? (result.message || 'Trụ từ chối lệnh bắt đầu sạc.')
+          : 'Phản hồi không hợp lệ từ máy chủ. Hãy kiểm tra trạng thái trụ.';
+      }
+    } catch (error) {
+      if (request.phase !== 'sending') return;
+      request.phase = 'error';
+      request.message = error.message || 'Không thể gửi lệnh bắt đầu sạc. Vui lòng thử lại.';
+    } finally {
+      updateStartWaitingUI();
+    }
+  }
 
+  const startWaitingTimer = window.setInterval(updateStartWaitingUI, 1000);
   window.addEventListener('pagehide', () => {
     window.clearInterval(startWaitingTimer);
+    for (const request of startRequests.values()) request.controller.abort();
   });
 
   function updateMockBtnUI() {
@@ -492,10 +548,7 @@
     const connectors = point.connectors || [];
 
     const options = connectors.map(connector => {
-      const available = point.status === 'online' &&
-        (connector.ocpp_status
-          ? connector.ocpp_status === 'Available'
-          : connector.status === 'rảnh');
+      const available = connectorAvailable(point, connector);
 
       return `
         <option value="${escapeHtml(connector.connector_id)}"
@@ -515,6 +568,11 @@
           </select>
         </label>
 
+        <label>
+          Mã thẻ / mã tài xế
+          <input class="form-input" type="text" data-start-id-tag
+                 maxlength="20" required autocomplete="off" placeholder="Nhập mã từ 1 đến 20 ký tự">
+        </label>
         <button class="btn btn--primary"
                 type="button"
                 data-start-charging
@@ -548,21 +606,22 @@
     });
     body.querySelectorAll('.start-charging-controls').forEach(controls => {
       const select = controls.querySelector('[data-start-connector]');
+      const tag = controls.querySelector('[data-start-id-tag]');
       const button = controls.querySelector('[data-start-charging]');
-      const message = controls.querySelector('[data-start-message]');
-
-      select.addEventListener('change', () => {
-        button.disabled = !select.value;
-        message.textContent = '';
-      });
-
+      const clearResult = () => {
+        const request = startRequests.get(button.dataset.cpCode);
+        if (request && ['sending', 'waiting'].includes(request.phase)) return;
+        startRequests.delete(button.dataset.cpCode);
+        controls.querySelector('[data-start-message]').textContent = '';
+        updateStartWaitingUI();
+      };
+      select.addEventListener('change', clearResult);
+      tag.addEventListener('input', clearResult);
       button.addEventListener('click', () => {
-        if (!select.value) return;
-        message.textContent =
-          `Đã chọn trụ ${button.dataset.cpCode}, đầu nối ${select.value}. ` +
-          'Đây là bản thử giao diện; chưa gửi yêu cầu sạc.';
+        submitRemoteStart(button.dataset.cpCode, select.value, tag.value.trim());
       });
     });
+    updateStartWaitingUI();
   }
 
 

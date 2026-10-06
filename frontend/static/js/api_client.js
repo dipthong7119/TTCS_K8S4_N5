@@ -75,6 +75,7 @@ const ApiClient = (() => {
 
     // --- Monitoring ---
     getMonitoringTree: () => _request('GET', '/monitoring/tree'),
+    remoteStartChargePoint: (code, connectorId, idTag, opts) => _request('POST', `/charge_points/${encodeURIComponent(code)}/remote-start`, { connector_id: connectorId, id_tag: idTag }, opts),
     resetChargePoint: (code, type = 'Soft') => _request('POST', `/charge_points/${encodeURIComponent(code)}/reset`, { type }),
 
     // --- Sessions ---
