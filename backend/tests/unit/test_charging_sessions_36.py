@@ -11,15 +11,15 @@ NFR:
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
+from alembic import command
 from alembic.config import Config
+import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 - nạp đủ model cho Base.metadata
-from alembic import command
 from app.config import settings
 from app.database import Base
 from app.models.charge_point import ChargePoint

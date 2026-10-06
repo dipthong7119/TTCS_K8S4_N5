@@ -399,7 +399,3 @@ class TestMigrationIdempotency:
             assert "vendor" in cols
         finally:
             engine.dispose()
-<<<<<<< HEAD:backend/app/tests/unit/test_boot_notification_113.py
-
-=======
->>>>>>> a48c28eea3c916afdb0a3ac0f9f5004a5d2b0564:backend/tests/unit/test_boot_notification_113.py
