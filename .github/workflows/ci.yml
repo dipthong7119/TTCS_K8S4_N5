@@ -4,12 +4,13 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -54,6 +55,11 @@ jobs:
           name: python-coverage
           path: backend/coverage.xml
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Check frontend behavior
         working-directory: .
         run: node --test tests/frontend_behavior.cjs
@@ -73,13 +79,22 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Smoke-test Docker Compose OCPP simulator
+        id: smoke-tests
+        timeout-minutes: 5
         working-directory: .
         shell: bash
         run: |
           set -euo pipefail
           export CSMS_IMAGE=csms-app:ci
-          docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --no-build --wait db app
+          docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --no-build --wait --wait-timeout 120 db app
           python -m pytest tests/sprint2_docker_acceptance.py --tb=short -v
+
+      - name: Collect failed Docker smoke-test diagnostics
+        if: failure() && steps.smoke-tests.outcome == 'failure'
+        working-directory: .
+        run: |
+          docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml ps --all
+          docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml logs --no-color --tail 100
 
       - name: Stop Docker Compose smoke-test stack
         if: always()

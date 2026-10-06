@@ -221,4 +221,39 @@ Kết quả GitHub phải đọc từ workflow của commit được push lên f
 | Dữ liệu và cấu trúc | Excel SHA256 giữ nguyên; giữ `.env` và volume PostgreSQL; không sinh thư mục backup hoặc test trùng trong app |
 
 Phạm vi đồng bộ là HOANG-DUC, không nhận nhánh frontend DANG-DAI-REMOTE-START.
-Kết quả này áp dụng bản local; chưa chạy workflow GitHub cho bản sửa sau gộp.
+Kết quả này được ghi nhận tại thời điểm đồng bộ local; bước sửa pipeline và
+kiểm chứng GitHub tiếp theo nằm ở mục dưới.
+
+## Kiểm tra độ ổn định CI/CD — T-02, T-03
+
+- Run HOANG-DUC `37476960203` thất bại ở Ruff do dấu conflict marker bị commit.
+  Run LAM-TUNG `37472521730` lỗi import/type/lint trong bản main cũ. Những lỗi
+  này đã được sửa trong lịch sử f hiện tại; chạy lại commit cũ không sửa được lỗi.
+  Run HOANG-DUC mới `37480905045` vẫn lỗi thứ tự import và tên `timezone` chưa
+  định nghĩa; bản f đã qua Ruff và các test remote với tham chiếu UTC đúng.
+- CD trước đây chỉ lặp lại lint/unit test, không chờ Docker và nghiệm thu OCPP.
+  Chuyển job `test` sang gọi `ci.yml` bằng `workflow_call` tại cùng commit để
+  mọi kiểm tra CI đều là điều kiện bắt buộc trước khi build/push/deploy staging.
+- Chọn Node.js 22, giới hạn chờ Compose 120 giây và bước nghiệm thu 5 phút.
+  Thu trạng thái/log container khi smoke test lỗi trước khi luôn dọn stack tạm.
+- Tách concurrency kiểm tra CD theo nhánh; giữ mutex triển khai chung main/master
+  để không thay hai image trên cùng server cùng lúc. Quyền ghi package chỉ nằm
+  ở job triển khai; f chỉ chạy kiểm tra. Không bỏ qua test hoặc audit.
+- Giữ kiểm thử các nhánh rollback và bổ sung kiểm thử điều kiện Docker/OCPP,
+  phạm vi nhánh và concurrency. Không có staging thật để xác nhận SSH deploy.
+
+### Kiểm chứng trước push bản sửa CI/CD
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| actionlint 1.7.12, cả hai workflow | Đạt kiểm tra cú pháp/cấu trúc Actions |
+| Linux/Python 3.11.16, nguồn từ Git index | **429 passed**, 26 warnings, 61,40 giây; coverage tổng hợp **74%** |
+| Ruff / Mypy / pip-audit trên Linux | Đạt; Mypy **46 file**; không có lỗ hổng thư viện được báo |
+| Hành vi JavaScript local | **51 passed**, không fail/skip |
+| Điều kiện triển khai và rollback | **8 passed**, gồm các nhánh ứng viên lỗi, thay image lỗi, health lỗi và pull lỗi |
+
+Kết quả workflow GitHub được đối chiếu theo SHA sau khi push lên f; trạng thái
+xanh trên f không xác nhận đã triển khai staging, vì job triển khai chỉ dành
+cho main/master.
+Nhánh f remote đã bị xóa trước lần push này (PR #30 đã đóng, chưa merge).
+Đẩy lại f theo yêu cầu trước đó; không mở lại PR hoặc đẩy lên main/HOANG-DUC.

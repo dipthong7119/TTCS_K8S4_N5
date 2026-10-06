@@ -383,8 +383,13 @@ Pipeline GitHub Actions gồm 2 workflow:
 
 | File | Kích hoạt | Tác vụ |
 |---|---|---|
-| `.github/workflows/ci.yml` | Mọi push / PR; có thể chạy thủ công | Ruff, Mypy, audit phụ thuộc, pytest, build Docker image |
-| `.github/workflows/deploy.yml` | Merge vào `main` | Deploy lên staging server |
+| `.github/workflows/ci.yml` | Mọi push / PR; chạy thủ công hoặc được CD gọi | Ruff, Mypy, audit phụ thuộc, pytest, JS, build Docker và nghiệm thu Compose/OCPP |
+| `.github/workflows/deploy.yml` | Push vào `main`, `master`, `f` | Gọi toàn bộ CI; chỉ triển khai staging từ `main`/`master` sau khi kiểm tra đạt |
+
+CD dùng lại workflow CI tại cùng commit, nên lỗi Docker/OCPP cũng chặn triển khai.
+Kiểm tra trên các nhánh chạy độc lập; các lần triển khai cùng server được xếp
+tuần tự và không hủy giữa chừng khi có push mới. Node.js được chọn phiên bản 22;
+bước nghiệm thu có giới hạn 5 phút, thu log khi lỗi và luôn dọn stack test.
 
 **Secrets cần cấu hình** tại `Settings > Secrets and variables > Actions`:
 
