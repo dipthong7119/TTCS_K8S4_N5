@@ -1,17 +1,14 @@
 import datetime
 import time
+from decimal import Decimal
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from decimal import Decimal
 
-from app.models.meter_value import MeterValue
 from app.models.charging_session import ChargingSession
-from app.models.user import User
-from app.models.charge_point import ChargePoint
-from app.models.station import Station
+from app.models.meter_value import MeterValue
 from app.services.meter_values import get_latest_meter_value
 
 
@@ -176,38 +173,41 @@ def test_performance_light_load(db: Session):
     assert duration_ms < 50, f"Truy vấn quá chậm: {duration_ms}ms"
 
 
-def test_migration_upgrade_downgrade(tmp_path):
-    """
-    Test migration bằng cách tạo DB SQLite tạm thời và chạy alembic commands.
-    """
-    import os
-    from alembic import command
+def test_migration_upgrade_downgrade(tmp_path, monkeypatch):
+    from pathlib import Path
+
     from alembic.config import Config
-    
-    db_path = tmp_path / "test_migration.db"
-    db_url = f"sqlite:///{db_path}"
-    
-    # Load alembic.ini config
-    alembic_ini_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../alembic.ini"))
-    alembic_cfg = Config(alembic_ini_path)
-    alembic_cfg.set_main_option("sqlalchemy.url", db_url)
-    
-    # 1. Upgrade to head
-    command.upgrade(alembic_cfg, "head")
-    
-    # Kiểm tra bảng và chỉ mục tồn tại
+
+    from alembic import command
+    from app.config import settings
+
+    db_url = f"sqlite:///{(tmp_path / 'test_migration.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", db_url)
+
+    cfg = Config()
+    cfg.set_main_option(
+        "script_location",
+        str(Path(__file__).resolve().parents[3] / "alembic"),
+    )
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
     engine = sa.create_engine(db_url)
-    inspector = sa.inspect(engine)
-    assert "meter_values" in inspector.get_table_names()
-    indexes = [idx["name"] for idx in inspector.get_indexes("meter_values")]
-    assert "ix_meter_values_session_id_measured_at" in indexes
-    
-    # 2. Downgrade -1
-    command.downgrade(alembic_cfg, "-1")
-    inspector = sa.inspect(engine)
-    assert "meter_values" not in inspector.get_table_names()
-    
-    # 3. Upgrade to head again
-    command.upgrade(alembic_cfg, "head")
-    inspector = sa.inspect(engine)
-    assert "meter_values" in inspector.get_table_names()
+    try:
+        command.upgrade(cfg, "head")
+        inspector = sa.inspect(engine)
+        assert "meter_values" in inspector.get_table_names()
+        indexes = {idx["name"] for idx in inspector.get_indexes("meter_values")}
+        assert "ix_meter_values_session_id_measured_at" in indexes
+
+        command.downgrade(cfg, "h20261004_defaults")
+        inspector = sa.inspect(engine)
+        assert "meter_values" in inspector.get_table_names()
+        indexes = {idx["name"] for idx in inspector.get_indexes("meter_values")}
+        assert "ix_meter_values_session_measured" in indexes
+
+        command.upgrade(cfg, "head")
+        inspector = sa.inspect(engine)
+        indexes = {idx["name"] for idx in inspector.get_indexes("meter_values")}
+        assert "ix_meter_values_session_id_measured_at" in indexes
+    finally:
+        engine.dispose()

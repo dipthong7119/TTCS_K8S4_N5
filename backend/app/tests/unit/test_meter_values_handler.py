@@ -1,11 +1,14 @@
-import pytest
 import datetime
+import json
 from decimal import Decimal
+
+import pytest
+
+from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.orphan_message import OrphanMessage
-from app.models.charging_session import ChargingSession
 from app.ocpp.handlers.meter_values import handle_meter_values, parse_meter_values
-import json
+
 
 def test_parse_meter_values_basic():
     """Hàm phân tích thuần: đúng định dạng, lọc đại lượng lạ."""
@@ -68,7 +71,7 @@ def test_parse_meter_values_invalid_value(caplog):
 
 def test_parse_meter_values_formation_errors():
     """Cấu trúc sai trả về ValueError."""
-    with pytest.raises(ValueError, match="meterValue must be an array"):
+    with pytest.raises(TypeError, match="meterValue must be an array"):
         parse_meter_values({"connectorId": 1, "meterValue": {}})
         
     with pytest.raises(ValueError, match="Missing timestamp"):
@@ -80,6 +83,7 @@ def test_handle_meter_values_ac1_ac2(db, dummy_charge_point):
     session = ChargingSession(
         charge_point_id=dummy_charge_point.id,
         charge_point_code=dummy_charge_point.code,
+        station_name="Test Station",
         connector_number=1,
         meter_start_wh=0,
         started_at=datetime.datetime.now(datetime.timezone.utc),
@@ -104,12 +108,13 @@ def test_handle_meter_values_ac1_ac2(db, dummy_charge_point):
     }
     
     response = handle_meter_values(db, dummy_charge_point, "msg-123", payload)
-    result_dict = json.loads(response[3]) if isinstance(response, list) else json.loads(response.split(',', 3)[-1][:-1]) # parse conf
+    assert json.loads(response) == [3, "msg-123", {}]
     
     # Check return conf
     assert 'msg-123' in response
     assert response.startswith('[3')
     
+    db.flush()
     records = db.query(MeterValue).filter_by(session_id=session.id).all()
     assert len(records) == 2
     measurands = [r.measurand for r in records]
@@ -135,6 +140,7 @@ def test_handle_meter_values_ac3_orphan(db, dummy_charge_point):
     records = db.query(MeterValue).all()
     assert len(records) == 0
     
+    db.flush()
     orphans = db.query(OrphanMessage).filter_by(charge_point_code=dummy_charge_point.code).all()
     assert len(orphans) == 1
     assert orphans[0].reason == "no_active_session"
@@ -148,6 +154,7 @@ async def test_handle_meter_values_ac4_perf(db, dummy_charge_point):
     session = ChargingSession(
         charge_point_id=dummy_charge_point.id,
         charge_point_code=dummy_charge_point.code,
+        station_name="Test Station",
         connector_number=1,
         meter_start_wh=0,
         started_at=datetime.datetime.now(datetime.timezone.utc),
@@ -174,5 +181,6 @@ async def test_handle_meter_values_ac4_perf(db, dummy_charge_point):
     # Trung bình mỗi request phải < 200ms -> 20 request phải < 4s
     assert duration < 4.0
     
+    db.flush()
     count = db.query(MeterValue).filter_by(session_id=session.id).count()
     assert count == 20

@@ -1,7 +1,6 @@
 """Handler cho sự kiện MeterValues."""
 
 import logging
-from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session
@@ -27,7 +26,7 @@ def parse_meter_values(payload: dict) -> list[dict]:
     """Hàm thuần phân tích payload MeterValues thành danh sách dict để lưu."""
     readings = payload.get("meterValue")
     if not isinstance(readings, list):
-        raise ValueError("meterValue must be an array")
+        raise TypeError("meterValue must be an array")
     
     # Fallback cho trường hợp không có timestamp trong sampledValue
     # Tuy nhiên spec OCPP 1.6 yêu cầu timestamp nằm ở meterValue, không ở sampledValue.
@@ -47,7 +46,7 @@ def parse_meter_values(payload: dict) -> list[dict]:
             
         samples = reading.get("sampledValue")
         if not isinstance(samples, list):
-            raise ValueError("sampledValue must be an array")
+            raise TypeError("sampledValue must be an array")
             
         for sample in samples:
             if not isinstance(sample, dict):
@@ -107,7 +106,7 @@ def handle_meter_values(db: Session, point: ChargePoint, msg_id: str, payload: d
         
     try:
         raw_samples = parse_meter_values(payload)
-    except ValueError as e:
+    except (TypeError, ValueError) as e:
         return pack_call_error(msg_id, "FormationViolation", str(e))
         
     # Khớp phiên sạc

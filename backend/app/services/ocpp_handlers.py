@@ -4,27 +4,21 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.charge_point import ChargePoint, Connector
+from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
-from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
-from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
-from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
-    pack_call_result,
     parse_message,
 )
 from app.services.ocpp_status import is_charge_point_stale, station_status_payload
-from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
 
@@ -188,13 +182,19 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
         return new_handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
-        from app.ocpp.handlers.start_transaction import handle_start_transaction as new_handle_start_transaction
+        from app.ocpp.handlers.start_transaction import (
+            handle_start_transaction as new_handle_start_transaction,
+        )
         return new_handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
-        from app.ocpp.handlers.meter_values import handle_meter_values as new_handle_meter_values
+        from app.ocpp.handlers.meter_values import (
+            handle_meter_values as new_handle_meter_values,
+        )
         return new_handle_meter_values(db, point, msg_id, payload)
     if action == "StopTransaction":
-        from app.ocpp.handlers.stop_transaction import handle_stop_transaction as new_handle_stop_transaction
+        from app.ocpp.handlers.stop_transaction import (
+            handle_stop_transaction as new_handle_stop_transaction,
+        )
         return new_handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
@@ -286,4 +286,128 @@ def publish_session_update(
         session.user_id,
         station.owner_id if station is not None else None,
         session.id,
+    )
+
+
+from decimal import Decimal, InvalidOperation
+
+from app.models.meter_value import MeterValue
+from app.models.orphan_message import OrphanMessage
+
+KNOWN_MEASURANDS = {
+    "Energy.Active.Import.Register",
+    "Energy.Active.Import.Interval",
+    "Energy.Active.Export.Register",
+    "Energy.Active.Export.Interval",
+    "Energy.Reactive.Import.Register",
+    "Energy.Reactive.Import.Interval",
+    "Energy.Reactive.Export.Register",
+    "Energy.Reactive.Export.Interval",
+    "Power.Active.Import",
+    "Power.Active.Export",
+    "Power.Active.Import.Offered",
+    "Power.Active.Export.Offered",
+    "Power.Factor",
+    "Power.Reactive.Import",
+    "Power.Reactive.Export",
+    "Current.Import",
+    "Current.Export",
+    "Current.Offered",
+    "Voltage",
+    "Frequency",
+    "SoC",
+    "Temperature",
+}
+
+DEFAULT_METER_UNITS = {
+    "Energy.Active.Import.Register": "Wh",
+    "Energy.Active.Import.Interval": "Wh",
+    "Energy.Active.Export.Register": "Wh",
+    "Energy.Active.Export.Interval": "Wh",
+    "Energy.Reactive.Import.Register": "varh",
+    "Energy.Reactive.Import.Interval": "varh",
+    "Energy.Reactive.Export.Register": "varh",
+    "Energy.Reactive.Export.Interval": "varh",
+    "Power.Active.Import": "W",
+    "Power.Active.Export": "W",
+    "Power.Active.Import.Offered": "W",
+    "Power.Active.Export.Offered": "W",
+    "Power.Reactive.Import": "var",
+    "Power.Reactive.Export": "var",
+    "Current.Import": "A",
+    "Current.Export": "A",
+    "Current.Offered": "A",
+    "Voltage": "V",
+    "Frequency": "Hz",
+    "SoC": "%",
+    "Temperature": "Celsius",
+}
+
+def _normalize_meter_values(readings: list, fallback_timestamp: datetime | None) -> list[dict]:
+    normalized = []
+    for reading in readings:
+        if not isinstance(reading, dict):
+            continue
+        measured_at = _parse_timestamp(reading.get("timestamp")) or fallback_timestamp
+        samples = reading.get("sampledValue")
+        if measured_at is None or not isinstance(samples, list):
+            continue
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+            measurand = sample.get("measurand") or "Energy.Active.Import.Register"
+            raw_value = sample.get("value")
+            if measurand not in KNOWN_MEASURANDS or isinstance(raw_value, bool):
+                continue
+            try:
+                value = Decimal(str(raw_value))
+            except (InvalidOperation, ValueError):
+                continue
+            if not value.is_finite():
+                continue
+            raw_unit = sample.get("unit")
+            unit = raw_unit if isinstance(raw_unit, str) and raw_unit else DEFAULT_METER_UNITS.get(measurand)
+            normalized.append(
+                {
+                    "measured_at": measured_at.isoformat(),
+                    "measurand": measurand,
+                    "value": str(value),
+                    "unit": unit[:20] if unit else None,
+                }
+            )
+    return normalized
+
+def _store_meter_values(db: Session, session: ChargingSession, samples: list[dict]) -> None:
+    db.add_all(
+        [
+            MeterValue(
+                session_id=session.id,
+                measured_at=datetime.fromisoformat(sample["measured_at"]),
+                measurand=sample["measurand"],
+                value=Decimal(sample["value"]),
+                unit=sample["unit"],
+            )
+            for sample in samples
+        ]
+    )
+
+def _save_orphan_message(
+    db: Session,
+    point: ChargePoint,
+    *,
+    action: str,
+    transaction_id: int | None,
+    connector_number: int | None,
+    reason: str,
+    payload: dict,
+) -> None:
+    db.add(
+        OrphanMessage(
+            charge_point_code=point.code,
+            action=action,
+            transaction_id=transaction_id,
+            connector_number=connector_number,
+            reason=reason,
+            payload=payload,
+        )
     )
