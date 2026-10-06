@@ -10,6 +10,7 @@ Tổ chức:
   Phần E — Migration: upgrade/downgrade (smoke test idempotency)
 """
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
