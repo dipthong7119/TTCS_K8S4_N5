@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
@@ -183,6 +183,9 @@ async def get_current_driver_session(
     )
     row = (
         db.query(ChargingSession, MeterValue)
+        # The serializer reads item.invoice; eager-load it to keep this API to
+        # one SQL query alongside the correlated latest-meter lookup.
+        .options(joinedload(ChargingSession.invoice))
         .outerjoin(MeterValue, MeterValue.id == latest_meter_id)
         .filter(ChargingSession.user_id == current_user.id, ChargingSession.ended_at.is_(None))
         .order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
