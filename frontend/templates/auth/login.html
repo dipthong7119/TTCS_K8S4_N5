@@ -7,9 +7,9 @@
   <title>Đăng nhập — CSMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="/static/css/base.css" />
-  <link rel="stylesheet" href="/static/css/components.css" />
-  <link rel="stylesheet" href="/static/css/pages/login.css" />
+  <link rel="stylesheet" href="{{ asset_url('css/base.css') }}" />
+  <link rel="stylesheet" href="{{ asset_url('css/components.css') }}" />
+  <link rel="stylesheet" href="{{ asset_url('css/pages/login.css') }}" />
 </head>
 <body class="login-body">
 
@@ -92,7 +92,6 @@
         <span id="login-alert-text"></span>
       </div>
 
-      <p id="login-mock-notice" class="alert" hidden>Chế độ mock: chỉ thử giao diện, không tạo phiên đăng nhập. Dùng mock@example.test; mật khẩu: success, wrong hoặc locked.</p>
       <form id="login-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="email">
@@ -150,10 +149,10 @@
   </div>
 </div>
 
-<script src="/static/js/api_client.js"></script>
-<script src="/static/js/form_guard.js"></script>
+<script src="{{ asset_url('js/api_client.js') }}"></script>
+<script src="{{ asset_url('js/form_guard.js') }}"></script>
 <!-- FormGuard.protect được gọi để bảo vệ #login-form trong static/js/pages/login.js -->
-<script src="/static/js/auth_guard.js"></script>
-<script src="/static/js/pages/login.js"></script>
+<script src="{{ asset_url('js/auth_guard.js') }}"></script>
+<script src="{{ asset_url('js/pages/login.js') }}"></script>
 </body>
 </html>

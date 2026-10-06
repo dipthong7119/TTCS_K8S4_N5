@@ -5,6 +5,10 @@
 **Branch**: TA-VINH
 **Ngày thực thi**: 2026-09-25
 
+> Báo cáo lịch sử. Ngày 06/10/2026 chuyển từ `tests/` sang `ketqua/`;
+> kết quả kiểm thử giữ nguyên. Các prompt được đọc tại thời điểm cũ nằm trong
+> mục dưới; hướng dẫn hiện hành là ba file `prompts/00_`, `01_`, `02_`.
+
 ## Tài liệu đã đối chiếu
 
 - `prompts/01_CODEBASE_MAP.md`
@@ -22,7 +26,7 @@
 | `tests/test_migrations.py` | Test migration, seed role, email unique và tài khoản demo |
 | `tests/test_auth.py` | Test đăng nhập, khóa tạm, cookie và giới hạn theo IP |
 | `tests/test_health.py` | Test contract của endpoint health check |
-| `tests/backend_test_results.md` | Báo cáo kết quả chạy pytest và các blocker |
+| `ketqua/backend_test_results.md` | Báo cáo kết quả chạy pytest và các blocker |
 
 ## Phạm vi đã thực hiện
 

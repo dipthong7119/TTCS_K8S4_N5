@@ -1,3 +1,11 @@
+> Cập nhật đồng bộ 06/10/2026: nội dung bên dưới là hướng dẫn và báo cáo gốc
+> từ DANG-DAI. Đường dẫn đã chỉnh theo cây thư mục hiện tại. AuthGuard đang
+> dùng context server; route_guard.js chưa được template nạp. Nút bắt đầu sạc
+> SCRUM-190 đang là UI thử. Kết quả kiểm chứng mới và mức hoàn thành task xem
+> `ketqua/dong_bo_main.md` và `huongdan/kiem_thu_sau_pull_main.md`.
+> Đăng nhập và hiện/ẩn mật khẩu là chức năng đã có trước; mock login không
+> thuộc yêu cầu và đã được gỡ khỏi ứng dụng.
+
 # CẨM NANG TOÀN DIỆN VẬN HÀNH & PHÁT TRIỂN DỰ ÁN CSMS — SPRINT 2
 ## HƯỚNG DẪN CHI TIẾT TỪNG CHỨC NĂNG, NHIỆM VỤ VÀ QUY TRÌNH THỰC HIỆN "ZERO-DEFECT"
 
@@ -50,7 +58,7 @@ flowchart TB
     end
 
     subgraph Backend["FASTAPI BACKEND CORE"]
-        AuthRouter["Router Auth (/api/v1/auth)\nLogin, Logout, Me, Rate Limit"]
+        AuthRouter["Router Auth (/api/auth)\nLogin, Logout, Me, Rate Limit"]
         StationRouter["Router Stations & Monitoring\nCây trạm (/api/monitoring/tree)\nSSE Realtime Stream"]
         OCPPRouter["Endpoint WebSocket OCPP (/ocpp/{charge_point_id})\nSubprotocol: ocpp1.6"]
         ConnManager["ConnectionManager (Registry trong RAM)\nPending CALLs, Idempotency"]
@@ -139,7 +147,7 @@ flowchart TB
 
 ### 2.4. Phân hệ Điều khiển Từ xa Khởi động lại Trụ (SCRUM-134, SCRUM-107)
 * **Người thực hiện:** **Vy Hoàng Tú** (Frontend UI) & **Ngô Quang Tùng** (Backend API).
-* **Endpoint:** `POST /api/v1/charge-points/{code}/reset`.
+* **Endpoint:** `POST /api/charge_points/{code}/reset`.
 * **Chi tiết kỹ thuật:**
   - **Phân quyền thực thi:** Chỉ `admin` và `operator` mới có quyền gửi lệnh reset.
   - **Kiểm tra trạng thái trụ:** Nếu trụ đang Offline/không có socket trong registry $\rightarrow$ Từ chối ngay lập tức với HTTP 400 và thông báo rõ: `"Trụ đang ngoại tuyến, không thể gửi lệnh"`.
@@ -223,7 +231,7 @@ flowchart TB
 [BƯỚC 1: ĐỒNG BỘ MÃ NGUỒN VÀ GIẢI QUYẾT XUNG ĐỘT GIT]
    │
    ├─► Kiểm tra nhánh hiện tại: git branch (phải là DANG-DAI)
-   ├─► Nếu có xung đột trong nhat_ky.md: Giữ toàn bộ log của đồng đội, chèn log của mình đúng ngày.
+   ├─► Nếu có xung đột trong ketqua/nhat_ky.md: Giữ toàn bộ log của đồng đội, chèn log của mình đúng ngày.
    └─► Chạy git status đảm bảo: working tree clean.
    │
 [BƯỚC 2: RÀ SOÁT TÍNH TOÀN VẸN CỦA 4 TỆP TIN SCRUM-135]
@@ -247,21 +255,21 @@ flowchart TB
    │     $env:PYTHONPATH="backend"
    │     $env:DATABASE_URL="sqlite:///D:/TTCS_K8S4_N5/backend/csms.db"
    ├─► Chạy live acceptance tests:
-   │     & D:\TTCS_K8S4_N5\.venv\Scripts\python.exe tests\test_scrum135_live.py
+   │     & .\.venv\Scripts\python.exe tests\test_scrum135_live.py
    │     ==> Phải đạt 10/10 TEST CASES PASS (100%)
    └─► Chạy unit tests xác thực backend:
-         & D:\TTCS_K8S4_N5\.venv\Scripts\python.exe -m pytest tests\test_auth.py -v
+         & .\.venv\Scripts\python.exe -m pytest tests\test_auth.py -v
          ==> Phải đạt 11/11 TESTS PASSED (100%)
    │
 [BƯỚC 5: PHỐI HỢP LIÊN PHÂN HỆ VỚI TUẤN VÀ TÚ]
    │
-   ├─► Kiểm tra base.html đã nhúng đủ: api_client.js, auth_guard.js, route_guard.js.
+   ├─► Kiểm tra base.html nạp api_client.js và auth_guard.js; route_guard.js là helper chưa được nạp.
    ├─► Xác nhận Tuấn (124) gọi ApiClient.get('/api/monitoring/tree') chạy mượt mà.
-   └─► Xác nhận Tú (134) dùng ApiClient.post('/api/v1/charge-points/.../reset') nhận đúng lỗi khi offline.
+   └─► Xác nhận Tú (134) dùng ApiClient.resetChargePoint(code, type) nhận đúng lỗi khi offline.
    │
 [BƯỚC 6: CAM KẾT VÀ ĐẨY CODE LÊN GITHUB (GIT PUSH)]
    │
-   ├─► Cập nhật nhật ký công việc vào nhat_ky.md.
+   ├─► Cập nhật nhật ký công việc vào ketqua/nhat_ky.md.
    ├─► Tạo commit rõ ràng: git commit -m "feat(SCRUM-135): hoàn thiện frontend đăng nhập & auth guard"
    └─► Đẩy lên nhánh cá nhân: git push origin DANG-DAI
 ```
@@ -377,7 +385,7 @@ git push origin DANG-DAI
 | **Chống Double Submit** | FormGuard tích hợp trên toàn bộ form, nút submit chuyển sang loading state. | ✅ Đạt 100% |
 | **Phân quyền Client** | AuthGuard kiểm soát chính xác 5 vai trò; safeNext ngăn chặn Open Redirect. | ✅ Đạt 100% |
 | **Kiểm thử tự động** | 10/10 Live Test Cases PASS; 11/11 Unit Tests PASS; Linter Ruff không có lỗi trên file sửa đổi. | ✅ Đạt 100% |
-| **Nhật ký công việc** | Ghi chép chi tiết, trung thực, giải quyết xung đột sạch sẽ trong `nhat_ky.md`. | ✅ Đạt 100% |
+| **Nhật ký công việc** | Ghi chép chi tiết, trung thực, giải quyết xung đột sạch sẽ trong `ketqua/nhat_ky.md`. | ✅ Đạt 100% |
 | **Sẵn sàng Code Freeze** | Hoàn thành trước mốc 17:00 ngày 6/10/2026; sẵn sàng cho Tester ký biên bản nghiệm thu. | ✅ Đạt 100% |
 
 ---

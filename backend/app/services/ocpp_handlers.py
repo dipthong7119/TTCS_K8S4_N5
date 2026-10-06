@@ -10,13 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.charge_point import ChargePoint, Connector
+from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
-from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
@@ -24,7 +23,6 @@ from app.services.ocpp_parser import (
     parse_message,
 )
 from app.services.ocpp_status import is_charge_point_stale, station_status_payload
-from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
 
@@ -188,12 +186,16 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
         return new_handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
-        from app.ocpp.handlers.start_transaction import handle_start_transaction as new_handle_start_transaction
+        from app.ocpp.handlers.start_transaction import (
+            handle_start_transaction as new_handle_start_transaction,
+        )
         return new_handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
         return handle_meter_values(db, point, msg_id, payload)
     if action == "StopTransaction":
-        from app.ocpp.handlers.stop_transaction import handle_stop_transaction as new_handle_stop_transaction
+        from app.ocpp.handlers.stop_transaction import (
+            handle_stop_transaction as new_handle_stop_transaction,
+        )
         return new_handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 

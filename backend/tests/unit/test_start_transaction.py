@@ -1,6 +1,5 @@
 """Test cases cho handler StartTransaction (SCRUM-162 / T-37)."""
 
-import json
 from datetime import UTC, datetime, timedelta
 
 import pytest

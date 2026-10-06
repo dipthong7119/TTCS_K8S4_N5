@@ -21,6 +21,16 @@ else:
 
 templates = Jinja2Templates(directory=str(_templates_dir))
 
+
+def asset_url(asset_path: str) -> str:
+    """Change JS/CSS URLs when files change so cached scripts stay in sync with HTML."""
+    asset_stat = (_templates_dir.parent / "static" / asset_path).stat()
+    version = f"{asset_stat.st_mtime_ns:x}-{asset_stat.st_size:x}"
+    return f"/static/{asset_path}?v={version}"
+
+
+templates.env.globals["asset_url"] = asset_url
+
 ROLE_LABELS = {
     "driver": "Tài xế",
     "station_owner": "Chủ trạm",

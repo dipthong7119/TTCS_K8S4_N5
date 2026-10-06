@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/monitoring.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/monitoring.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -78,15 +78,16 @@
     </svg>
     <input type="search" class="search-input" id="mon-search" placeholder="Tìm trạm, trụ..." aria-label="Tìm kiếm" />
   </div>
-  <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;" aria-label="Lọc trạng thái">
+  <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;" aria-label="Lọc trạng thái trụ sạc">
     <option value="">Tất cả trạng thái</option>
     <option value="online">Trực tuyến</option>
     <option value="offline">Ngoại tuyến</option>
     <option value="rảnh">Sẵn sàng</option>
-    <option value="bận">Đang bận</option>
-    <option value="đặt chỗ">Đã đặt chỗ</option>
+    <!-- <option value="bận">Đang bận</option> -->
+    <!-- <option value="đặt chỗ">Đã đặt chỗ</option> -->
     <option value="lỗi">Lỗi</option>
-    <option value="unknown">Chưa rõ</option>
+    <option value="unavailable">Tạm ngừng / Bảo trì</option>
+    <!-- <option value="unknown">Chưa rõ</option> -->
   </select>
   <div class="view-toggle" role="group" aria-label="Chế độ xem">
     <button class="view-toggle__btn is-active" id="view-grid" type="button" aria-pressed="true" title="Xem dạng lưới">
@@ -100,16 +101,6 @@
         <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
         <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
       </svg>
-    </button>
-  </div>
-  <div class="mock-mode-wrap" style="margin-left:auto;">
-    <button class="btn btn--secondary btn--sm" id="btn-toggle-mock" type="button" title="Chuyển đổi nguồn dữ liệu kiểm thử (20 trụ)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-        <line x1="8" y1="21" x2="16" y2="21"></line>
-        <line x1="12" y1="17" x2="12" y2="21"></line>
-      </svg>
-      <span id="mock-btn-label">Dữ liệu mẫu (20 trụ)</span>
     </button>
   </div>
 </div>
@@ -142,5 +133,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/monitoring_grid.js"></script>
+<script src="{{ asset_url('js/pages/monitoring_grid.js') }}"></script>
 {% endblock %}

@@ -6,6 +6,10 @@
 **Ngày kiểm thử**: 2026-09-25
 **Môi trường**: Windows, Python 3.11.2, SQLite
 
+> Báo cáo lịch sử ngày 25/09/2026. Ngày 06/10/2026 chuyển file từ `tests/`
+> sang `ketqua/`, giữ nguyên kết quả và blocker tại thời điểm kiểm tra.
+> Vị trí test hiện hành và lệnh chạy nằm trong README ở gốc dự án.
+
 ## Lệnh thực thi
 
 ```powershell

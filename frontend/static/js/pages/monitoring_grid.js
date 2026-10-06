@@ -3,209 +3,11 @@
   'use strict';
 
   let stations = [];
-  let isMockMode = false;
-  let mockModeSelected = false;
-  let dataSourceVersion = 0;
   let isSseConnected = false;
   let loadRequestId = 0;
   let loadError = '';
+  let activeDetailStationId = null;
   const canReset = document.getElementById('monitoring-grid')?.dataset.canReset === 'true';
-
-  // Bộ dữ liệu mẫu 20 trụ sạc đáp ứng tiêu chí nghiệm thu SCRUM-124 / T-24 (Story S-11)
-  const MOCK_STATIONS_20_POINTS = [
-    {
-      id: 1,
-      name: "Trạm Sạc TT01 — Hoàn Kiếm",
-      address: "12 Tràng Tiền, Hoàn Kiếm, Hà Nội",
-      status: "active",
-      charge_points: [
-        {
-          id: 101, code: "CP-HN-01", station_id: 1, status: "online", ocpp_status: "Available",
-          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 1001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 1002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 102, code: "CP-HN-02", station_id: 1, status: "online", ocpp_status: "Charging",
-          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 1003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
-            { id: 1004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 103, code: "CP-HN-03", station_id: 1, status: "online", ocpp_status: "Reserved",
-          vendor: "Schneider", model: "EVlink Pro", firmware_version: "v2.1.0", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 1005, connector_id: 1, status: "đặt chỗ", ocpp_status: "Reserved" }
-          ]
-        },
-        {
-          id: 104, code: "CP-HN-04", station_id: 1, status: "offline", ocpp_status: "offline",
-          vendor: "Schneider", model: "EVlink Pro", firmware_version: "v2.1.0",
-          last_seen_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-          connectors: [
-            { id: 1006, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
-            { id: 1007, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
-          ]
-        },
-        {
-          id: 105, code: "CP-HN-05", station_id: 1, status: "online", ocpp_status: "Faulted",
-          vendor: "ABB", model: "Terra 124", firmware_version: "v1.6.0", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 1008, connector_id: 1, status: "lỗi", ocpp_status: "Faulted" },
-            { id: 1009, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        }
-      ]
-    },
-    {
-      id: 2,
-      name: "Trạm Sạc TT02 — Cầu Giấy",
-      address: "88 Duy Tân, Cầu Giấy, Hà Nội",
-      status: "active",
-      charge_points: [
-        {
-          id: 201, code: "CP-HN-06", station_id: 2, status: "online", ocpp_status: "Available",
-          vendor: "StarCharge", model: "Titan 180kW", firmware_version: "v3.0.1", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 2001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 2002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 202, code: "CP-HN-07", station_id: 2, status: "online", ocpp_status: "Charging",
-          vendor: "StarCharge", model: "Titan 180kW", firmware_version: "v3.0.1", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 2003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
-            { id: 2004, connector_id: 2, status: "bận", ocpp_status: "Charging" }
-          ]
-        },
-        {
-          id: 203, code: "CP-HN-08", station_id: 2, status: "online", ocpp_status: "Available",
-          vendor: "StarCharge", model: "Nova 60kW", firmware_version: "v2.4.5", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 2005, connector_id: 1, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 204, code: "CP-HN-09", station_id: 2, status: "offline", ocpp_status: "offline",
-          vendor: "Delta", model: "Ultra Fast 150kW", firmware_version: "v1.2.9",
-          last_seen_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-          connectors: [
-            { id: 2006, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
-            { id: 2007, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
-          ]
-        },
-        {
-          id: 205, code: "CP-HN-10", station_id: 2, status: "online", ocpp_status: "Available",
-          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 2008, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 2009, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        }
-      ]
-    },
-    {
-      id: 3,
-      name: "Trạm Sạc TT03 — Nam Từ Liêm (Mỹ Đình)",
-      address: "1 Lê Đức Thọ, Nam Từ Liêm, Hà Nội",
-      status: "active",
-      charge_points: [
-        {
-          id: 301, code: "CP-HN-11", station_id: 3, status: "online", ocpp_status: "Charging",
-          vendor: "ABB", model: "Terra 184", firmware_version: "v1.8.2", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 3001, connector_id: 1, status: "bận", ocpp_status: "Charging" },
-            { id: 3002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 302, code: "CP-HN-12", station_id: 3, status: "online", ocpp_status: "Available",
-          vendor: "ABB", model: "Terra 184", firmware_version: "v1.8.2", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 3003, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 3004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 303, code: "CP-HN-13", station_id: 3, status: "online", ocpp_status: "Faulted",
-          vendor: "Schneider", model: "EVlink 22kW", firmware_version: "v2.0.3", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 3005, connector_id: 1, status: "lỗi", ocpp_status: "Faulted" }
-          ]
-        },
-        {
-          id: 304, code: "CP-HN-14", station_id: 3, status: "online", ocpp_status: "Available",
-          vendor: "Schneider", model: "EVlink 22kW", firmware_version: "v2.0.3", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 3006, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 3007, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 305, code: "CP-HN-15", station_id: 3, status: "offline", ocpp_status: "offline",
-          vendor: "ABB", model: "Terra 54", firmware_version: "v1.4.2",
-          last_seen_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
-          connectors: [
-            { id: 3008, connector_id: 1, status: "unknown", ocpp_status: "Unavailable" },
-            { id: 3009, connector_id: 2, status: "unknown", ocpp_status: "Unavailable" }
-          ]
-        }
-      ]
-    },
-    {
-      id: 4,
-      name: "Trạm Sạc TT04 — Long Biên (Aeon)",
-      address: "27 Cổ Linh, Long Biên, Hà Nội",
-      status: "active",
-      charge_points: [
-        {
-          id: 401, code: "CP-HN-16", station_id: 4, status: "online", ocpp_status: "Available",
-          vendor: "StarCharge", model: "Titan 120kW", firmware_version: "v2.8.0", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 4001, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 4002, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 402, code: "CP-HN-17", station_id: 4, status: "online", ocpp_status: "Charging",
-          vendor: "StarCharge", model: "Titan 120kW", firmware_version: "v2.8.0", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 4003, connector_id: 1, status: "bận", ocpp_status: "Charging" },
-            { id: 4004, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 403, code: "CP-HN-18", station_id: 4, status: "online", ocpp_status: "Reserved",
-          vendor: "StarCharge", model: "Nova 30kW", firmware_version: "v2.2.1", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 4005, connector_id: 1, status: "đặt chỗ", ocpp_status: "Reserved" },
-            { id: 4006, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 404, code: "CP-HN-19", station_id: 4, status: "online", ocpp_status: "Available",
-          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 4007, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 4008, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        },
-        {
-          id: 405, code: "CP-HN-20", station_id: 4, status: "online", ocpp_status: "Available",
-          vendor: "Delta", model: "City Charger 50kW", firmware_version: "v1.1.4", last_seen_at: new Date().toISOString(),
-          connectors: [
-            { id: 4009, connector_id: 1, status: "rảnh", ocpp_status: "Available" },
-            { id: 4010, connector_id: 2, status: "rảnh", ocpp_status: "Available" }
-          ]
-        }
-      ]
-    }
-  ];
 
   const STATUS = {
     online: ['Trực tuyến', 'badge--online'],
@@ -213,8 +15,8 @@
     'rảnh': ['Sẵn sàng', 'badge--available'],
     'bận': ['Đang bận', 'badge--charging'],
     'đặt chỗ': ['Đã đặt chỗ', 'badge--warning'],
-    'lỗi': ['Lỗi', 'badge--fault'],
-    unavailable: ['Không khả dụng', 'badge--offline'],
+    'lỗi': ['Báo lỗi', 'badge--fault'],
+    unavailable: ['Tạm ngừng', 'badge--offline'],
     unknown: ['Chưa rõ', 'badge--neutral'],
     active: ['Đang hoạt động', 'badge--online'],
     inactive: ['Tạm ngừng', 'badge--offline'],
@@ -227,8 +29,13 @@
     SuspendedEVSE: ['Trụ tạm dừng', 'badge--warning'],
     Finishing: ['Đang kết thúc', 'badge--finishing'],
     Reserved: ['Đã đặt chỗ', 'badge--warning'],
-    Unavailable: ['Không khả dụng', 'badge--fault'],
+    Unavailable: ['Tạm ngừng', 'badge--offline'],
     Faulted: ['Báo lỗi', 'badge--fault'],
+  };
+  const OCPP_STATUS = {
+    Available: 'rảnh', Preparing: 'bận', Charging: 'bận', SuspendedEV: 'bận',
+    SuspendedEVSE: 'bận', Finishing: 'bận', Reserved: 'đặt chỗ',
+    Unavailable: 'unavailable', Faulted: 'lỗi',
   };
 
   function escapeHtml(value) {
@@ -243,186 +50,106 @@
   }
 
   function formatLastSeen(timestamp) {
-    // DB timestamps without an offset are UTC. Date otherwise interprets
-    // them in the browser's local zone and shifts the displayed instant.
+    // Timestamps without an offset from the DB represent UTC.
     const value = /(?:Z|[+-]\d{2}:\d{2})$/i.test(timestamp) ? timestamp : `${timestamp}Z`;
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? 'Không rõ' : date.toLocaleString('vi-VN');
   }
 
-  function internalStatus(ocppStatus) {
-    if (ocppStatus === 'Available') return 'rảnh';
-    if (['Preparing', 'Charging', 'SuspendedEV', 'SuspendedEVSE', 'Finishing'].includes(ocppStatus)) return 'bận';
-    if (ocppStatus === 'Reserved') return 'đặt chỗ';
-    if (['Unavailable', 'Faulted'].includes(ocppStatus)) return 'lỗi';
-    return 'unknown';
+  function operationalStatus(item) {
+    // The API groups Unavailable and Faulted under "lỗi". Keep them distinct
+    // on the monitoring page using the original OCPP status.
+    if (item.ocpp_status) return OCPP_STATUS[item.ocpp_status] || 'unknown';
+    return STATUS[item.status] ? item.status : 'unknown';
   }
 
-  let activeDetailStationId = null;
-  // SCRUM-191: lưu trạng thái chờ theo mã trụ.
-  const startRequests = new Map();
-
-  function updateStartWaitingUI() {
-    document.querySelectorAll('.start-charging-controls').forEach(controls => {
-      const select = controls.querySelector('[data-start-connector]');
-      const button = controls.querySelector('[data-start-charging]');
-      const message = controls.querySelector('[data-start-message]');
-      const request = startRequests.get(button.dataset.cpCode);
-
-      if (!request) return;
-
-      const seconds = Math.max(
-        0,
-        Math.ceil((request.deadline - Date.now()) / 1000)
-      );
-
-      select.value = request.connectorId;
-      select.disabled = seconds > 0;
-      button.disabled = seconds > 0 || !select.value;
-
-      if (seconds > 0) {
-        button.textContent = 'Đang chờ...';
-        message.textContent =
-          `Đang chờ trụ xác nhận… còn ${seconds} giây (bản thử).`;
-      } else {
-        button.textContent = 'Bắt đầu sạc';
-        message.textContent =
-          'Hết thời gian chờ 60 giây (bản thử). Chưa gửi lệnh sạc thật.';
-      }
-    });
+  function hasFault(item) {
+    return operationalStatus(item) === 'lỗi' ||
+      Boolean(item.error_code && item.error_code !== 'NoError');
   }
 
-  // Cập nhật số giây, kể cả khi phần chi tiết được vẽ lại.
-  const startWaitingTimer = window.setInterval(updateStartWaitingUI, 1000);
+  function pointHasFault(point) {
+    return hasFault(point) || (point.connectors || []).some(hasFault);
+  }
 
-  window.addEventListener('pagehide', () => {
-    window.clearInterval(startWaitingTimer);
-  });
-
-  function updateMockBtnUI() {
-    const btn = document.getElementById('btn-toggle-mock');
-    const label = document.getElementById('mock-btn-label');
-    if (!btn || !label) return;
-    if (isMockMode) {
-      loadError = '';
-      btn.classList.add('is-active');
-      label.textContent = 'Dữ liệu máy chủ (API)';
-      btn.title = 'Đang xem dữ liệu mẫu 20 trụ. Bấm để chuyển sang dữ liệu máy chủ';
-    } else {
-      btn.classList.remove('is-active');
-      label.textContent = 'Dữ liệu mẫu (20 trụ)';
-      btn.title = 'Bấm để nạp bộ dữ liệu mẫu 20 trụ kiểm thử giao diện';
-    }
-    updateRealtimeIndicator();
+  function pointDisplayStatus(point) {
+    if (point.status === 'offline') return 'offline';
+    if (pointHasFault(point)) return 'Faulted';
+    return point.ocpp_status || point.status;
   }
 
   function updateRealtimeIndicator() {
     const indicator = document.getElementById('sse-indicator');
     const label = document.getElementById('sse-label');
-    if (indicator) indicator.className = `sse-indicator ${isMockMode || isSseConnected ? 'connected' : 'error'}`;
-    if (label) label.textContent = isMockMode ? 'Đang mô phỏng' : (isSseConnected ? 'Đang theo dõi' : 'Đang kết nối lại');
+    if (indicator) indicator.className = `sse-indicator ${isSseConnected ? 'connected' : 'error'}`;
+    if (label) label.textContent = isSseConnected ? 'Đang theo dõi' : 'Đang kết nối lại';
   }
 
-  function toggleMockMode() {
-    isMockMode = !isMockMode;
-    mockModeSelected = isMockMode;
-    dataSourceVersion += 1;
-    closeDetail();
-    loadRequestId += 1; // Ignore an in-flight API response after the user changes sources.
-    if (isMockMode) {
-      stations = JSON.parse(JSON.stringify(MOCK_STATIONS_20_POINTS));
-      render();
-      document.getElementById('mon-loading')?.remove();
-      updateMockBtnUI();
-      if (typeof RealtimeStatus !== 'undefined' && typeof RealtimeStatus.connect === 'function') {
-        RealtimeStatus.connect(stations.flatMap(station => station.charge_points || []));
-      }
-      if (typeof showToast === 'function') {
-        showToast('Đang hiển thị bộ dữ liệu mẫu 20 trụ kiểm thử giao diện (SCRUM-124 / T-24)', 'info');
-      }
-    } else {
-      if (typeof RealtimeStatus !== 'undefined' && typeof RealtimeStatus.disconnect === 'function') {
-        RealtimeStatus.disconnect();
-      }
-      updateMockBtnUI();
-      loadData(true);
-    }
-  }
-
-  async function loadData(forceServer = false) {
+  async function loadData() {
     const requestId = ++loadRequestId;
-    if (forceServer) {
-      isMockMode = false;
-      mockModeSelected = false;
-      updateMockBtnUI();
-    }
-    if (isMockMode && mockModeSelected) {
-      render();
-      document.getElementById('mon-loading')?.remove();
-      updateMockBtnUI();
-      return;
-    }
-
     try {
       const result = await ApiClient.getMonitoringTree();
       if (requestId !== loadRequestId) return;
-      const serverStations = Array.isArray(result) ? result : (result?.stations || []);
-      stations = serverStations;
-      isMockMode = false;
+      stations = Array.isArray(result) ? result : (result?.stations || []);
       loadError = '';
       render();
-      if (activeDetailStationId) {
-        const curStation = stations.find(s => s.id === activeDetailStationId);
-        if (curStation) renderDetailBody(curStation);
-      }
       document.getElementById('mon-loading')?.remove();
-      updateMockBtnUI();
     } catch (error) {
       if (requestId !== loadRequestId) return;
       loadError = 'Không tải được trạng thái từ máy chủ. Bấm Làm mới để thử lại.';
       render();
       document.getElementById('mon-loading')?.remove();
-      updateMockBtnUI();
       if (typeof showToast === 'function') {
         showToast(stations.length ? 'Mất kết nối máy chủ. Đang giữ dữ liệu đã tải trước đó.' : loadError, 'warning');
       }
     }
   }
 
-  function matchesStatus(station, wanted) {
+  function matchesStatus(point, wanted) {
     if (!wanted) return true;
-    return (station.charge_points || []).some(point =>
-      point.status === wanted || internalStatus(point.ocpp_status) === wanted ||
-      (point.connectors || []).some(connector => connector.status === wanted || internalStatus(connector.ocpp_status) === wanted)
-    );
+    if (wanted === 'online' || wanted === 'offline') return point.status === wanted;
+    if (wanted === 'lỗi') return pointHasFault(point);
+    // An offline point's last known connector state does not make it ready.
+    if (point.status === 'offline') return false;
+    return operationalStatus(point) === wanted ||
+      (point.connectors || []).some(connector => operationalStatus(connector) === wanted);
   }
 
   function filteredStations() {
     const search = (document.getElementById('mon-search')?.value || '').trim().toLocaleLowerCase('vi');
     const status = document.getElementById('mon-status-filter')?.value || '';
-    return stations.filter(station => {
-      const searchText = [station.name, station.address, ...(station.charge_points || []).map(point => point.code)]
-        .filter(Boolean).join(' ').toLocaleLowerCase('vi');
-      return (!search || searchText.includes(search)) && matchesStatus(station, status);
+    return stations.flatMap(station => {
+      const stationMatches = [station.name, station.address].filter(Boolean)
+        .join(' ').toLocaleLowerCase('vi').includes(search);
+      const points = (station.charge_points || []).filter(point =>
+        (!search || stationMatches || String(point.code || '').toLocaleLowerCase('vi').includes(search)) &&
+        matchesStatus(point, status)
+      );
+      // Copies preserve the complete API tree for counters and later filters.
+      if (points.length || (!status && stationMatches && !(station.charge_points || []).length)) {
+        return [{ ...station, charge_points: points }];
+      }
+      return [];
     });
   }
 
-  function connectorMarkup(connector) {
-    return `<div class="connector-status" aria-label="Đầu nối ${escapeHtml(connector.connector_id)}: ${escapeHtml(STATUS[connector.status]?.[0] || STATUS.unknown[0])}">
+  function connectorMarkup(connector, offline = false) {
+    const displayedStatus = offline ? 'unknown' :
+      (hasFault(connector) ? 'Faulted' : (connector.ocpp_status || connector.status));
+    return `<div class="connector-status" aria-label="Đầu nối ${escapeHtml(connector.connector_id)}: ${escapeHtml(STATUS[displayedStatus]?.[0] || STATUS.unknown[0])}">
       <span class="connector-status__number">Đầu ${escapeHtml(connector.connector_id)}</span>
-      ${statusBadge(connector.status)}
+      ${statusBadge(displayedStatus)}
     </div>`;
   }
 
   function chargePointMarkup(point) {
-    const displayedStatus = point.status === 'offline' ? 'offline' : (point.ocpp_status || point.status);
-    const connectorMarkupList = (point.connectors || []).map(connectorMarkup).join('');
+    const connectorMarkupList = (point.connectors || []).map(connector => connectorMarkup(connector, point.status === 'offline')).join('');
     const lastSeen = point.status === 'offline' && point.last_seen_at
       ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>`
       : '';
     return `<section class="cp-tile" aria-label="Trụ ${escapeHtml(point.code)}" data-cp-code="${escapeHtml(point.code)}">
       <div class="cp-tile__header">
-        <strong class="cp-tile__code">${escapeHtml(point.code)}</strong>${statusBadge(displayedStatus)}
+        <strong class="cp-tile__code">${escapeHtml(point.code)}</strong>${statusBadge(pointDisplayStatus(point))}
       </div>
       ${lastSeen}
       <div class="connector-list">${connectorMarkupList || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>
@@ -430,11 +157,10 @@
   }
 
   function stationStatus(station) {
+    if (['maintenance', 'inactive', 'locked'].includes(station.status)) return station.status;
     const points = station.charge_points || [];
     if (!points.length) return station.status || 'unknown';
-    if (points.every(point => point.status === 'offline')) return 'offline';
-    if (points.some(point => point.status === 'lỗi' || internalStatus(point.ocpp_status) === 'lỗi' || (point.connectors || []).some(connector => connector.status === 'lỗi' || internalStatus(connector.ocpp_status) === 'lỗi'))) return 'lỗi';
-    return 'online';
+    return points.every(point => point.status === 'offline') ? 'offline' : 'online';
   }
 
   function render() {
@@ -453,17 +179,18 @@
         const card = document.createElement('article');
         card.className = 'station-card';
         card.dataset.stationId = station.id;
+        const original = stations.find(item => item.id === station.id);
         card.innerHTML = `<button class="station-card__open" type="button" aria-label="Xem chi tiết trạm ${escapeHtml(station.name)}">
           <span class="station-card__heading"><span><strong class="station-card__name">${escapeHtml(station.name)}</strong>
-          <span class="station-card__addr">${escapeHtml(station.address || '')}</span></span>${statusBadge(stationStatus(station))}</span>
+          <span class="station-card__addr">${escapeHtml(station.address || '')}</span></span>${statusBadge(stationStatus(original))}</span>
         </button><div class="station-card__body"><div class="cp-grid">
           ${(station.charge_points || []).map(chargePointMarkup).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}
         </div></div>`;
         card.querySelector('.station-card__open').addEventListener('click', () => openDetail(station));
         card.querySelectorAll('.cp-tile').forEach(tile => {
           tile.style.cursor = 'pointer';
-          tile.addEventListener('click', (e) => {
-            e.stopPropagation();
+          tile.addEventListener('click', event => {
+            event.stopPropagation();
             openDetail(station);
           });
         });
@@ -471,22 +198,26 @@
       });
     }
     updateStats();
+    if (activeDetailStationId !== null) {
+      const detail = result.find(station => station.id === activeDetailStationId);
+      if (detail) renderDetailBody(detail);
+      else closeDetail();
+    }
   }
 
   function updateStats() {
     const points = stations.flatMap(station => station.charge_points || []);
-    const connectors = points.flatMap(point => point.connectors || []);
+    const connectors = points.filter(point => point.status !== 'offline').flatMap(point => point.connectors || []);
     const totalEl = document.getElementById('mon-total');
     const chargingEl = document.getElementById('mon-charging');
     const offlineEl = document.getElementById('mon-offline');
     const faultEl = document.getElementById('mon-fault');
     if (totalEl) totalEl.textContent = points.length;
-    if (chargingEl) chargingEl.textContent = connectors.filter(connector => connector.status === 'bận' || connector.ocpp_status === 'Charging').length;
+    if (chargingEl) chargingEl.textContent = connectors.filter(connector => operationalStatus(connector) === 'bận').length;
     if (offlineEl) offlineEl.textContent = points.filter(point => point.status === 'offline').length;
-    if (faultEl) faultEl.textContent =
-      connectors.filter(connector => connector.status === 'lỗi' || connector.ocpp_status === 'Faulted').length +
-      points.filter(point => internalStatus(point.ocpp_status) === 'lỗi' || point.status === 'lỗi').length;
+    if (faultEl) faultEl.textContent = points.filter(pointHasFault).length;
   }
+
   // SCRUM-190: chọn đầu nối và nút bắt đầu sạc.
   function startChargingMarkup(point) {
     const connectors = point.connectors || [];
@@ -526,36 +257,41 @@
         <p data-start-message role="status" aria-live="polite"></p>
       </div>`;
   }
-  function renderDetailBody(station, body) {
-    if (!body) body = document.getElementById('detail-body');
+  function renderDetailBody(station, body = document.getElementById('detail-body')) {
     if (!body) return;
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
         const lastSeen = point.last_seen_at
           ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>` : '';
         const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
-        return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(point.status)}</div>
+        return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(pointDisplayStatus(point))}</div>
           <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
-          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${restartMarkup}</section>`;
+          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connector => connectorMarkup(connector, point.status === 'offline')).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${startChargingMarkup(point)}${restartMarkup}</section>`;
       }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
-    const sourceVersion = dataSourceVersion;
-    const resetChargePoint = isMockMode
-      ? (code, type) => RealtimeStatus.resetChargePoint(code, type)
-      : (code, type) => ApiClient.resetChargePoint(code, type);
-    RestartButton.bindEvents(body, {
-      resetChargePoint,
-      isCurrentSource: () => sourceVersion === dataSourceVersion,
+    RestartButton.bindEvents(body);
+    body.querySelectorAll('.start-charging-controls').forEach(controls => {
+      const select = controls.querySelector('[data-start-connector]');
+      const button = controls.querySelector('[data-start-charging]');
+      const message = controls.querySelector('[data-start-message]');
+      const hasSelection = () => Boolean(select.value) && !select.selectedOptions[0]?.disabled;
+      select.addEventListener('change', () => {
+        button.disabled = !hasSelection();
+        message.textContent = '';
+      });
+      button.addEventListener('click', () => {
+        if (!hasSelection()) return;
+        message.textContent =
+          `Đã chọn trụ ${button.dataset.cpCode}, đầu nối ${select.value}. ` +
+          'Đây là bản thử giao diện; chưa gửi yêu cầu sạc.';
+      });
     });
   }
 
-
   function openDetail(station) {
     activeDetailStationId = station.id;
-    const backdrop = document.getElementById('detail-backdrop');
-    const body = document.getElementById('detail-body');
     document.getElementById('detail-title').textContent = station.name;
-    renderDetailBody(station, body);
-    backdrop.classList.remove('is-hidden');
+    renderDetailBody(station);
+    document.getElementById('detail-backdrop').classList.remove('is-hidden');
     document.getElementById('detail-close').focus();
   }
 
@@ -563,113 +299,33 @@
     SseClient.on('_connected', () => {
       isSseConnected = true;
       updateRealtimeIndicator();
-      if (!mockModeSelected) {
-        loadData(true); // Reload the complete server tree after initial connection or reconnect.
-      }
+      loadData(); // Restore the complete tree after initial connection or reconnect.
     });
     SseClient.on('_error', () => {
       isSseConnected = false;
       updateRealtimeIndicator();
     });
     SseClient.on('status_update', payload => {
-      if (mockModeSelected) return; // Giữ nguyên dữ liệu mẫu khi người dùng chủ động bật mock.
       const station = stations.find(item => item.id === payload.station_id);
-      if (station && payload.charge_points) {
+      if (station && Array.isArray(payload.charge_points)) {
+        ++loadRequestId; // An older HTTP snapshot must not replace this newer event.
         station.charge_points = payload.charge_points;
         render();
-        // Cập nhật tức thời Drawer chi tiết trạm nếu đang mở (realtime detail sync)
-        if (activeDetailStationId === station.id) {
-          renderDetailBody(station);
-        }
       } else {
-        // Trạm mới hoặc cây chưa có trạm này -> tải lại cây authoritative
-        loadData(false);
+        loadData();
       }
     });
     SseClient.connect('/api/monitoring/sse');
   }
 
-  // ── Hook RealtimeStatus (Dành cho kiểm thử giao diện & mock) ───────────
-  function connectRealtimeHook() {
-    RealtimeStatus.subscribe('status_change', (payload) => {
-      if (!isMockMode) return;
-      for (const station of stations) {
-        for (const point of (station.charge_points || [])) {
-          if (point.code === payload.charge_point_code) {
-            for (const conn of (point.connectors || [])) {
-              if (conn.connector_id === payload.connector_id) {
-                conn.ocpp_status = payload.status;
-                conn.status = internalStatus(payload.status);
-                conn.ocpp_status = payload.status;
-              }
-            }
-            point.status = 'online';
-            point.ocpp_status = payload.status;
-            point.last_seen_at = payload.timestamp;
-          }
-        }
-      }
-      render();
-      if (activeDetailStationId) {
-        const cur = stations.find(s => s.id === activeDetailStationId);
-        if (cur) renderDetailBody(cur);
-      }
-    });
-
-    RealtimeStatus.subscribe('cp_offline', (payload) => {
-      if (!isMockMode) return;
-      for (const station of stations) {
-        for (const point of (station.charge_points || [])) {
-          if (point.code === payload.charge_point_code) {
-            point.status = 'offline';
-            point.ocpp_status = 'offline';
-            (point.connectors || []).forEach(connector => {
-              connector.status = 'unknown';
-              connector.ocpp_status = 'unknown';
-            });
-          }
-        }
-      }
-      render();
-      if (activeDetailStationId) {
-        const cur = stations.find(s => s.id === activeDetailStationId);
-        if (cur) renderDetailBody(cur);
-      }
-      showToast(`Trụ ${payload.charge_point_code} đã mất kết nối`, 'warning');
-    });
-
-    RealtimeStatus.subscribe('cp_online', (payload) => {
-      if (!isMockMode) return;
-      for (const station of stations) {
-        for (const point of (station.charge_points || [])) {
-          if (point.code === payload.charge_point_code) {
-            point.status = 'online';
-            point.ocpp_status = 'unknown';
-            point.last_seen_at = payload.timestamp;
-          }
-        }
-      }
-      render();
-      if (activeDetailStationId) {
-        const cur = stations.find(s => s.id === activeDetailStationId);
-        if (cur) renderDetailBody(cur);
-      }
-      showToast(`Trụ ${payload.charge_point_code} đã trực tuyến trở lại`, 'success');
-    });
-  }
-
   document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    connectSSE();
-    connectRealtimeHook();
     let debounce;
     document.getElementById('mon-search')?.addEventListener('input', () => {
       clearTimeout(debounce);
       debounce = setTimeout(render, 200);
     });
     document.getElementById('mon-status-filter')?.addEventListener('change', render);
-    document.getElementById('btn-refresh-monitoring')?.addEventListener('click', () => loadData(false));
-    document.getElementById('btn-toggle-mock')?.addEventListener('click', toggleMockMode);
+    document.getElementById('btn-refresh-monitoring')?.addEventListener('click', loadData);
     document.getElementById('view-grid')?.addEventListener('click', () => setView('grid'));
     document.getElementById('view-list')?.addEventListener('click', () => setView('list'));
     document.getElementById('detail-close')?.addEventListener('click', closeDetail);
@@ -679,6 +335,17 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') closeDetail();
     });
+    // Controls must work even if the realtime transport cannot start.
+    loadData();
+    try {
+      connectSSE();
+    } catch (error) {
+      isSseConnected = false;
+      updateRealtimeIndicator();
+      if (typeof showToast === 'function') {
+        showToast('Chưa kết nối được cập nhật trực tiếp. Bấm Làm mới để tải trạng thái.', 'warning');
+      }
+    }
   });
 
   function setView(mode) {
@@ -693,9 +360,6 @@
 
   function closeDetail() {
     activeDetailStationId = null;
-    const backdrop = document.getElementById('detail-backdrop');
-    if (backdrop && !backdrop.classList.contains('is-hidden')) {
-      backdrop.classList.add('is-hidden');
-    }
+    document.getElementById('detail-backdrop')?.classList.add('is-hidden');
   }
 })();

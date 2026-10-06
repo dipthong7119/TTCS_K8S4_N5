@@ -357,7 +357,7 @@ def test_ca7_migration_upgrade_and_downgrade(tmp_path, monkeypatch):
     from alembic import command
     from app.config import settings
 
-    backend_dir = Path(__file__).resolve().parents[3]
+    backend_dir = Path(__file__).resolve().parents[2]
     cfg = Config(str(backend_dir / "alembic.ini"))
     cfg.set_main_option("script_location", str(backend_dir / "alembic"))
     # env.py dùng Settings, nên phải override đúng URL mà Alembic thực sự đọc.

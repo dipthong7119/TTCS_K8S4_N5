@@ -41,11 +41,20 @@ services:
       retries: 30
 
   simulator:
-    image: ${CSMS_IMAGE:-csms-app:acceptance}
+    image: ${CSMS_SIMULATOR_IMAGE:-${CSMS_IMAGE:-csms-app:acceptance}}
     profiles: ["ocpp-simulator"]
     depends_on:
       app:
         condition: service_healthy
     environment:
       TZ: UTC-5
-    command: ["python", "-m", "app.dev_tools.ocpp_simulator.simulator", "SIM-01", "--host", "app", "--port", "8000"]
+    command:
+      - python
+      - -m
+      - app.dev_tools.ocpp_simulator.simulator
+      - --count
+      - "${CSMS_SIMULATOR_COUNT:-20}"
+      - --include-demo-stations
+      - "${CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS:-false}"
+      - --server-url
+      - "${CSMS_SIMULATOR_URL:-ws://app:8000/ocpp}"

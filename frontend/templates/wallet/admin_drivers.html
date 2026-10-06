@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/admin_drivers.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/admin_drivers.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -81,5 +81,5 @@
 
 {% block extra_js %}
 <script>window.WalletAdmin = { canTopUp: {{ 'true' if 'admin' in current_user.roles else 'false' }} };</script>
-<script src="/static/js/pages/admin_drivers.js"></script>
+<script src="{{ asset_url('js/pages/admin_drivers.js') }}"></script>
 {% endblock %}

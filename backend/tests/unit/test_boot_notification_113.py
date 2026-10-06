@@ -375,7 +375,7 @@ class TestMigrationIdempotency:
         from alembic.runtime.migration import MigrationContext
         from alembic.util import load_python_file
 
-        versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+        versions_dir = Path(__file__).resolve().parents[2] / "alembic" / "versions"
         migration = load_python_file(versions_dir, "h20261004_boot_notification.py")
         try:
             with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
@@ -393,7 +393,7 @@ class TestMigrationIdempotency:
         engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(bind=engine)
 
-        versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+        versions_dir = Path(__file__).resolve().parents[2] / "alembic" / "versions"
         migration = load_python_file(versions_dir, "h20261004_boot_notification.py")
         try:
             migration.downgrade()

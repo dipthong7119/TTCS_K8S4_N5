@@ -8,11 +8,10 @@ NFR:
   - `transactionId` là số nguyên tăng dần do CSDL cấp (S-17), không dùng thời gian.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 - nạp đủ model cho Base.metadata
+from alembic import command
 from app.config import settings
 from app.database import Base
 from app.models.charge_point import ChargePoint
@@ -27,7 +27,7 @@ from app.models.charging_session import ChargingSession
 from app.models.station import Station
 from app.models.user import User
 
-BACKEND_DIR = Path(__file__).resolve().parents[3]
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 # Revision liền trước migration tạo bảng charging_sessions (e81f0a6b2c44).
 REVISION_BEFORE_SESSIONS = "d4e9f7210b8c"
 SESSION_STATUSES = ("active", "completed", "anomaly", "needs_review")
@@ -77,16 +77,16 @@ def alembic_cfg(tmp_path, monkeypatch):
 
 
 def _new_session(**overrides) -> ChargingSession:
-    values = dict(
-        charge_point_id=1,
-        charge_point_code="CP001",
-        station_id=1,
-        station_name="Trạm A",
-        connector_number=1,
-        id_tag="TAG-0001",
-        meter_start_wh=1000,
-        started_at=datetime(2026, 10, 6, 8, 0, 0),
-    )
+    values = {
+        "charge_point_id": 1,
+        "charge_point_code": "CP001",
+        "station_id": 1,
+        "station_name": "Trạm A",
+        "connector_number": 1,
+        "id_tag": "TAG-0001",
+        "meter_start_wh": 1000,
+        "started_at": datetime(2026, 10, 6, 8, 0, 0, tzinfo=UTC).replace(tzinfo=None),
+    }
     values.update(overrides)
     return ChargingSession(**values)
 
@@ -185,9 +185,8 @@ def test_migration_enforces_partial_unique_index_at_db_level(alembic_cfg):
             conn.execute(insert, {"started": "2026-10-06 07:00:00", "ended": "2026-10-06 07:30:00", "status": "completed"})
             conn.execute(insert, {"started": "2026-10-06 08:00:00", "ended": None, "status": "active"})
         # Phiên mở thứ hai trên cùng đầu nối: CSDL phải từ chối.
-        with pytest.raises(IntegrityError):
-            with engine.begin() as conn:
-                conn.execute(insert, {"started": "2026-10-06 09:00:00", "ended": None, "status": "active"})
+        with pytest.raises(IntegrityError), engine.begin() as conn:
+            conn.execute(insert, {"started": "2026-10-06 09:00:00", "ended": None, "status": "active"})
         with engine.connect() as conn:
             assert conn.execute(text("SELECT COUNT(*) FROM charging_sessions")).scalar_one() == 2
     finally:
@@ -203,7 +202,7 @@ def test_two_open_sessions_on_same_connector_are_rejected(db):
     db.add(_new_session())
     db.commit()
 
-    db.add(_new_session(started_at=datetime(2026, 10, 6, 9, 0, 0)))
+    db.add(_new_session(started_at=datetime(2026, 10, 6, 9, 0, 0, tzinfo=UTC).replace(tzinfo=None)))
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
@@ -222,7 +221,7 @@ def test_new_session_allowed_after_previous_one_is_closed(db):
     first.stop_reason = "Local"
     db.commit()
 
-    db.add(_new_session(started_at=datetime(2026, 10, 6, 9, 0, 0)))
+    db.add(_new_session(started_at=datetime(2026, 10, 6, 9, 0, 0, tzinfo=UTC).replace(tzinfo=None)))
     db.commit()
 
     open_sessions = db.query(ChargingSession).filter(ChargingSession.ended_at.is_(None)).all()
@@ -232,7 +231,7 @@ def test_new_session_allowed_after_previous_one_is_closed(db):
 
 def test_many_closed_sessions_on_same_connector_are_allowed(db):
     for i in range(3):
-        start = datetime(2026, 10, 6, 8 + i, 0, 0)
+        start = datetime(2026, 10, 6, 8 + i, 0, 0, tzinfo=UTC).replace(tzinfo=None)
         db.add(_new_session(started_at=start, ended_at=start + timedelta(minutes=10), status="completed"))
     db.commit()
     assert db.query(ChargingSession).count() == 3
@@ -253,7 +252,7 @@ def test_open_sessions_on_different_connectors_or_points_are_allowed(db):
 
 @pytest.mark.parametrize("status", SESSION_STATUSES)
 def test_valid_session_statuses_are_accepted(db, status):
-    ended = None if status == "active" else datetime(2026, 10, 6, 9, 0, 0)
+    ended = None if status == "active" else datetime(2026, 10, 6, 9, 0, 0, tzinfo=UTC).replace(tzinfo=None)
     db.add(_new_session(status=status, ended_at=ended))
     db.commit()
     assert db.query(ChargingSession).one().status == status

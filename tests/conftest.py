@@ -12,13 +12,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
-# Bỏ qua các script live test của Tester khi chạy unit test CI tự động
-collect_ignore = [
-    "test_scrum126_live.py",
-    "test_scrum130_live.py",
-    "test_scrum135_live.py",
-]
-
 from app.core.security import hash_password
 from app.database import Base, get_db
 from app.main import app

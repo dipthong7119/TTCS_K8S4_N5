@@ -1,3 +1,10 @@
+> Báo cáo gốc của thành viên từ DANG-DAI. Các nhận định hoàn thành trong tài
+> liệu là ghi nhận của tác giả; kết quả kiểm chứng sau gộp ngày 06/10/2026
+> nằm tại `ketqua/dong_bo_main.md`. T-52/SCRUM-190 hiện có UI thử, chưa đủ
+> trạng thái chờ/phản hồi và luồng bắt đầu sạc đầu cuối.
+> Đăng nhập và hiện/ẩn mật khẩu đã có từ trước; chế độ mock login được gỡ
+> sau phản hồi của người dùng vì không thuộc yêu cầu.
+
 # KẾ HOẠCH CHI TIẾT VÀ BÁO CÁO THỰC THI SPRINT 2
 ## DÀNH CHO: ĐẶNG NGỌC ĐẠI (DANG-DAI) — TASK SCRUM-135
 > **Dự án:** Nền tảng vận hành trạm sạc xe điện (CSMS)
@@ -33,9 +40,9 @@ flowchart LR
 | **30/9/2026 (T4)**<br>*AM: 9:00 - 12:00* | **Tham gia Sprint Planning & Chốt Interface Contract:**<br>- Thống nhất schema payload login (`email`, `password`).<br>- Thống nhất mã lỗi: HTTP 401 chung (`"email hoặc mật khẩu không đúng"`), HTTP 401 khi khóa tạm (`"tài khoản tạm khoá 15 phút"`).<br>- Thống nhất cơ chế lưu phiên qua cookie `session_id` (HttpOnly, SameSite=Lax). | Thống nhất với Tân (Backend) | Contract API & Spec cho cả nhóm | ✅ Đã đạt |
 | **30/9/2026 (T4)**<br>*PM: 13:30 - 17:30* | **Xây dựng Nền tảng API Client Dùng Chung (`api_client.js`):**<br>- Đóng gói `fetch` tự động kèm `credentials: 'include'`.<br>- Tự động bắt lỗi 401 và chuyển hướng về `/login?next=...`.<br>- Bắt lỗi mạng (`AbortError`, mất kết nối). | Spec OpenAPI từ Tân | `api_client.js` cho Tuấn, Tú dùng chung | ✅ Đã đạt |
 | **01/10/2026 (T5)**<br>*Cả ngày* | **Thiết kế Giao diện Form Đăng nhập & Chế độ Mock (`login.html` & `pages/login.js`):**<br>- Thiết kế giao diện 2 cột chuẩn UX: Panel thương hiệu bên trái, Panel form bên phải.<br>- Nút toggle hiện/ẩn mật khẩu: Icon SVG mắt mở/đóng, cập nhật thuộc tính trợ năng `aria-pressed`, `aria-label`.<br>- Tích hợp `FormGuard.protect`: Chống double-submit, vô hiệu hóa nút submit khi đang gửi.<br>- Xây dựng chế độ Mock độc lập `?mock=1` (cho phép thử đăng nhập `success`, `wrong`, `locked` ngay cả khi backend chưa xong).<br>- *Đạt mốc chặn G3 vào cuối ngày.* | Độc lập (Mock data) | Giao diện form + Mock mode | ✅ Đã đạt |
-| **02/10/2026 (T6)**<br>*Cả ngày* | **Ghép Nối API Thật & Xây Dựng Route/Auth Guard:**<br>- Chuyển từ mock sang gọi API thật `/api/v1/auth/login`.<br>- Tách hoàn toàn JavaScript nghiệp vụ inline ra `pages/login.js` theo đúng quy tắc `00_QUY_TAC_AGENT.md`.<br>- Tự động xóa thông báo lỗi khi người dùng nhập lại vào ô email/password.<br>- Xây dựng `auth_guard.js` / `route_guard.js`: Kiểm tra quyền cho 5 vai trò (`admin`, `operator`, `station_owner`, `accountant`, `driver`), chống Open Redirect với hàm `safeNext()`.<br>- Nhúng `auth-context` và nạp guard vào `base.html`.<br>- *Đạt mốc chặn G4 vào cuối ngày.* | Backend thật từ Tân (G3) | Tuấn (124) và Tú (134) lấy guard áp dụng vào màn hình giám sát | ✅ Đã đạt |
+| **02/10/2026 (T6)**<br>*Cả ngày* | **Ghép Nối API Thật & Xây Dựng Route/Auth Guard:**<br>- Chuyển từ mock sang gọi API thật `/api/auth/login`.<br>- Tách hoàn toàn JavaScript nghiệp vụ inline ra `pages/login.js` theo đúng quy tắc `00_QUY_TAC_AGENT.md`.<br>- Tự động xóa thông báo lỗi khi người dùng nhập lại vào ô email/password.<br>- Xây dựng `auth_guard.js` / `route_guard.js`: Kiểm tra quyền cho 5 vai trò (`admin`, `operator`, `station_owner`, `accountant`, `driver`), chống Open Redirect với hàm `safeNext()`.<br>- Nhúng `auth-context` và nạp guard vào `base.html`.<br>- *Đạt mốc chặn G4 vào cuối ngày.* | Backend thật từ Tân (G3) | Tuấn (124) và Tú (134) lấy guard áp dụng vào màn hình giám sát | ✅ Đã đạt |
 | **03/10 – 04/10** | *Thứ 7 & Chủ Nhật (Thời gian đệm dự phòng sprint)* | N/A | N/A | Nghỉ / Đệm |
-| **05/10/2026 (T2 - Hôm nay)**<br>*Cả ngày* | **Kiểm tra Phân quyền Cây Trạm (122), Tối ưu UI & Chạy Kiểm Thử Toàn Diện:**<br>- Kiểm tra tương thích phân quyền hiển thị cây trạm SCRUM-122 của Tân.<br>- Bổ sung chú thích tích hợp `FormGuard.protect` cho template để pass toàn diện test suite của Tester Đức.<br>- Xử lý triệt để xung đột Git Merge trong `nhat_ky.md`.<br>- Chạy bộ test tự động live test `tests/test_scrum135_live.py` (đạt 10/10 PASS) và `tests/test_auth.py` (đạt 11/11 PASS).<br>- Commit merge sạch sẽ trên nhánh `DANG-DAI`. | Tân (SCRUM-122) | Mã nguồn hoàn thiện, test suite PASS 100% | ✅ Hoàn thành xuất sắc |
+| **05/10/2026 (T2 - Hôm nay)**<br>*Cả ngày* | **Kiểm tra Phân quyền Cây Trạm (122), Tối ưu UI & Chạy Kiểm Thử Toàn Diện:**<br>- Kiểm tra tương thích phân quyền hiển thị cây trạm SCRUM-122 của Tân.<br>- Bổ sung chú thích tích hợp `FormGuard.protect` cho template để pass toàn diện test suite của Tester Đức.<br>- Xử lý triệt để xung đột Git Merge trong `ketqua/nhat_ky.md`.<br>- Chạy bộ test tự động live test `tests/test_scrum135_live.py` (đạt 10/10 PASS) và `tests/test_auth.py` (đạt 11/11 PASS).<br>- Commit merge sạch sẽ trên nhánh `DANG-DAI`. | Tân (SCRUM-122) | Mã nguồn hoàn thiện, test suite PASS 100% | ✅ Hoàn thành xuất sắc |
 | **06/10/2026 (T3)**<br>*Sáng & Chiều* | **Hoàn thiện Tích hợp & Code Freeze:**<br>- 12:00: Đạt mốc **G6** (Frontend ghép dữ liệu thật toàn bộ).<br>- Phối hợp với Tester Đức nghiệm thu chéo UI và chức năng form.<br>- 17:00: **CODE FREEZE** — Đóng băng mã nguồn toàn sprint, không nhận thêm code mới. | Phối hợp cùng Đức, Tuấn, Tú | Bàn giao bản code đóng băng cho QA | ⏳ Kế hoạch tiếp theo |
 | **07/10/2026 (T4)**<br>*Cả ngày* | **Regression, Nghiệm thu & Sprint Review:**<br>- AM: Hỗ trợ regression test toàn bộ hệ thống; Tester Đức ký biên bản nghiệm thu task SCRUM-135.<br>- 14:00: Tham gia **Sprint Review**, demo chức năng đăng nhập, khóa tạm, phân quyền.<br>- 15:30: Tham gia **Sprint Retrospective**, tổng kết bài học kinh nghiệm Sprint 2. | Cả nhóm | Task SCRUM-135 đóng chính thức (Done) | ⏳ Kế hoạch tiếp theo |
 
@@ -101,7 +108,7 @@ frontend/
 
 ## 5. Trạng thái Git & Hướng dẫn Push chuẩn của nhóm TTCS_K8S4_N5
 
-Xung đột Git Merge giữa nhánh `DANG-DAI` và `main` đã được giải quyết triệt để trong `nhat_ky.md`.
+Xung đột Git Merge giữa nhánh `DANG-DAI` và `main` đã được giải quyết triệt để trong `ketqua/nhat_ky.md`.
 Cây thư mục làm việc hiện tại: `working tree clean`, commit merge `8fc3210` đã được tạo thành công trên local.
 
 Để đẩy thành quả công việc lên remote theo đúng quy định tại `huongdan/HD.txt`:

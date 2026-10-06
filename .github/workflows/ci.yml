@@ -37,7 +37,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Run Linter (Ruff)
-        run: python -m ruff check app alembic ../tests
+        run: python -m ruff check app tests alembic ../tests
 
       - name: Typecheck application (Mypy)
         run: python -m mypy app
@@ -46,7 +46,7 @@ jobs:
         run: python -m pip_audit --local --progress-spinner off
 
       - name: Run Unit Tests (Pytest)
-        run: python -m pytest app/tests ../tests --tb=short -v --cov=app --cov-branch --cov-report=term --cov-report=xml
+        run: python -m pytest tests ../tests --tb=short -v --cov=app --cov-branch --cov-report=term --cov-report=xml
 
       - name: Save coverage report
         uses: actions/upload-artifact@v4
