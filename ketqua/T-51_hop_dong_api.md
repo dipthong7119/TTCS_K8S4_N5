@@ -1,8 +1,14 @@
 # HỢP ĐỒNG API: BẮT ĐẦU SẠC TỪ XA (REMOTE START)
-**Task**: T-51 (SCRUM-180) & SCRUM-193  
-**Backend phụ trách**: Hoàng Văn Đức  
-**Frontend tích hợp**: Đặng Ngọc Đại (SCRUM-190, 191, 192)  
-**Trạng thái**: Đã sẵn sàng trên nhánh `HOANG-DUC` (PR #11 - Pass CI 100%)
+**Task**: T-51 (SCRUM-180) & SCRUM-193
+**Backend phụ trách**: Hoàng Văn Đức
+**Frontend tích hợp**: Đặng Ngọc Đại (SCRUM-190, 191, 192)
+**Trạng thái**: Đã có API gửi lệnh và map phản hồi; chưa nghiệm thu đầy đủ T-51/S-24.
+
+**Ghi chú sau đồng bộ vào f (06/10/2026):** Unit test của API đạt, nhưng chưa
+kiểm đầu nối bận/trạm ngừng trước khi gửi, chưa ràng buộc thẻ ảo theo tài xế và
+chưa lưu yêu cầu chờ 60 giây. Frontend hiện tại vẫn là bản thử, simulator fleet
+chưa xử lý RemoteStart. Không coi phản hồi Accepted là phiên đã được tạo;
+phiên chỉ xuất hiện khi máy chủ nhận StartTransaction hợp lệ từ trụ.
 
 ---
 

@@ -37,7 +37,6 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
@@ -56,6 +55,8 @@ class MockUser:
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
+    previous_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.create_all(bind=engine_test)
     db = SessionLocalTest()
     user = User(id=1, email="operator@test.com", password_hash="123", full_name="Operator Test")
@@ -65,7 +66,7 @@ def setup_db():
         code="CP01",
         station_id=1,
         status="online",
-        last_seen_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(UTC),
     )
     connector = Connector(
         id=1,
@@ -83,7 +84,7 @@ def setup_db():
         user_id=1,
         driver_name="Driver Test",
         meter_start_wh=1000,
-        started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        started_at=datetime.now(UTC).replace(tzinfo=None),
         status="active",
     )
     db.add_all([user, station, point, connector, session])
@@ -96,6 +97,8 @@ def setup_db():
 
     Base.metadata.drop_all(bind=engine_test)
     manager.active_connections.clear()
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(previous_overrides)
 
 
 def test_remote_stop_accepted(monkeypatch):
@@ -185,7 +188,7 @@ def test_remote_stop_session_already_ended():
     """Phiên đã kết thúc -> báo lỗi 409, không gửi lệnh."""
     db = SessionLocalTest()
     session = db.query(ChargingSession).filter_by(id=101).one()
-    session.ended_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.ended_at = datetime.now(UTC).replace(tzinfo=None)
     session.status = "completed"
     db.commit()
     db.close()

@@ -56,6 +56,8 @@ def reconcile_single_session(
     tolerance: float = 0.001,
 ) -> SessionReconciliationItem:
     """Đối chiếu một phiên sạc giữa CSMS và Simulator."""
+    if system_record is None and sim_record is None:
+        raise ValueError("At least one session record is required")
     if system_record is None and sim_record is not None:
         return SessionReconciliationItem(
             session_id=sim_record.get("session_id", "N/A"),
@@ -86,7 +88,8 @@ def reconcile_single_session(
             notes="Phiên có trên hệ thống CSMS nhưng thiếu trong bản ghi simulator",
         )
 
-    # Cả hai bên đều có bản ghi
+    # Các nhánh thiếu một bên đã trả về ở trên.
+    assert system_record is not None and sim_record is not None
     session_id = system_record["session_id"]
     code = system_record.get("charge_point_code", sim_record.get("charge_point_code", "UNKNOWN"))
     connector_id = system_record.get("connector_id", sim_record.get("connector_id", 1))
@@ -195,6 +198,6 @@ def export_markdown_table(reconciliation_data: dict[str, Any]) -> str:
     lines.append("")
     lines.append(
         f"**Tổng kết**: Hệ thống={summary['total_system_kwh']} kWh | Giả lập={summary['total_simulator_kwh']} kWh | "
-        f"Tỷ lệ khớp đạt 100% tiêu chí nghiệm thu S-21 / E-04."
+        f"Tỷ lệ khớp={summary['match_percentage']}% | Kết quả đối chiếu={summary['verdict']}."
     )
     return "\n".join(lines)

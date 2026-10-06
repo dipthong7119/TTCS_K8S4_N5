@@ -6,6 +6,8 @@ Phụ trách: Hoàng Văn Đức (Backend / SCRUM-183)
 import json
 from pathlib import Path
 
+import pytest
+
 from app.services.kwh_reconciliation import (
     calculate_session_kwh,
     export_markdown_table,
@@ -172,3 +174,19 @@ def test_export_markdown_table():
     assert "CP01" in md
     assert "CP02" in md
     assert "100.0%" in md
+
+
+def test_failed_reconciliation_report_does_not_claim_full_match():
+    result = reconcile_datasets(
+        [{"session_id": 1, "system_kwh": 5.0}],
+        [{"session_id": 1, "simulator_kwh": 6.5}],
+    )
+    report = export_markdown_table(result)
+    assert "FAILED" in report
+    assert "0.0%" in report
+    assert "100%" not in report
+
+
+def test_reconciliation_requires_at_least_one_record():
+    with pytest.raises(ValueError, match="At least one session record"):
+        reconcile_single_session(None, None)

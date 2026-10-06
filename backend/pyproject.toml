@@ -1,5 +1,5 @@
 [tool.ruff.lint]
-extend-ignore = ["B008", "DTZ003", "RUF059", "BLE001", "ASYNC221", "EXE002"]
+extend-ignore = ["B008", "DTZ003", "RUF059", "BLE001", "ASYNC221"]
 
 [tool.mypy]
 explicit_package_bases = true
@@ -21,4 +21,3 @@ omit = ["tests/*"]
 
 [tool.coverage.report]
 omit = ["tests/*"]
-

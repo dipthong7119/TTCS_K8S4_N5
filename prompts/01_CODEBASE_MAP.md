@@ -7,6 +7,8 @@
 >
 > Cập nhật ngày **06/10/2026**, sau Sprint 1–2, T-55, main `bff0369`
 > và gộp `origin/DANG-DAI` tại `34a9b4d` (merge local `55d58a7`).
+> Nhánh f đã nhận main `717cc62` và HOANG-DUC `3520f1c` với API điều khiển
+> từ xa và công cụ đối chiếu kWh; giao diện bắt đầu sạc vẫn là bản thử.
 > Tài liệu này là **nguồn sự thật duy nhất** về "file này đặt ở đâu". Khi vibe
 > code (AI sinh code), luôn đọc file này trước để biết đặt code mới vào thư mục
 > nào — không tự sáng tạo thư mục mới, không tạo file `_v2`, `_final`, `_copy`.
@@ -99,11 +101,12 @@ backend/
 │   │   ├── ownership.py            # Lọc quyền sở hữu; không có models/ownership.py
 │   │   ├── ocpp_parser.py / ocpp_handlers.py
 │   │   ├── connection_manager.py / ocpp_status.py / jobs.py
-│   │   └── pricing.py / session_energy.py / billing.py / wallet.py / audit.py
+│   │   ├── pricing.py / session_energy.py / billing.py / wallet.py / audit.py
+│   │   └── meter_values.py / kwh_reconciliation.py # Số đo mới nhất; đối chiếu tập dữ liệu kWh
 │   │
 │   ├── ocpp/                       # Handler OCPP theo tin nhắn và ánh xạ trạng thái
 │   │   ├── status_mapping.py / warning_throttler.py
-│   │   └── handlers/               # boot_notification, heartbeat, status_notification, authorize, start_transaction, stop_transaction
+│   │   └── handlers/               # boot_notification, heartbeat, status_notification, authorize, start_transaction, meter_values, stop_transaction
 │   │
 │   └── dev_tools/
 │       └── ocpp_simulator/         # PHẦN MỀM giả lập trụ sạc OCPP

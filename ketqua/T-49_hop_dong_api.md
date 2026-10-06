@@ -1,8 +1,13 @@
 # HỢP ĐỒNG API: DỪNG SẠC TỪ XA (REMOTE STOP)
-**Task**: T-49 (SCRUM-172) & S-23  
-**Backend phụ trách**: Hoàng Văn Đức  
-**Frontend tích hợp**: Phạm Văn Tuấn (T-50: Nút dừng trên màn hình phiên)  
+**Task**: T-49 (SCRUM-172) & S-23
+**Backend phụ trách**: Hoàng Văn Đức
+**Frontend tích hợp**: Phạm Văn Tuấn (T-50: Nút dừng trên màn hình phiên)
 **Trạng thái**: Đã sẵn sàng trên nhánh `HOANG-DUC`
+
+**Ghi chú sau đồng bộ vào f (06/10/2026):** API và các nhánh lỗi đã kiểm thử
+đơn vị; simulator fleet hiện chưa xử lý RemoteStop nên chưa nghiệm thu thành
+công đầu cuối trên fleet. Luồng chờ StopTransaction và job quá 2 phút đã có
+trước đợt gộp này; nhánh bổ sung xử lý lỗi chi tiết và bằng chứng kiểm thử.
 
 ---
 

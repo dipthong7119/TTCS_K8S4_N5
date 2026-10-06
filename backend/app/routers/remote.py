@@ -223,4 +223,3 @@ async def remote_start_transaction(
         status="Rejected",
         message="Trụ sạc từ chối lệnh bắt đầu sạc từ xa (Rejected).",
     )
-

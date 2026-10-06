@@ -117,6 +117,18 @@ Tìm mã trụ chỉ hiện trụ khớp; tìm tên/địa chỉ trạm có th�
 backend tới simulator OCPP; trụ kết nối lại và báo trạng thái theo profile đã cấu hình.
 Trụ lỗi và bảo trì vẫn giữ trạng thái kiểm thử sau Reset.
 
+### Điều khiển phiên và đối chiếu kWh sau gộp HOANG-DUC
+
+Nhánh f đã nhận API `POST /api/charge_points/{code}/remote-start` (T-51 /
+SCRUM-193), cải tiến xử lý lỗi dừng phiên T-49 và công cụ đối chiếu kWh
+SCRUM-183. Hợp đồng API ở [T-51](ketqua/T-51_hop_dong_api.md) và
+[T-49](ketqua/T-49_hop_dong_api.md); cách thử và giới hạn hiện tại ở
+[hướng dẫn web local](huongdan/kiem_thu_sau_pull_main.md).
+
+Nút Bắt đầu sạc trên web vẫn là giao diện thử; simulator fleet chưa xử lý
+RemoteStart/RemoteStop. Công cụ đối chiếu nhận hai tập dữ liệu đầu vào,
+chưa tự thu thập kết quả 20 trụ. JSON mẫu phục vụ kiểm thử định dạng.
+
 ### Sao lưu và khôi phục PostgreSQL
 
 Compose khởi chạy dịch vụ `backup`, tạo một bản sao lưu ngay khi dịch vụ bắt đầu,
@@ -445,4 +457,3 @@ lại các AC trên máy chủ staging khi có môi trường đó.
 6. **Không commit** file `.env`, `csms.db`, `*.sqlite`.
 7. **Tối đa ~250 dòng/file** backend; ~150 dòng/template HTML.
 8. Ghi log kết quả mỗi task vào `ketqua/T-XX_ket_qua.md`.
-

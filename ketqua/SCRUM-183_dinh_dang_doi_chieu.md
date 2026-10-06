@@ -1,7 +1,7 @@
 # ĐẶC TẢ ĐỊNH DẠNG DỮ LIỆU ĐỐI CHIẾU NĂNG LƯỢNG KWH (SCRUM-183 / 184)
 
-**Task**: SCRUM-183 (Đức - Thu thập và đối chiếu kWh) & SCRUM-184 (Tuấn - Xuất bảng đối chiếu) & SCRUM-182 (Tú - Kịch bản 20 trụ ảo)  
-**Phụ trách thiết kế**: Hoàng Văn Đức (Backend)  
+**Task**: SCRUM-183 (Đức - Thu thập và đối chiếu kWh) & SCRUM-184 (Tuấn - Xuất bảng đối chiếu) & SCRUM-182 (Tú - Kịch bản 20 trụ ảo)
+**Phụ trách thiết kế**: Hoàng Văn Đức (Backend)
 **Trạng thái**: Đã thống nhất định dạng JSON và hoàn tất công cụ đối chiếu lõi tại `backend/app/services/kwh_reconciliation.py`.
 
 ---
@@ -18,7 +18,10 @@
 
 ## 2. Cấu trúc JSON kết quả đối chiếu chuẩn
 
-File mẫu được lưu tại: [`ketqua/kwh_reconciliation_sample.json`](file:///d:/TTCS_K8S4_N5/ketqua/kwh_reconciliation_sample.json)
+File mẫu được lưu tại: [kwh_reconciliation_sample.json](kwh_reconciliation_sample.json).
+Đây là dữ liệu mẫu cho kiểm thử và bàn giao định dạng, chưa phải kết quả
+thu thập từ một lượt chạy 20 trụ/ngắt nối thật. Module hiện nhận hai tập dữ
+liệu đầu vào; chưa tự gọi API/DB hoặc chạy simulator để thu thập.
 
 ```json
 {
