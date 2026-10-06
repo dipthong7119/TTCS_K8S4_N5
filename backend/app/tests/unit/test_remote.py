@@ -225,3 +225,202 @@ def test_reset_ocpp_error(monkeypatch):
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 502
     assert "từ chối" in resp.text
+
+
+# ==============================================================================
+# Tests cho T-51 / SCRUM-180 & SCRUM-193: RemoteStartTransaction
+# ==============================================================================
+
+def test_remote_start_offline(monkeypatch):
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "operator@test.com"
+            self.full_name = "Operator"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["operator"])
+    send_call = mock.AsyncMock()
+    monkeypatch.setattr(manager, "send_call", send_call)
+
+    resp = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG12345", "connector_id": 1},
+    )
+    assert resp.status_code == 409
+    assert "ngoại tuyến" in resp.json()["detail"]
+    send_call.assert_not_awaited()
+
+
+def test_remote_start_online_accepted(monkeypatch):
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "driver@test.com"
+            self.full_name = "Driver User"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(2, ["driver"])
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    point.status = "online"
+    point.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    db.close()
+    monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+
+    async def acknowledged(code, action, payload, timeout):
+        assert code == "CP01"
+        assert action == "RemoteStartTransaction"
+        assert payload == {"idTag": "TAG12345", "connectorId": 1}
+        return {"status": "Accepted"}
+
+    monkeypatch.setattr(manager, "send_call", acknowledged)
+
+    resp = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG12345", "connector_id": 1},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "Accepted"
+    assert "chấp nhận" in data["message"]
+
+
+def test_remote_start_online_rejected(monkeypatch):
+    """SCRUM-193: Map phản hồi Rejected từ trụ sạc."""
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    point.status = "online"
+    point.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    db.close()
+    monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+
+    async def rejected(code, action, payload, timeout):
+        assert code == "CP01"
+        assert action == "RemoteStartTransaction"
+        assert payload == {"idTag": "TAG_REJECT"}
+        return {"status": "Rejected"}
+
+    monkeypatch.setattr(manager, "send_call", rejected)
+
+    resp = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG_REJECT"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "Rejected"
+    assert "từ chối" in data["message"]
+
+
+def test_remote_start_timeout(monkeypatch):
+    import asyncio
+
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    point.status = "online"
+    point.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    db.close()
+    monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+
+    async def timeout_call(code, action, payload, timeout):
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(manager, "send_call", timeout_call)
+
+    resp = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG12345"},
+    )
+    assert resp.status_code == 504
+    assert "thời gian" in resp.text
+
+
+def test_remote_start_disconnect(monkeypatch):
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    point.status = "online"
+    point.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    db.close()
+    monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+
+    async def disconnect_call(code, action, payload, timeout):
+        raise ConnectionError()
+
+    monkeypatch.setattr(manager, "send_call", disconnect_call)
+
+    resp = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG12345"},
+    )
+    assert resp.status_code == 409
+    assert "ngắt kết nối" in resp.text
+
+
+def test_remote_start_not_found():
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "admin@test.com"
+            self.full_name = "Admin"
+            self.roles = [MockRole(r) for r in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
+    resp = client.post(
+        "/api/charge_points/NOT_EXIST/remote-start",
+        json={"id_tag": "TAG12345"},
+    )
+    assert resp.status_code == 404
+
