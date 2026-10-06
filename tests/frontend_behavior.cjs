@@ -26,7 +26,7 @@ function element() {
     remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); },
     querySelector(selector) { if (!selectors.has(selector)) selectors.set(selector, element()); return selectors.get(selector); },
     querySelectorAll() { return []; },
-    setAttribute() {}, focus() {}, prepend() {},
+    setAttribute() { }, focus() { }, prepend() { },
   };
 }
 
@@ -52,6 +52,7 @@ function monitoring(getTree, clock = Date, options = {}) {
     handlers: {}, body: element(),
     getElementById(id) { if (!ids.has(id)) ids.set(id, element()); return ids.get(id); },
     createElement: element,
+    querySelectorAll() { return []; },
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
   const callbacks = {};
@@ -64,14 +65,24 @@ function monitoring(getTree, clock = Date, options = {}) {
   const math = Object.create(Math);
   math.random = options.random || Math.random;
   const context = vm.createContext({
-    document, window: {}, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, Date: clock, Math: math, console,
+    document,
+    window: {
+      setInterval() { return 1; },
+      clearInterval() { },
+      addEventListener() { },
+    },
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
+    Date: clock,
+    Math: math,
+    console,
     ApiClient: {
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
-    SseClient: { on: (name, fn) => { callbacks[name] = fn; }, connect() {} },
-    RealtimeStatus: { subscribe() {}, connect() {}, disconnect() {} },
-    RestartButton: { createMarkup: () => '', bindEvents() {} },
+    SseClient: { on: (name, fn) => { callbacks[name] = fn; }, connect() { } },
+    RealtimeStatus: { subscribe() { }, connect() { }, disconnect() { } },
+    RestartButton: { createMarkup: () => '', bindEvents() { } },
     showToast: message => toasts.push(message),
   });
   if (options.realModules) {
@@ -85,21 +96,27 @@ function monitoring(getTree, clock = Date, options = {}) {
   }
   vm.runInContext(read('pages/monitoring_grid.js'), context);
   document.handlers.DOMContentLoaded();
-  return { document, callbacks, toasts, apiResets, mockPoints, resetBindings,
+  return {
+    document, callbacks, toasts, apiResets, mockPoints, resetBindings,
     mock: context.window.RealtimeStatus, restart: context.window.RestartButton,
     confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click(),
     openDetail: () => document.getElementById('monitoring-grid').children[0].querySelector('.station-card__open').handlers.click(),
     toggleMock: () => document.getElementById('btn-toggle-mock').handlers.click(),
     html: () => document.getElementById('monitoring-grid').children.map(child => child.innerHTML).join(''),
     pointHtml(code) { return this.html().match(/<section class="cp-tile"[\s\S]*?<\/section>/g).find(html => html.includes(`data-cp-code="${code}"`)); },
-    requests: () => requests, total: () => Number(document.getElementById('mon-total').textContent) };
+    requests: () => requests, total: () => Number(document.getElementById('mon-total').textContent)
+  };
 }
 
-const tree = [{ id: 42, name: 'Real station', address: '', status: 'active', charge_points: [
-  { id: 1, code: 'REAL-01', status: 'online', ocpp_status: 'Available', connectors: [
-    { connector_id: 1, status: 'rảnh', ocpp_status: 'Available' },
-  ] },
-] }];
+const tree = [{
+  id: 42, name: 'Real station', address: '', status: 'active', charge_points: [
+    {
+      id: 1, code: 'REAL-01', status: 'online', ocpp_status: 'Available', connectors: [
+        { connector_id: 1, status: 'rảnh', ocpp_status: 'Available' },
+      ]
+    },
+  ]
+}];
 
 test('empty API tree stays empty, without invented demo points', async () => {
   const page = monitoring(async () => []);
@@ -144,9 +161,13 @@ test('SSE reconnect reloads the complete tree and status events update connector
   page.callbacks._connected();
   await flush();
   assert.equal(page.requests(), 2);
-  page.callbacks.status_update({ station_id: 42, charge_points: [{ ...tree[0].charge_points[0], connectors: [
-    { connector_id: 1, status: 'bận', ocpp_status: 'Charging' },
-  ] }] });
+  page.callbacks.status_update({
+    station_id: 42, charge_points: [{
+      ...tree[0].charge_points[0], connectors: [
+        { connector_id: 1, status: 'bận', ocpp_status: 'Charging' },
+      ]
+    }]
+  });
   assert.equal(Number(page.document.getElementById('mon-charging').textContent), 1);
 });
 
@@ -347,12 +368,13 @@ function protectedForm(onSubmit) {
   button.textContent = 'Lưu';
   form.querySelector = () => button;
   const window = {};
-  const context = vm.createContext({ window, document: { createElement: element },
+  const context = vm.createContext({
+    window, document: { createElement: element },
     FormData: class { entries() { return [['name', 'Station']]; } },
   });
   vm.runInContext(read('form_guard.js'), context);
-  window.FormGuard.protect(form, onSubmit, { keepDisabledOnSuccess: true, onError() {} });
-  return { button, submit: () => form.handlers.submit({ preventDefault() {} }) };
+  window.FormGuard.protect(form, onSubmit, { keepDisabledOnSuccess: true, onError() { } });
+  return { button, submit: () => form.handlers.submit({ preventDefault() { } }) };
 }
 
 test('form rejects simultaneous submits and stays disabled after successful save', async () => {
@@ -380,13 +402,16 @@ test('form becomes usable again after save failure', async () => {
 });
 
 function restartClient(reset) {
-  const document = { body: element(), createElement: element, addEventListener() {} };
+  const document = { body: element(), createElement: element, addEventListener() { } };
   const window = {};
-  vm.runInContext(read('restart_button.js'), vm.createContext({ document, window,
-    ApiClient: { resetChargePoint: reset }, showToast() {},
+  vm.runInContext(read('restart_button.js'), vm.createContext({
+    document, window,
+    ApiClient: { resetChargePoint: reset }, showToast() { },
   }));
-  return { module: window.RestartButton,
-    confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click() };
+  return {
+    module: window.RestartButton,
+    confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click()
+  };
 }
 
 test('Reset requires confirmation and allows only one pending command per point', async () => {
@@ -463,7 +488,7 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
   class FakeEventSource {
     static CLOSED = 2;
     constructor(url, options) { this.url = url; this.options = options; this.readyState = 0; this.closes = 0; instances.push(this); }
-    addEventListener() {}
+    addEventListener() { }
     close() { this.closes++; this.readyState = FakeEventSource.CLOSED; }
   }
   const window = {};
