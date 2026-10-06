@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     """
     backend_dir = Path(__file__).parent.parent  # thư mục backend/
     subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "heads"],
         cwd=str(backend_dir),
         check=True,
     )
