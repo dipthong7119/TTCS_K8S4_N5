@@ -113,6 +113,21 @@ class SimpleSimulator:
                         future.set_exception(RuntimeError(f"OCPP {data[2]}: {data[3]}"))
                 elif data[0] == 2:
                     _, message_id, action, _payload = data
+                    if action == "RemoteStartTransaction":
+                        await self.ws.send(json.dumps(
+                            make_callresult(message_id, {"status": "Accepted"})
+                        ))
+                        await self.ws.send(json.dumps(make_call(
+                            "StatusNotification",
+                            {
+                                "connectorId": _payload.get("connectorId", 1),
+                                "errorCode": "NoError",
+                                "status": "Charging",
+                                "timestamp": datetime.now(timezone.utc)
+                                    .isoformat().replace("+00:00", "Z"),
+                            },
+                        )))
+                        print("[Simulator] Remote start accepted; Charging") 
                     if action == "Reset":
                         await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
                         self._reboot_requested = True
