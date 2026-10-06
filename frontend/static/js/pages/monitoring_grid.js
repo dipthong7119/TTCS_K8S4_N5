@@ -248,6 +248,45 @@
   }
 
   let activeDetailStationId = null;
+  // SCRUM-191: lưu trạng thái chờ theo mã trụ.
+  const startRequests = new Map();
+
+  function updateStartWaitingUI() {
+    document.querySelectorAll('.start-charging-controls').forEach(controls => {
+      const select = controls.querySelector('[data-start-connector]');
+      const button = controls.querySelector('[data-start-charging]');
+      const message = controls.querySelector('[data-start-message]');
+      const request = startRequests.get(button.dataset.cpCode);
+
+      if (!request) return;
+
+      const seconds = Math.max(
+        0,
+        Math.ceil((request.deadline - Date.now()) / 1000)
+      );
+
+      select.value = request.connectorId;
+      select.disabled = seconds > 0;
+      button.disabled = seconds > 0 || !select.value;
+
+      if (seconds > 0) {
+        button.textContent = 'Đang chờ...';
+        message.textContent =
+          `Đang chờ trụ xác nhận… còn ${seconds} giây (bản thử).`;
+      } else {
+        button.textContent = 'Bắt đầu sạc';
+        message.textContent =
+          'Hết thời gian chờ 60 giây (bản thử). Chưa gửi lệnh sạc thật.';
+      }
+    });
+  }
+
+  // Cập nhật số giây, kể cả khi phần chi tiết được vẽ lại.
+  const startWaitingTimer = window.setInterval(updateStartWaitingUI, 1000);
+
+  window.addEventListener('pagehide', () => {
+    window.clearInterval(startWaitingTimer);
+  });
 
   function updateMockBtnUI() {
     const btn = document.getElementById('btn-toggle-mock');
@@ -436,21 +475,78 @@
       connectors.filter(connector => connector.status === 'lỗi' || connector.ocpp_status === 'Faulted').length +
       points.filter(point => internalStatus(point.ocpp_status) === 'lỗi' || point.status === 'lỗi').length;
   }
+  // SCRUM-190: chọn đầu nối và nút bắt đầu sạc.
+  function startChargingMarkup(point) {
+    const connectors = point.connectors || [];
 
+    const options = connectors.map(connector => {
+      const available = point.status === 'online' &&
+        (connector.ocpp_status
+          ? connector.ocpp_status === 'Available'
+          : connector.status === 'rảnh');
+
+      return `
+        <option value="${escapeHtml(connector.connector_id)}"
+                ${available ? '' : 'disabled'}>
+          Đầu nối ${escapeHtml(connector.connector_id)}
+          — ${available ? 'Sẵn sàng' : 'Không khả dụng'}
+        </option>`;
+    }).join('');
+
+    return `
+      <div class="start-charging-controls">
+        <label>
+          Chọn đầu nối
+          <select class="form-select" data-start-connector>
+            <option value="">-- Chọn đầu nối --</option>
+            ${options}
+          </select>
+        </label>
+
+        <button class="btn btn--primary"
+                type="button"
+                data-start-charging
+                data-cp-code="${escapeHtml(point.code)}"
+                disabled>
+          Bắt đầu sạc
+        </button>
+
+        <p data-start-message role="status" aria-live="polite"></p>
+      </div>`;
+  }
   function renderDetailBody(station, body) {
     if (!body) body = document.getElementById('detail-body');
     if (!body) return;
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
-        const lastSeen = point.last_seen_at
-          ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>` : '';
-        const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
-        return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(point.status)}</div>
+      const lastSeen = point.last_seen_at
+        ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(new Date(point.last_seen_at).toLocaleString('vi-VN'))}</p>` : '';
+      const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
+      return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(point.status)}</div>
           <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
-          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${restartMarkup}</section>`;
-      }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
+          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connectorMarkup).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${startChargingMarkup(point)}${restartMarkup}</section>`;
+    }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
     RestartButton.bindEvents(body);
+    body.querySelectorAll('.start-charging-controls').forEach(controls => {
+      const select = controls.querySelector('[data-start-connector]');
+      const button = controls.querySelector('[data-start-charging]');
+      const message = controls.querySelector('[data-start-message]');
+
+      select.addEventListener('change', () => {
+        button.disabled = !select.value;
+        message.textContent = '';
+      });
+
+      button.addEventListener('click', () => {
+        if (!select.value) return;
+
+        message.textContent =
+          `Đã chọn trụ ${button.dataset.cpCode}, đầu nối ${select.value}. ` +
+          'Đây là bản thử giao diện; chưa gửi yêu cầu sạc.';
+      });
+    });
   }
+
 
   function openDetail(station) {
     activeDetailStationId = station.id;
@@ -507,6 +603,7 @@
           if (point.code === payload.charge_point_code) {
             for (const conn of (point.connectors || [])) {
               if (conn.connector_id === payload.connector_id) {
+                conn.ocpp_status = payload.status;
                 conn.status = internalStatus(payload.status);
               }
             }
