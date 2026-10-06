@@ -13,7 +13,7 @@ from app.services.session_energy import calculate_energy_kwh
         # Regressing meter counters are anomalous; never produce negative energy.
         (27_110, 26_000, None),
         # An unchanged counter is a valid zero-energy session.
-        (40_520, 40_520, Decimal("0")),
+        (40_520, 40_520, Decimal(0)),
     ],
 )
 def test_calculate_energy_kwh(meter_start_wh, meter_stop_wh, expected_kwh):

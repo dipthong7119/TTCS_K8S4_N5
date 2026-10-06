@@ -24,3 +24,8 @@ def db_session():
         db.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
+
+
+@pytest.fixture
+def db(db_session):
+    return db_session

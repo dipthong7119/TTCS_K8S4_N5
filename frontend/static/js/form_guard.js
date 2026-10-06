@@ -10,7 +10,8 @@
 const FormGuard = (() => {
   /**
    * @param {HTMLFormElement} form
-   * @param {function} onSubmit — async function(formData, formElement)
+   * @param {function} onSubmit — async function(formData, formElement);
+   * return false when validation did not submit successfully.
    * @param {object} opts — { loadingText, submitSelector }
    */
   function protect(form, onSubmit, opts = {}) {
@@ -33,8 +34,7 @@ const FormGuard = (() => {
 
       try {
         const data = Object.fromEntries(new FormData(form).entries());
-        await onSubmit(data, form);
-        succeeded = true;
+        succeeded = (await onSubmit(data, form)) !== false;
       } catch (err) {
         // Hiển thị lỗi tại ô nhập hoặc alert chung
         if (typeof opts.onError === 'function') opts.onError(err, form);

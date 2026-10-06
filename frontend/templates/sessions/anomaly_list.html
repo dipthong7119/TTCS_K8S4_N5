@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "anomalies" %}
 
 {% block title %}Phiên bất thường{% endblock %}
@@ -13,7 +13,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/sessions.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -135,5 +135,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/anomaly_list.js"></script>
+<script src="{{ asset_url('js/pages/anomaly_list.js') }}"></script>
 {% endblock %}

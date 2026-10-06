@@ -162,3 +162,26 @@ def test_login_returns_the_home_page_for_each_role(
     assert response.status_code == 200, response.text
     assert response.json()["roles"] == [role_name]
     assert response.json()["redirect_to"] == expected_page
+
+
+def test_current_user_requires_a_session(client: TestClient) -> None:
+    assert client.get("/api/auth/me").status_code == 401
+
+
+@pytest.mark.parametrize("role_name", ["admin", "operator", "station_owner", "accountant", "driver"])
+def test_current_user_returns_only_the_logged_in_identity(client, user_factory, role_name):
+    user = user_factory(email=f"{role_name}@example.com", role_name=role_name)
+    assert client.post(
+        "/api/auth/login", json={"email": user.email, "password": PASSWORD}
+    ).status_code == 200
+    response = client.get("/api/auth/me")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == user.id
+    assert data["email"] == user.email
+    assert data["roles"] == [role_name]
+    assert data["full_name"] == user.full_name
+    assert data["role_label"]
+    assert set(data) == {"user_id", "email", "full_name", "roles", "role_label"}
+    assert client.post("/api/auth/logout").status_code == 200
+    assert client.get("/api/auth/me").status_code == 401

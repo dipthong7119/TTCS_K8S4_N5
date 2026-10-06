@@ -7,9 +7,9 @@
   <title>Đăng nhập — CSMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="/static/css/base.css" />
-  <link rel="stylesheet" href="/static/css/components.css" />
-  <link rel="stylesheet" href="/static/css/pages/login.css" />
+  <link rel="stylesheet" href="{{ asset_url('css/base.css') }}" />
+  <link rel="stylesheet" href="{{ asset_url('css/components.css') }}" />
+  <link rel="stylesheet" href="{{ asset_url('css/pages/login.css') }}" />
 </head>
 <body class="login-body">
 
@@ -81,10 +81,13 @@
         <p class="login-form-subtitle">Vui lòng nhập thông tin tài khoản của bạn</p>
       </div>
 
-      <!-- Alert area (general errors shown here) -->
-      <div class="alert alert--danger" id="login-alert" role="alert" aria-live="assertive" style="display:none;margin-bottom:20px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      <!-- Alert area (lỗi đăng nhập hiển thị ở đây) -->
+      <div class="alert alert--danger" id="login-alert" role="alert" aria-live="assertive"
+           style="display:none;margin-bottom:20px;" tabindex="-1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         <span id="login-alert-text"></span>
       </div>
@@ -146,8 +149,10 @@
   </div>
 </div>
 
-<script src="/static/js/api_client.js"></script>
-<script src="/static/js/form_guard.js"></script>
-<script src="/static/js/pages/login.js"></script>
+<script src="{{ asset_url('js/api_client.js') }}"></script>
+<script src="{{ asset_url('js/form_guard.js') }}"></script>
+<!-- FormGuard.protect được gọi để bảo vệ #login-form trong static/js/pages/login.js -->
+<script src="{{ asset_url('js/auth_guard.js') }}"></script>
+<script src="{{ asset_url('js/pages/login.js') }}"></script>
 </body>
 </html>

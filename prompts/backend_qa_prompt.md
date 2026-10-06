@@ -9,16 +9,15 @@
 
 Trước khi viết test, phải đọc và đối chiếu đầy đủ các file:
 
-1. `prompts/01_CODEBASE_MAP.md`
-2. `prompts/02_CODING_STANDARDS.md`
-3. `prompts/03_SSD_SPEC.md`
-4. `prompts/SPRINT_1.md`
-5. `prompts/plant-sprint1.md`
+1. `prompts/00_QUY_TAC_AGENT.md`
+2. `prompts/01_CODEBASE_MAP.md`
+3. `prompts/02_DAC_TA_DU_AN.md`
 
 Phải kiểm tra source hiện tại trong `backend/`, không tự suy diễn endpoint hoặc
 chức năng chưa tồn tại. Theo quy trình bàn giao của trưởng nhóm, toàn bộ artifact
-QA trong yêu cầu này đặt tại thư mục `tests/` ở root, ngang hàng với `backend/`
-và `frontend/`. Không sửa code của developer.
+QA được phân loại: code kiểm thử tại `tests/` ở root, prompt trong `prompts/`,
+báo cáo trong `ketqua/`. Unit test của backend đặt tại `backend/tests/`.
+Không sửa code của developer. Đường dẫn được đồng bộ ngày 06/10/2026.
 
 ## Nhiệm vụ
 
@@ -38,7 +37,7 @@ và `frontend/`. Không sửa code của developer.
    - Bảo vệ đăng nhập sai theo tài khoản và theo IP.
 5. Kiểm thử endpoint `/health` theo contract test hiện có.
 6. Chạy toàn bộ test, không sửa assertion để chiều theo code đang lỗi.
-7. Ghi kết quả pass/fail và blocker vào file báo cáo trong `tests/`.
+7. Ghi kết quả pass/fail và blocker vào file báo cáo trong `ketqua/`.
 
 ## Ràng buộc
 
@@ -53,14 +52,13 @@ và `frontend/`. Không sửa code của developer.
 ## Đầu ra yêu cầu
 
 ```text
-tests/
-|-- backend_qa_prompt.md
-|-- backend_qa_prompt_ket_qua.md
-|-- backend_test_results.md
-|-- conftest.py
-|-- test_auth.py
-|-- test_health.py
-`-- test_migrations.py
+prompts/backend_qa_prompt.md
+ketqua/backend_qa_prompt_ket_qua.md
+ketqua/backend_test_results.md
+tests/conftest.py
+tests/test_auth.py
+tests/test_health.py
+tests/test_migrations.py
 ```
 
 ## Tiêu chí hoàn thành

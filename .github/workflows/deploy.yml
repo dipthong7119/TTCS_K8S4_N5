@@ -2,7 +2,7 @@ name: CD Pipeline - Deploy to Staging
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "f" ]
 
 # Phân quyền cho token để có thể đẩy package lên GitHub Container Registry
 permissions:
@@ -32,13 +32,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
       - name: Run Linter (Ruff)
-        run: ruff check app alembic ../tests
+        run: ruff check app tests alembic ../tests
       - name: Typecheck application (Mypy)
         run: python -m mypy app
       - name: Audit installed dependencies
         run: python -m pip_audit --local --progress-spinner off
       - name: Run Unit Tests (Pytest)
-        run: pytest app/tests ../tests
+        run: pytest tests ../tests
       - name: Check frontend behavior
         working-directory: .
         run: node --test tests/frontend_behavior.cjs
@@ -46,6 +46,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     # Chỉ build/push sau khi lint và toàn bộ test đã qua.
 
     steps:

@@ -15,8 +15,8 @@ class SessionReconciliationItem:
     session_id: int | str
     charge_point_code: str
     connector_id: int
-    meter_start_wh: int | float
-    meter_stop_wh: int | float
+    meter_start_wh: float
+    meter_stop_wh: float
     system_kwh: float
     simulator_kwh: float
     difference_kwh: float
@@ -43,7 +43,7 @@ class ReconciliationSummary:
         return asdict(self)
 
 
-def calculate_session_kwh(start_wh: int | float, stop_wh: int | float) -> float | None:
+def calculate_session_kwh(start_wh: float, stop_wh: float) -> float | None:
     """Tính kWh từ hai mốc Wh theo quy tắc S-18 / SCRUM-187."""
     if stop_wh < start_wh:
         return None

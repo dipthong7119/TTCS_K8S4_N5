@@ -1,7 +1,7 @@
 """Unit tests for Task T-49 (SCRUM-172): RemoteStopTransaction API and 2-minute review cutoff."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 import pytest

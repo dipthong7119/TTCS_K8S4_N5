@@ -1,6 +1,6 @@
 """Store the original CALL frame with its persisted response.
 
-Revision ID: h20261003_t21_request_payload
+Revision ID: h20261003_t21_ocpp_request_payload
 Revises: df03d362bc53
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "h20261003_t21_request_payload"
+revision: str = "h20261003_t21_ocpp_request_payload"
 down_revision: str | None = "df03d362bc53"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

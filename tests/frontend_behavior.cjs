@@ -30,22 +30,6 @@ function element() {
   };
 }
 
-function mockTimers() {
-  const timers = new Map();
-  let nextId = 0;
-  return {
-    setTimeout(fn, delay) { const id = nextId++; timers.set(id, { fn, delay }); return id; },
-    clearTimeout(id) { timers.delete(id); },
-    run(predicate) {
-      const entry = [...timers.entries()].find(([, timer]) => predicate(timer.delay));
-      assert.ok(entry, 'expected a scheduled mock event');
-      timers.delete(entry[0]);
-      entry[1].fn();
-    },
-    size: () => timers.size,
-  };
-}
-
 function monitoring(getTree, clock = Date, options = {}) {
   const ids = new Map();
   const document = {
@@ -54,42 +38,49 @@ function monitoring(getTree, clock = Date, options = {}) {
     createElement: element,
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
+  if (options.startControls) {
+    document.getElementById('detail-body').querySelectorAll = selector =>
+      selector === '.start-charging-controls' ? options.startControls : [];
+  }
   const callbacks = {};
   const toasts = [];
   const resetBindings = [];
   const apiResets = [];
-  const mockPoints = [];
   let requests = 0;
-  const timers = options.timers || { setTimeout, clearTimeout };
-  const math = Object.create(Math);
-  math.random = options.random || Math.random;
   const context = vm.createContext({
-    document, window: {}, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, Date: clock, Math: math, console,
+    document, window: {}, setTimeout, clearTimeout, Date: clock, console,
     ApiClient: {
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
-    SseClient: { on: (name, fn) => { callbacks[name] = fn; }, connect() {} },
-    RealtimeStatus: { subscribe() {}, connect() {}, disconnect() {} },
+    SseClient: {
+      on: (name, fn) => { callbacks[name] = fn; },
+      connect() { if (options.sseConnectError) throw Error('EventSource unavailable'); },
+    },
     RestartButton: { createMarkup: () => '', bindEvents() {} },
     showToast: message => toasts.push(message),
   });
   if (options.realModules) {
     document.getElementById('monitoring-grid').dataset.canReset = 'true';
-    vm.runInContext(read('realtime_status.js'), context);
     vm.runInContext(read('restart_button.js'), context);
     const bind = context.window.RestartButton.bindEvents;
     context.window.RestartButton.bindEvents = (body, bindings) => { resetBindings.push(bindings); bind(body, bindings); };
-    const connect = context.window.RealtimeStatus.connect;
-    context.window.RealtimeStatus.connect = points => { mockPoints.splice(0, mockPoints.length, ...points); connect(points); };
   }
   vm.runInContext(read('pages/monitoring_grid.js'), context);
   document.handlers.DOMContentLoaded();
-  return { document, callbacks, toasts, apiResets, mockPoints, resetBindings,
-    mock: context.window.RealtimeStatus, restart: context.window.RestartButton,
+  return { document, callbacks, toasts, apiResets, resetBindings,
+    restart: context.window.RestartButton,
     confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click(),
     openDetail: () => document.getElementById('monitoring-grid').children[0].querySelector('.station-card__open').handlers.click(),
-    toggleMock: () => document.getElementById('btn-toggle-mock').handlers.click(),
+    filter(value) {
+      document.getElementById('mon-status-filter').value = value;
+      document.getElementById('mon-status-filter').handlers.change();
+    },
+    search(value) {
+      document.getElementById('mon-search').value = value;
+      document.getElementById('mon-status-filter').handlers.change();
+    },
+    codes: () => [...document.getElementById('monitoring-grid').children.map(child => child.innerHTML).join('').matchAll(/data-cp-code="([^"]+)"/g)].map(match => match[1]),
     html: () => document.getElementById('monitoring-grid').children.map(child => child.innerHTML).join(''),
     pointHtml(code) { return this.html().match(/<section class="cp-tile"[\s\S]*?<\/section>/g).find(html => html.includes(`data-cp-code="${code}"`)); },
     requests: () => requests, total: () => Number(document.getElementById('mon-total').textContent) };
@@ -105,7 +96,7 @@ test('empty API tree stays empty, without invented demo points', async () => {
   const page = monitoring(async () => []);
   await flush();
   assert.equal(page.total(), 0);
-  assert.equal(page.document.getElementById('btn-toggle-mock').classList.contains('is-active'), false);
+  assert.match(page.html(), /Không có kết quả/);
 });
 
 test('API failure shows an error, without invented online points', async () => {
@@ -126,18 +117,6 @@ test('temporary API failure retains the last real tree and reports staleness', a
   assert.match(page.toasts.at(-1), /dữ liệu đã tải trước đó/);
 });
 
-test('demo data appears only after explicit selection and resists pending API responses', async () => {
-  let resolve;
-  const page = monitoring(() => new Promise(done => { resolve = done; }));
-  page.document.getElementById('btn-toggle-mock').handlers.click();
-  assert.equal(page.total(), 20);
-  resolve([]);
-  await flush();
-  page.callbacks._connected();
-  assert.equal(page.total(), 20);
-  assert.equal(page.requests(), 1);
-});
-
 test('SSE reconnect reloads the complete tree and status events update connectors', async () => {
   const page = monitoring(async () => structuredClone(tree));
   await flush();
@@ -150,195 +129,252 @@ test('SSE reconnect reloads the complete tree and status events update connector
   assert.equal(Number(page.document.getElementById('mon-charging').textContent), 1);
 });
 
-test('mock events address all 20 displayed points and only their declared connectors', async () => {
-  const timers = mockTimers();
-  let random = 0.9;
-  const page = monitoring(async () => tree, Date, { realModules: true, timers, random: () => random });
-  await flush();
-  page.toggleMock();
-  assert.equal(page.mockPoints.length, 20);
-  const events = [];
-  page.mock.subscribe('status_change', payload => events.push(payload));
-  for (let index = 0; index < 20; index++) {
-    random = index / 20 + 0.001;
-    const previous = events.length;
-    timers.run(delay => delay >= 5000);
-    const emitted = events.slice(previous);
-    assert.ok(emitted.length > 0);
-    for (const event of emitted) {
-      const point = page.mockPoints[index];
-      assert.equal(event.charge_point_code, point.code);
-      assert.ok(point.connectors.some(connector => connector.connector_id === event.connector_id));
-    }
-  }
-  page.mock.disconnect();
-  assert.equal(timers.size(), 0);
-});
+function mixedTree() {
+  const ready = { code: 'CP_AEON_01', status: 'online', ocpp_status: 'Available', connectors: [
+    { connector_id: 1, status: 'rảnh', ocpp_status: 'Available', error_code: 'NoError' },
+  ] };
+  const fault = { code: 'CP_AEON_FAULT', status: 'online', ocpp_status: 'Faulted', connectors: [
+    { connector_id: 1, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
+    { connector_id: 2, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
+  ] };
+  return [
+    { id: 7, name: 'AEON Mall', status: 'active', charge_points: [ready, fault] },
+    { id: 8, name: 'Thủ Thiêm', status: 'maintenance', charge_points: [
+      { code: 'CP_DEMO_MAINT_01', status: 'online', ocpp_status: 'Unavailable', connectors: [
+        { connector_id: 1, status: 'lỗi', ocpp_status: 'Unavailable', error_code: 'NoError' },
+      ] },
+    ] },
+    { id: 9, name: 'Vincom', status: 'active', charge_points: [{ ...structuredClone(ready), code: 'CP_VINCOM_01' }] },
+  ];
+}
 
-test('mock status changes update the grid, connector totals and an open drawer', async () => {
-  const timers = mockTimers();
-  const randoms = [];
-  const page = monitoring(async () => tree, Date, {
-    realModules: true, timers, random: () => randoms.length ? randoms.shift() : 0.9,
-  });
+test('fault filter shows only faulty points in grid, list and drawer; totals count each point once', async () => {
+  const data = mixedTree();
+  const original = JSON.stringify(data);
+  const page = monitoring(async () => data);
   await flush();
-  page.toggleMock();
+  assert.equal(page.total(), 4);
+  assert.equal(Number(page.document.getElementById('mon-fault').textContent), 1);
+  page.filter('lỗi');
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  assert.equal(page.document.getElementById('monitoring-grid').children.length, 1);
+  page.document.getElementById('view-list').handlers.click();
+  assert.equal(page.document.getElementById('monitoring-grid').classList.contains('list-view'), true);
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
   page.openDetail();
-  const previous = Number(page.document.getElementById('mon-charging').textContent);
-  randoms.push(0, 0, 2 / 9, 0.9);
-  timers.run(delay => delay >= 5000);
-  assert.equal(Number(page.document.getElementById('mon-charging').textContent), previous + 1);
-  assert.equal(page.mockPoints[0].connectors[0].ocpp_status, 'Charging');
-  assert.match(page.pointHtml('CP-HN-01'), /Đang sạc/);
-  assert.match(page.document.getElementById('detail-body').innerHTML, /CP-HN-01/);
-  assert.equal(page.mockPoints[0].last_seen_at.length, 24);
-  page.mock.disconnect();
+  assert.match(page.document.getElementById('detail-body').innerHTML, /CP_AEON_FAULT/);
+  assert.doesNotMatch(page.document.getElementById('detail-body').innerHTML, /CP_AEON_01/);
+  page.document.getElementById('view-grid').handlers.click();
+  assert.equal(page.document.getElementById('monitoring-grid').classList.contains('list-view'), false);
+  page.filter('');
+  assert.equal(page.codes().length, 4);
+  assert.equal(page.total(), 4);
+  assert.equal(JSON.stringify(data), original);
 });
 
-for (const type of ['Soft', 'Hard']) {
-  test(`confirmed demo Reset ${type} recovers the grid and drawer without calling backend`, async () => {
-    const timers = mockTimers();
-    const page = monitoring(async () => tree, Date, { realModules: true, timers });
-    await flush();
-    page.toggleMock();
-    page.openDetail();
-    const command = page.restart.handleRestart('CP-HN-01', type, false, element(), page.resetBindings.at(-1));
-    assert.equal(page.apiResets.length, 0);
-    assert.equal(page.mockPoints[0].status, 'online');
-    page.confirm();
-    await command;
-    assert.equal(page.apiResets.length, 0);
-    assert.equal(page.mockPoints[0].status, 'offline');
-    assert.ok(page.mockPoints[0].connectors.every(connector => connector.status === 'unknown'));
-    assert.match(page.pointHtml('CP-HN-01'), /Ngoại tuyến/);
-    assert.match(page.document.getElementById('detail-body').innerHTML, /data-cp-code="CP-HN-01"[\s\S]*?data-cp-offline="true"/);
-    assert.match(page.toasts.at(-1), new RegExp(`chấp nhận Reset ${type}`));
+test('Unavailable is gray and has its own filter even when the API internal status is lỗi', async () => {
+  const page = monitoring(async () => mixedTree());
+  await flush();
+  page.filter('unavailable');
+  assert.deepEqual(page.codes(), ['CP_DEMO_MAINT_01']);
+  assert.match(page.html(), /badge--offline">Tạm ngừng/);
+  assert.doesNotMatch(page.html(), /badge--fault/);
+  assert.equal(Number(page.document.getElementById('mon-fault').textContent), 1);
+});
 
-    // Refresh must retain the current mock state while the restart timer runs.
-    page.document.getElementById('btn-refresh-monitoring').handlers.click();
-    assert.equal(page.mockPoints[0].status, 'offline');
-    assert.match(page.pointHtml('CP-HN-01'), /Ngoại tuyến/);
-    assert.equal(page.requests(), 1);
-    timers.run(delay => delay === 2000);
-    assert.equal(page.mockPoints[0].status, 'online');
-    assert.ok(page.mockPoints[0].connectors.every(connector => connector.status === 'rảnh' && connector.ocpp_status === 'Available'));
-    assert.doesNotMatch(page.pointHtml('CP-HN-01'), /Ngoại tuyến/);
-    assert.match(page.document.getElementById('detail-body').innerHTML, /data-cp-code="CP-HN-01"[\s\S]*?data-cp-offline="false"/);
-    page.mock.disconnect();
+test('a faulty connector or non-NoError code marks its point faulty without requiring global Faulted', async () => {
+  const data = mixedTree();
+  data[0].charge_points[0].connectors[0] = { connector_id: 1, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'NoError' };
+  data[2].charge_points[0].connectors[0].error_code = 'GroundFailure';
+  const page = monitoring(async () => data);
+  await flush();
+  page.filter('lỗi');
+  assert.deepEqual(page.codes(), ['CP_AEON_01', 'CP_AEON_FAULT', 'CP_VINCOM_01']);
+  assert.equal(Number(page.document.getElementById('mon-fault').textContent), 3);
+  assert.match(page.pointHtml('CP_VINCOM_01'), /Báo lỗi/);
+});
+
+for (const [wanted, raw, connection] of [
+  ['online', 'Available', 'online'], ['offline', 'Available', 'offline'],
+  ['rảnh', 'Available', 'online'], ['bận', 'Charging', 'online'],
+  ['đặt chỗ', 'Reserved', 'online'], ['unknown', 'unknown', 'online'],
+]) {
+  test(`${wanted} filter excludes other points in the same station`, async () => {
+    const data = mixedTree();
+    const target = { code: 'MATCH', status: connection, ocpp_status: raw, connectors: [
+      { connector_id: 1, status: 'unknown', ocpp_status: raw },
+    ] };
+    data[0].charge_points = [data[0].charge_points[1], target];
+    data.splice(1);
+    if (wanted === 'online') data[0].charge_points[0].status = 'offline';
+    const page = monitoring(async () => data);
+    await flush();
+    page.filter(wanted);
+    assert.deepEqual(page.codes(), ['MATCH']);
   });
 }
 
-test('demo Reset rejects offline, unknown, invalid and duplicate commands', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers });
+test('offline points with stale Available or Charging do not appear as ready or busy', async () => {
+  const data = mixedTree();
+  data[0].charge_points[0].status = 'offline';
+  data[2].charge_points[0].status = 'offline';
+  data[2].charge_points[0].connectors[0].ocpp_status = 'Charging';
+  const page = monitoring(async () => data);
   await flush();
-  page.toggleMock();
-  await assert.rejects(page.mock.resetChargePoint('CP-HN-04', 'Soft'), /ngoại tuyến/);
-  await assert.rejects(page.mock.resetChargePoint('MISSING', 'Soft'), /không thuộc/);
-  await assert.rejects(page.mock.resetChargePoint('CP-HN-01', 'Other'), /không hợp lệ/);
-  assert.equal(timers.size(), 1);
-  await page.mock.resetChargePoint('CP-HN-01', 'Soft');
-  await assert.rejects(page.mock.resetChargePoint('CP-HN-01', 'Hard'), /đang khởi động lại/);
-  assert.equal(timers.size(), 2);
-  assert.equal(page.apiResets.length, 0);
-  page.mock.disconnect();
-  await assert.rejects(page.mock.resetChargePoint('CP-HN-01', 'Soft'), /không thuộc/);
+  page.filter('rảnh');
+  assert.deepEqual(page.codes(), []);
+  page.filter('bận');
+  assert.deepEqual(page.codes(), []);
+  assert.equal(Number(page.document.getElementById('mon-charging').textContent), 0);
+  page.filter('offline');
+  assert.match(page.pointHtml('CP_AEON_01'), /Chưa rõ/);
+  assert.doesNotMatch(page.pointHtml('CP_AEON_01'), /Sẵn sàng/);
 });
 
-test('random mock updates cannot bring a restarting point online early', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers, random: () => 0 });
+test('searching a point code hides healthy siblings; station search combines with point status', async () => {
+  const page = monitoring(async () => mixedTree());
   await flush();
-  page.toggleMock();
-  await page.mock.resetChargePoint('CP-HN-01', 'Soft');
-  timers.run(delay => delay >= 5000);
-  assert.equal(page.mockPoints[0].status, 'offline');
-  timers.run(delay => delay === 2000);
-  assert.equal(page.mockPoints[0].status, 'online');
-  page.mock.disconnect();
+  page.search(' cp_aeon_fault ');
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  page.search('aeon mall');
+  assert.deepEqual(page.codes(), ['CP_AEON_01', 'CP_AEON_FAULT']);
+  page.filter('lỗi');
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  page.search('VINCOM');
+  assert.deepEqual(page.codes(), []);
+  page.filter('');
+  assert.deepEqual(page.codes(), ['CP_VINCOM_01']);
 });
 
-test('demo Reset rechecks offline state after confirmation', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers, random: () => 0 });
+test('typing in the search field renders the filtered points after the debounce', async () => {
+  const page = monitoring(async () => mixedTree());
   await flush();
-  page.toggleMock();
+  page.document.getElementById('mon-search').value = 'CP_AEON_FAULT';
+  page.document.getElementById('mon-search').handlers.input();
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+});
+
+test('SSE keeps the fault filter and drawer in sync and closes a drawer with no matching points', async () => {
+  const data = mixedTree();
+  const page = monitoring(async () => data);
+  await flush();
+  page.filter('lỗi');
   page.openDetail();
-  const command = page.restart.handleRestart('CP-HN-01', 'Soft', false, element(), page.resetBindings.at(-1));
-  timers.run(delay => delay >= 5000); // A status event followed by loss of connection.
-  page.confirm();
-  await command;
-  assert.match(page.toasts.at(-1), /ngoại tuyến/);
-  assert.equal(page.apiResets.length, 0);
-  assert.equal(timers.size(), 1);
-  page.mock.disconnect();
+  const points = structuredClone(data[0].charge_points);
+  // The fault moves from one point to its sibling in the same station.
+  points[0].ocpp_status = 'Faulted';
+  points[1].ocpp_status = 'Available';
+  points[1].connectors.forEach(connector => Object.assign(connector, { status: 'rảnh', ocpp_status: 'Available', error_code: 'NoError' }));
+  page.callbacks.status_update({ station_id: 7, charge_points: points });
+  assert.deepEqual(page.codes(), ['CP_AEON_01']);
+  assert.match(page.document.getElementById('detail-body').innerHTML, /CP_AEON_01/);
+  assert.doesNotMatch(page.document.getElementById('detail-body').innerHTML, /CP_AEON_FAULT/);
+  points[0].ocpp_status = 'Available';
+  page.callbacks.status_update({ station_id: 7, charge_points: points });
+  assert.deepEqual(page.codes(), []);
+  assert.equal(page.document.getElementById('detail-backdrop').classList.contains('is-hidden'), true);
+  assert.equal(Number(page.document.getElementById('mon-fault').textContent), 0);
+  points[1].ocpp_status = 'Faulted';
+  page.callbacks.status_update({ station_id: 7, charge_points: points });
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  assert.equal(page.document.getElementById('mon-status-filter').value, 'lỗi');
 });
 
-test('switching away from demo cancels its pending restart and all event timers', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => structuredClone(tree), Date, { realModules: true, timers });
+test('reconnect refresh preserves the fault filter and filtered drawer', async () => {
+  const page = monitoring(async () => mixedTree());
   await flush();
-  page.toggleMock();
-  await page.mock.resetChargePoint('CP-HN-01', 'Soft');
-  assert.equal(timers.size(), 2);
-  page.toggleMock();
-  await flush();
-  assert.equal(timers.size(), 0);
-  assert.equal(page.total(), 1);
-  assert.match(page.html(), /REAL-01/);
-  assert.doesNotMatch(page.html(), /CP-HN/);
-  assert.equal(page.mock.isConnected(), false);
-  page.toggleMock();
-  assert.equal(timers.size(), 1);
-  assert.equal(page.mockPoints[0].status, 'online');
-  page.mock.disconnect();
-});
-
-test('confirmation from an old data source cannot send a Reset after switching', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers });
-  await flush();
-  page.toggleMock();
+  page.filter('lỗi');
   page.openDetail();
-  const command = page.restart.handleRestart('CP-HN-01', 'Soft', false, element(), page.resetBindings.at(-1));
-  page.toggleMock();
-  await flush();
-  page.toggleMock();
-  page.confirm();
-  await command;
-  assert.equal(page.apiResets.length, 0);
-  assert.equal(page.mockPoints[0].status, 'online');
-  assert.equal(timers.size(), 1);
-  assert.match(page.toasts.at(-1), /Nguồn dữ liệu đã thay đổi/);
-  page.mock.disconnect();
-});
-
-test('API mode Reset still sends the selected code and type to backend', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers });
-  await flush();
-  page.openDetail();
-  const command = page.restart.handleRestart('REAL-01', 'Hard', false, element(), page.resetBindings.at(-1));
-  page.confirm();
-  await command;
-  assert.deepEqual(page.apiResets, [{ code: 'REAL-01', type: 'Hard' }]);
-  assert.equal(timers.size(), 0);
-});
-
-test('demo connection label stays explicit when backend SSE disconnects', async () => {
-  const timers = mockTimers();
-  const page = monitoring(async () => tree, Date, { realModules: true, timers });
-  await flush();
-  page.toggleMock();
-  page.callbacks._error();
-  assert.equal(page.document.getElementById('sse-label').textContent, 'Đang mô phỏng');
   page.callbacks._connected();
-  assert.equal(page.document.getElementById('sse-label').textContent, 'Đang mô phỏng');
-  assert.equal(page.requests(), 1);
-  page.toggleMock();
   await flush();
-  assert.equal(page.document.getElementById('sse-label').textContent, 'Đang theo dõi');
-  assert.equal(timers.size(), 0);
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  assert.doesNotMatch(page.document.getElementById('detail-body').innerHTML, /CP_AEON_01/);
+  page.callbacks._error();
+  assert.equal(page.document.getElementById('sse-label').textContent, 'Đang kết nối lại');
+});
+
+for (const closeBy of ['button', 'backdrop', 'Escape']) {
+  test(`drawer closes by ${closeBy}, stays closed after SSE and can reopen`, async () => {
+    const page = monitoring(async () => mixedTree());
+    await flush();
+    page.filter('lỗi');
+    page.openDetail();
+    const backdrop = page.document.getElementById('detail-backdrop');
+    assert.equal(backdrop.classList.contains('is-hidden'), false);
+    if (closeBy === 'button') page.document.getElementById('detail-close').handlers.click();
+    if (closeBy === 'backdrop') backdrop.handlers.click({ target: backdrop, currentTarget: backdrop });
+    if (closeBy === 'Escape') page.document.handlers.keydown({ key: 'Escape' });
+    assert.equal(backdrop.classList.contains('is-hidden'), true);
+    page.callbacks.status_update({ station_id: 7, charge_points: mixedTree()[0].charge_points });
+    assert.equal(backdrop.classList.contains('is-hidden'), true);
+    page.openDetail();
+    assert.equal(backdrop.classList.contains('is-hidden'), false);
+    assert.doesNotMatch(page.document.getElementById('detail-body').innerHTML, /CP_AEON_01/);
+  });
+}
+
+test('clicking inside the drawer does not close it', async () => {
+  const page = monitoring(async () => mixedTree());
+  await flush();
+  page.openDetail();
+  const backdrop = page.document.getElementById('detail-backdrop');
+  backdrop.handlers.click({ target: page.document.getElementById('detail-body'), currentTarget: backdrop });
+  assert.equal(backdrop.classList.contains('is-hidden'), false);
+});
+
+test('filter, refresh, view toggle and close buttons still work when SSE cannot start', async () => {
+  const page = monitoring(async () => mixedTree(), Date, { sseConnectError: true });
+  await flush();
+  page.filter('lỗi');
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+  page.document.getElementById('view-list').handlers.click();
+  assert.equal(page.document.getElementById('monitoring-grid').classList.contains('list-view'), true);
+  page.openDetail();
+  page.document.getElementById('detail-close').handlers.click();
+  assert.equal(page.document.getElementById('detail-backdrop').classList.contains('is-hidden'), true);
+  page.document.getElementById('btn-refresh-monitoring').handlers.click();
+  await flush();
+  assert.equal(page.requests(), 2);
+  assert.deepEqual(page.codes(), ['CP_AEON_FAULT']);
+});
+
+test('a late HTTP response cannot overwrite newer SSE state', async () => {
+  let resolve;
+  let requests = 0;
+  const page = monitoring(() => ++requests === 1 ? Promise.resolve(mixedTree()) : new Promise(done => { resolve = done; }));
+  await flush();
+  page.filter('lỗi');
+  page.document.getElementById('btn-refresh-monitoring').handlers.click();
+  const points = mixedTree()[0].charge_points.slice(0, 1);
+  page.callbacks.status_update({ station_id: 7, charge_points: points });
+  assert.deepEqual(page.codes(), []);
+  resolve(mixedTree());
+  await flush();
+  assert.deepEqual(page.codes(), []);
+});
+
+test('only the newest of overlapping HTTP loads takes effect', async () => {
+  const completions = [];
+  const page = monitoring(() => new Promise(done => completions.push(done)));
+  page.document.getElementById('btn-refresh-monitoring').handlers.click();
+  completions[1](tree);
+  await flush();
+  completions[0](mixedTree());
+  await flush();
+  assert.deepEqual(page.codes(), ['REAL-01']);
+});
+
+test('Reset from the filtered drawer sends the selected code and type to backend', async () => {
+  const page = monitoring(async () => mixedTree(), Date, { realModules: true });
+  await flush();
+  page.filter('lỗi');
+  page.openDetail();
+  const command = page.restart.handleRestart('CP_AEON_FAULT', 'Hard', false, element(), page.resetBindings.at(-1));
+  assert.equal(page.apiResets.length, 0);
+  page.confirm();
+  await command;
+  assert.deepEqual(page.apiResets, [{ code: 'CP_AEON_FAULT', type: 'Hard' }]);
 });
 
 function protectedForm(onSubmit) {
@@ -380,12 +416,13 @@ test('form becomes usable again after save failure', async () => {
 });
 
 function restartClient(reset) {
-  const document = { body: element(), createElement: element, addEventListener() {} };
+  const document = { body: element(), createElement: element, handlers: {},
+    addEventListener(name, fn) { this.handlers[name] = fn; } };
   const window = {};
   vm.runInContext(read('restart_button.js'), vm.createContext({ document, window,
     ApiClient: { resetChargePoint: reset }, showToast() {},
   }));
-  return { module: window.RestartButton,
+  return { module: window.RestartButton, document,
     confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click() };
 }
 
@@ -414,6 +451,25 @@ test('opening another Reset confirmation releases the old dialog waiter', async 
   assert.equal(await second, true);
 });
 
+for (const closeBy of ['close', 'cancel', 'backdrop', 'Escape']) {
+  test(`Reset confirmation can be dismissed by ${closeBy} without sending a command`, async () => {
+    let calls = 0;
+    const client = restartClient(async () => { calls++; return {}; });
+    const command = client.module.handleRestart('CP-01', 'Soft', false, element());
+    const modal = client.document.body.children[0];
+    if (closeBy === 'close') modal.querySelector('#restart-confirm-close').handlers.click();
+    if (closeBy === 'cancel') modal.querySelector('#restart-confirm-cancel').handlers.click();
+    if (closeBy === 'backdrop') modal.handlers.click({ target: modal });
+    if (closeBy === 'Escape') client.document.handlers.keydown({ key: 'Escape' });
+    await command;
+    assert.equal(calls, 0);
+    assert.equal(modal.classList.contains('is-hidden'), true);
+    const again = client.module.showConfirm('CP-01', 'Hard');
+    client.confirm();
+    assert.equal(await again, true);
+  });
+}
+
 test('offline point does not send Reset', async () => {
   let calls = 0;
   const client = restartClient(async () => { calls++; return {}; });
@@ -421,7 +477,7 @@ test('offline point does not send Reset', async () => {
   assert.equal(calls, 0);
 });
 
-test('bound Reset button forwards the chosen type to the provided mock transport', async () => {
+test('bound Reset button forwards the chosen type to the provided transport', async () => {
   let backendCalls = 0;
   const calls = [];
   const client = restartClient(async () => { backendCalls++; return {}; });
@@ -483,4 +539,220 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
   assert.equal(instances[0].options.withCredentials, true);
   window.SseClient.disconnect();
   assert.equal(instances[0].closes, 1);
+});
+
+function authClient(fetchResponse) {
+  const redirects = [];
+  const window = { location: { origin: 'http://localhost:8000', pathname: '/monitoring',
+    search: '?status=fault', replace: url => redirects.push(url) } };
+  const context = vm.createContext({ window, fetch: fetchResponse, URL });
+  vm.runInContext(read('api_client.js'), context);
+  return { api: window.ApiClient, redirects };
+}
+
+test('protected API 401 preserves the requested page; failed login stays on the form', async () => {
+  const client = authClient(async () => ({ ok: false, status: 401,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Unauthorized' }) }));
+  await assert.rejects(client.api.get('/auth/me'), error => error.status === 401);
+  assert.deepEqual(client.redirects, ['/login?next=%2Fmonitoring%3Fstatus%3Dfault']);
+  client.redirects.length = 0;
+  await assert.rejects(client.api.login('a@example.com', 'wrong'), error => error.status === 401);
+  assert.equal(client.redirects.length, 0);
+});
+
+test('API 204 has no body and AbortSignal cancellation is preserved', async () => {
+  const controller = new AbortController();
+  const client = authClient(async (_, config) => {
+    assert.equal(config.signal, controller.signal);
+    return { ok: true, status: 204, headers: { get: () => '' },
+      text: async () => { throw Error('204 must not parse a body'); } };
+  });
+  assert.equal(await client.api.get('/sessions/current', { signal: controller.signal }), null);
+  const aborted = new DOMException('Cancelled', 'AbortError');
+  const cancellation = authClient(async () => { throw aborted; });
+  await assert.rejects(cancellation.api.get('/auth/me'), error => error === aborted);
+});
+
+function loginPage(login, search = '') {
+  const ids = new Map();
+  const document = {
+    getElementById(id) {
+      if (id === 'auth-context') return null;
+      if (!ids.has(id)) {
+        const item = element();
+        item.style = {}; item.validity = { valid: true }; item.attributes = {};
+        item.setAttribute = (key, value) => { item.attributes[key] = value; };
+        ids.set(id, item);
+      }
+      return ids.get(id);
+    },
+    querySelectorAll: () => [], createElement: element,
+  };
+  const form = document.getElementById('login-form');
+  form.elements = { email: document.getElementById('email'), password: document.getElementById('password') };
+  form.elements.email.value = 'owner@example.com';
+  form.elements.password.value = 'ValidPassword123!'; form.elements.password.type = 'password';
+  const button = element(); button.textContent = 'Đăng nhập'; form.querySelector = () => button;
+  const destinations = [];
+  const window = { location: { origin: 'http://localhost:8000', pathname: '/login', search,
+    assign: url => destinations.push(url), replace: url => destinations.push(url) } };
+  const context = vm.createContext({ document, window, URL, URLSearchParams, ApiClient: { login },
+    FormData: class { entries() { return Object.entries(form.elements).map(([name, input]) => [name, input.value]); } },
+  });
+  vm.runInContext(read('auth_guard.js'), context);
+  context.AuthGuard = window.AuthGuard;
+  vm.runInContext(read('form_guard.js'), context);
+  vm.runInContext(read('pages/login.js'), context);
+  return { document, button, destinations, guard: window.AuthGuard,
+    submit: () => form.handlers.submit({ preventDefault() {} }) };
+}
+
+test('next accepts permitted local routes and rejects external or unauthorized destinations', () => {
+  const page = loginPage(async () => ({}));
+  const safe = value => page.guard.safeNext(value, ['driver']);
+  assert.equal(safe('/sessions/mine?tab=current#details'), '/sessions/mine?tab=current#details');
+  for (const next of ['https://example.com', '//example.com', '/\\example.com', '/monitoring', '/unknown']) {
+    assert.equal(safe(next), null, next);
+  }
+});
+
+test('login password toggle changes type and accessible state; typing dismisses errors', () => {
+  const page = loginPage(async () => ({}));
+  const input = page.document.getElementById('password');
+  const toggle = page.document.getElementById('password-toggle');
+  toggle.handlers.click();
+  assert.equal(input.type, 'text'); assert.equal(toggle.attributes['aria-pressed'], 'true');
+  toggle.handlers.click();
+  assert.equal(input.type, 'password'); assert.equal(toggle.attributes['aria-pressed'], 'false');
+  page.document.getElementById('login-alert').style.display = 'flex';
+  input.handlers.input();
+  assert.equal(page.document.getElementById('login-alert').style.display, 'none');
+});
+
+test('invalid login stays editable, then valid login blocks duplicate submits during redirect', async () => {
+  let calls = 0;
+  let resolveLogin;
+  const page = loginPage(() => { calls++; return new Promise(resolve => { resolveLogin = resolve; }); }, '?next=/monitoring');
+  page.document.getElementById('email').validity.valid = false;
+  await page.submit();
+  assert.equal(calls, 0); assert.equal(page.button.disabled, false);
+  page.document.getElementById('email').validity.valid = true;
+  const pending = page.submit();
+  await page.submit(); assert.equal(calls, 1);
+  resolveLogin({ roles: ['station_owner'], redirect_to: '/stations' });
+  await pending; await page.submit();
+  assert.equal(calls, 1); assert.equal(page.button.disabled, true);
+  assert.deepEqual(page.destinations, ['/monitoring']);
+});
+
+test('failed login displays the server message and allows retry', async () => {
+  const page = loginPage(async () => { throw { status: 401, message: 'Wrong credentials' }; });
+  await page.submit();
+  assert.equal(page.document.getElementById('login-alert-text').textContent, 'Wrong credentials');
+  assert.equal(page.document.getElementById('login-alert').style.display, 'flex');
+  assert.equal(page.button.disabled, false);
+});
+
+test('legacy mock query and special passwords always use the login API', async () => {
+  for (const password of ['success', 'wrong', 'locked']) {
+    const calls = [];
+    const page = loginPage(async (email, submittedPassword) => {
+      calls.push({ email, password: submittedPassword });
+      throw { status: 401, message: 'Wrong credentials' };
+    }, '?mock=1');
+    page.document.getElementById('email').value = 'missing@example.test';
+    page.document.getElementById('password').value = password;
+    await page.submit();
+    assert.deepEqual(calls, [{ email: 'missing@example.test', password }]);
+    assert.equal(page.document.getElementById('login-alert-text').textContent, 'Wrong credentials');
+    assert.equal(page.button.disabled, false);
+    assert.deepEqual(page.destinations, []);
+  }
+});
+
+test('valid login follows the server response even with the legacy mock query', async () => {
+  let calls = 0;
+  const page = loginPage(async () => {
+    calls++;
+    return { roles: ['station_owner'], redirect_to: '/stations' };
+  }, '?mock=1');
+  await page.submit();
+  assert.equal(calls, 1);
+  assert.deepEqual(page.destinations, ['/stations']);
+  assert.equal(page.button.disabled, true);
+});
+
+test('connector selection enables only usable options and start button clearly reports UI preview', async () => {
+  const controls = element();
+  const select = controls.querySelector('[data-start-connector]');
+  const button = controls.querySelector('[data-start-charging]');
+  const message = controls.querySelector('[data-start-message]');
+  select.selectedOptions = [{ disabled: false }]; button.dataset.cpCode = 'REAL-01';
+  const page = monitoring(async () => tree, Date, { startControls: [controls] });
+  await flush(); page.openDetail();
+  select.handlers.change(); assert.equal(button.disabled, true);
+  select.value = '1'; select.handlers.change(); assert.equal(button.disabled, false);
+  button.handlers.click();
+  assert.match(message.textContent, /REAL-01, đầu nối 1/);
+  assert.match(message.textContent, /chưa gửi yêu cầu sạc/);
+  select.selectedOptions[0].disabled = true;
+  select.handlers.change(); assert.equal(button.disabled, true);
+  button.handlers.click(); assert.equal(message.textContent, '');
+  assert.equal(page.apiResets.length, 0);
+});
+
+function sessionPage(getSessions) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) { const el = element(); el.style = {}; ids.set(id, el); }
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  document.getElementById('sessions-page').dataset = { scope: 'mine', canRemoteStop: 'false', liveUpdates: 'false' };
+  const calls = [], timers = [], toasts = [];
+  const api = { listMySessions: async params => { calls.push(params); return getSessions(); },
+    getCurrentSession: async () => null };
+  vm.runInContext(read('pages/my_session.js'), vm.createContext({ document, window: {}, ApiClient: api,
+    Date, Intl, console, setTimeout, clearTimeout, clearInterval() {},
+    setInterval: fn => { timers.push(fn); return timers.length; },
+    showToast: message => toasts.push(message),
+  }));
+  document.handlers.DOMContentLoaded();
+  return { document, calls, timers, toasts };
+}
+
+test('driver session page uses the API and stays empty without fabricated sessions', async () => {
+  const page = sessionPage(async () => ({ items: [], total: 0 }));
+  await flush();
+  assert.equal(page.calls.length, 1);
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /Chưa có phiên sạc nào/);
+  assert.equal(page.document.getElementById('active-session-banner').style.display, 'none');
+  assert.equal(page.document.getElementById('no-active-session-card').style.display, 'flex');
+  assert.equal(page.timers.length, 0);
+});
+
+test('driver session banner displays API energy and never increments energy with a timer', async () => {
+  const session = { id: 123, station_name: 'API station', charge_point_code: 'API-01', connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z', status: 'active', live_kwh: 1.234 };
+  const page = sessionPage(async () => ({ items: [session], total: 1 }));
+  await flush();
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /API-01/);
+  assert.equal(page.document.getElementById('active-session-id').textContent, '#123');
+  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
+  assert.equal(page.timers.length, 1);
+  page.timers[0]();
+  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
+});
+
+test('driver session API failure reports the error without displaying sample sessions', async () => {
+  const page = sessionPage(async () => { throw Error('Server unavailable'); });
+  await flush();
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /Server unavailable/);
+  assert.doesNotMatch(page.document.getElementById('sessions-tbody').innerHTML, /8888|EcoCharge/);
+  assert.equal(page.document.getElementById('session-count').textContent, 'Lỗi kết nối');
+  assert.equal(page.timers.length, 0);
 });
