@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -138,7 +139,6 @@ def test_reset_rejected(monkeypatch):
     assert "chấp nhận" in resp.json()["detail"] or "chấp nhận" in resp.json()["detail"].lower() or "chấp nhận" in resp.text
 
 def test_reset_timeout(monkeypatch):
-    import asyncio
     class MockRole:
         def __init__(self, name):
             self.name = name
@@ -336,8 +336,6 @@ def test_remote_start_online_rejected(monkeypatch):
 
 
 def test_remote_start_timeout(monkeypatch):
-    import asyncio
-
     class MockRole:
         def __init__(self, name):
             self.name = name

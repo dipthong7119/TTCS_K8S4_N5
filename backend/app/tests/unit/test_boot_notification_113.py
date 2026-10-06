@@ -10,7 +10,6 @@ Tổ chức:
   Phần E — Migration: upgrade/downgrade (smoke test idempotency)
 """
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -21,9 +20,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.charge_point import ChargePoint
 from app.models.station import Station
-from app.ocpp.handlers.boot_notification import (
-    decide_boot_status,
-)
+from app.ocpp.handlers.boot_notification import decide_boot_status
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
 
