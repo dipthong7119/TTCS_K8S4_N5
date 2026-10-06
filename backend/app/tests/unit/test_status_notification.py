@@ -615,3 +615,25 @@ class TestMigrationSmoke:
                 # Môi trường in-memory không có op.get_bind() — smoke test chỉ kiểm tra không raise TypeError
                 logger = logging.getLogger(__name__)
                 logger.debug("Ignored expected downgrade error in in-memory test: %s", exc)
+
+def test_handle_status_notification_publishes_exactly_once(db_session, monkeypatch):
+    """Xác nhận handle_status_notification gọi publish_charge_point_status đúng một lần."""
+    from app.services import ocpp_handlers
+
+    calls = []
+
+    def mock_publish(db, charge_point_id):
+        calls.append(charge_point_id)
+
+    monkeypatch.setattr(ocpp_handlers, "publish_charge_point_status", mock_publish)
+
+    _sn_ok(
+        db_session,
+        {"connectorId": 1, "errorCode": "NoError", "status": "Available"},
+        msg_id="publish-1",
+    )
+
+    assert len(calls) == 1
+    # Check the charge_point_id, from the fixture we know CP-SN has a specific ID.
+    # In this test file, the mock CP is usually ID 1.
+    assert calls[0] == 1

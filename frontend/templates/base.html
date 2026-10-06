@@ -202,7 +202,10 @@
 </div><!-- /app-shell -->
 
 <!-- Shared JS -->
+<script id="auth-context" type="application/json">{{ current_user | tojson }}</script>
 <script src="/static/js/api_client.js"></script>
+<script src="/static/js/auth_guard.js"></script>
+<script src="/static/js/route_guard.js"></script>
 <script src="/static/js/sse_client.js"></script>
 <script src="/static/js/realtime_status.js"></script>
 <script src="/static/js/restart_button.js"></script>

@@ -11,39 +11,28 @@ const ApiClient = (() => {
    */
   async function _request(method, path, body = null, opts = {}) {
     const headers = { 'Content-Type': 'application/json', ...opts.headers };
-    const config = { method, headers, credentials: 'include' };
+    const config = { method, headers, credentials: 'include', signal: opts.signal };
     if (body !== null) config.body = JSON.stringify(body);
-
     try {
       const res = await fetch(BASE_URL + path, config);
-
-      // Phiên hết hạn → chuyển về login
-      if (res.status === 401) {
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-          throw { status: 401, message: 'Phiên đã hết hạn, vui lòng đăng nhập lại.' };
-        }
-      }
-
-      let data;
       const ct = res.headers.get('Content-Type') || '';
-      if (ct.includes('application/json')) {
-        data = await res.json();
-      } else {
-        data = await res.text();
-      }
-
+      const data = res.status === 204 ? null :
+        (ct.includes('application/json') ? await res.json() : await res.text());
       if (!res.ok) {
-        let errMsg = data?.detail || data || 'Có lỗi xảy ra';
-        if (Array.isArray(errMsg)) {
-          errMsg = errMsg.map(e => `${e.loc ? e.loc.join('.') : ''}: ${e.msg}`).join(', ');
+        let message = data?.detail || data || 'Có lỗi xảy ra';
+        if (Array.isArray(message)) message = message.map(item => item.msg).join(', ');
+        if (typeof message !== 'string') message = 'Có lỗi xảy ra';
+        if (res.status === 401 && path !== '/auth/login' && window.location.pathname !== '/login') {
+          const next = window.location.pathname + window.location.search;
+          window.location.replace('/login?next=' + encodeURIComponent(next));
         }
-        throw { status: res.status, message: errMsg, detail: data?.detail };
+        throw { status: res.status, message, detail: data?.detail };
       }
       return data;
     } catch (err) {
       if (err.status) throw err;
-      throw { status: 0, message: 'Không thể kết nối đến máy chủ' };
+      if (err.name === 'AbortError') throw err;
+      throw { status: 0, message: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.' };
     }
   }
 
