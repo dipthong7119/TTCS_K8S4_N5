@@ -50,7 +50,7 @@ def db_session():
     db = Session()
 
     station = Station(id=1, name="Trạm Test", owner_id=1, status="active")
-    cp = ChargePoint(id=1, code="CP-SN", station_id=1, status="online")
+    cp = ChargePoint(id=1, code="CP-SN", station_id=1, status="online", last_seen_at=datetime.now(UTC))
     conn1 = Connector(id=1, charge_point_id=1, connector_id=1, status="unavailable")
     db.add_all([station, cp, conn1])
     db.commit()
@@ -59,6 +59,7 @@ def db_session():
 
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @pytest.fixture()
@@ -70,7 +71,7 @@ def db_session_2conn():
     db = Session()
 
     station = Station(id=1, name="Trạm 2 Đầu Nối", owner_id=1, status="active")
-    cp = ChargePoint(id=1, code="CP-2CONN", station_id=1, status="online")
+    cp = ChargePoint(id=1, code="CP-2CONN", station_id=1, status="online", last_seen_at=datetime.now(UTC))
     conn1 = Connector(id=1, charge_point_id=1, connector_id=1, status="unavailable")
     conn2 = Connector(id=2, charge_point_id=1, connector_id=2, status="unavailable")
     db.add_all([station, cp, conn1, conn2])
@@ -80,6 +81,7 @@ def db_session_2conn():
 
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 # ---------------------------------------------------------------------------

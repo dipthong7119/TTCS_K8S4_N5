@@ -1,2 +1,24 @@
 [tool.ruff.lint]
 extend-ignore = ["B008", "DTZ003", "RUF059", "BLE001", "ASYNC221", "EXE002"]
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = ["app/tests/", "app/dev_tools/", "app/models/"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# Legacy Column/declarative_base models do not expose instance types to mypy.
+# Check callers and domain logic; a Mapped-based model conversion is separate work.
+module = ["app.models.*"]
+follow_imports = "skip"
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = ["app/tests/*"]
+
+[tool.coverage.report]
+omit = ["app/tests/*"]
+

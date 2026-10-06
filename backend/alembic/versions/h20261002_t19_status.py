@@ -36,9 +36,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    existing = {col["name"] for col in inspector.get_columns("connectors")}
-
-    if "ocpp_status" in existing:
-        op.drop_column("connectors", "ocpp_status")
-    # Do NOT drop 'status' because it was created in 0003_create_charge_points
+    # Both columns belong to earlier revisions; this guard must not remove them.
+    pass

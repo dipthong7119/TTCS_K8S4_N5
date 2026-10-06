@@ -31,6 +31,12 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
 
     # connectorId = 0 báo trạng thái cả trụ, không cập nhật bảng connectors.
     if connector_id == 0:
+        db.execute(
+            update(ChargePoint)
+            .where(ChargePoint.code == charge_point_code)
+            .values(ocpp_status=status_raw)
+            .execution_options(synchronize_session=False)
+        )
         logger.info(
             "Trụ %s trạng thái toàn cục: status=%s errorCode=%s",
             charge_point_code,
@@ -48,6 +54,8 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
     if isinstance(timestamp_raw, str) and timestamp_raw:
         try:
             parsed_timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            if parsed_timestamp.tzinfo is None:
+                parsed_timestamp = parsed_timestamp.replace(tzinfo=UTC)
             occurred_at = parsed_timestamp.astimezone(UTC).replace(tzinfo=None)
         except ValueError:
             pass
@@ -63,7 +71,7 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
             Connector.charge_point_id == charge_point_id,
             Connector.connector_id == connector_id,
         )
-        .values(status=internal_status, ocpp_status=status_raw)
+        .values(status=internal_status, ocpp_status=status_raw, error_code=error_code)
         .returning(Connector.id)
         .execution_options(synchronize_session=False)
     )

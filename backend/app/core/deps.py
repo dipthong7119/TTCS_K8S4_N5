@@ -8,9 +8,12 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.database import get_db
 from app.models.user import User
+
+_ROLE_GUARD_ATTRIBUTE = "__role_guard__"
 
 
 def public_route(endpoint):
@@ -21,15 +24,18 @@ def public_route(endpoint):
 
 def _has_role_guard(dependant) -> bool:
     for dependency in getattr(dependant, "dependencies", ()):
-        if getattr(dependency.call, "__role_guard__", False):
+        if getattr(dependency.call, _ROLE_GUARD_ATTRIBUTE, False):
             return True
         if _has_role_guard(dependency):
             return True
     return False
 
 
-async def deny_unannotated_route(request: Request) -> None:
+async def deny_unannotated_route(request: HTTPConnection) -> None:
     """Deny API routes unless they declare a role guard or are explicitly public."""
+    if request.scope["type"] == "websocket":
+        # OCPP admission is based on registered charge-point codes and subprotocol.
+        return
     route = request.scope.get("route")
     endpoint = getattr(route, "endpoint", None)
     if getattr(endpoint, "__public_route__", False):
@@ -91,7 +97,7 @@ def require_role(*allowed_roles: str):
             )
         return current_user
 
-    checker.__role_guard__ = True
+    setattr(checker, _ROLE_GUARD_ATTRIBUTE, True)
     return checker
 
 

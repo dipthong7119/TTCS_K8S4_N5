@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, text
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import settings
 from app.database import SessionLocal
@@ -136,6 +137,7 @@ def cleanup_old_ocpp_messages_once(db) -> int:
     from app.models.ocpp_message import OcppMessage
 
     retention = settings.OCPP_MESSAGE_RETENTION_DAYS
+    cutoff: ColumnElement
     if db.get_bind().dialect.name == "sqlite":
         cutoff = func.datetime(func.current_timestamp(), f"-{retention} days")
     else:

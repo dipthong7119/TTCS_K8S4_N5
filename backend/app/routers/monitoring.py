@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session, joinedload
@@ -15,8 +16,16 @@ from app.models.user import User
 from app.services.ocpp_status import station_status_payload
 from app.services.ownership import filter_by_owner
 
+
+class SseSubscriber(TypedDict):
+    queue: asyncio.Queue[dict[str, str]]
+    owner_id: int | None
+    driver_id: int | None
+    global_access: bool
+
+
 router = APIRouter(dependencies=[Depends(deny_unannotated_route)])
-sse_clients: list[dict] = []
+sse_clients: list[SseSubscriber] = []
 SSE_QUEUE_LIMIT = 10
 
 
@@ -67,7 +76,7 @@ async def monitoring_sse(
     current_user: User = Depends(require_role("admin", "station_owner", "operator", "driver")),
 ):
     roles = [role.name for role in current_user.roles]
-    subscriber = {
+    subscriber: SseSubscriber = {
         "queue": asyncio.Queue(maxsize=SSE_QUEUE_LIMIT),
         "owner_id": current_user.id if "station_owner" in roles else None,
         "driver_id": current_user.id if "driver" in roles else None,

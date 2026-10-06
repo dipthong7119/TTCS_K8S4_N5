@@ -17,6 +17,20 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Keep this already-used revision ID stable. PostgreSQL enforces Alembic's
+    # default VARCHAR(32), unlike SQLite, and this ID is longer than 32 chars.
+    # Widen before Alembic writes the ID at the end of this migration.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        version_column = next(
+            column for column in sa.inspect(bind).get_columns("alembic_version")
+            if column["name"] == "version_num"
+        )
+        if version_column["type"].length < 64:
+            op.alter_column(
+                "alembic_version", "version_num", existing_type=sa.String(32),
+                type_=sa.String(64), existing_nullable=False,
+            )
     columns = {
         column["name"]
         for column in sa.inspect(op.get_bind()).get_columns("ocpp_messages")
@@ -29,6 +43,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Leave the version table wide: Alembic still holds this long ID until
+    # after downgrade() returns. Base rollback removes all application tables.
     columns = {
         column["name"]
         for column in sa.inspect(op.get_bind()).get_columns("ocpp_messages")

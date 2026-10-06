@@ -42,6 +42,7 @@ def db_session():
     
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 def test_handle_invalid_json(db_session):
     resp = handle_ocpp_message(db_session, "CP001", "invalid json")

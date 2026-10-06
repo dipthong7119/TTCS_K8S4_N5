@@ -9,12 +9,13 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
+from app.core.deps import deny_unannotated_route, public_route
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.charge_points import router as charge_points_router
@@ -65,6 +66,7 @@ app = FastAPI(
     description="Hệ thống quản lý trụ sạc và giao tiếp OCPP",
     version="1.0.0",
     lifespan=lifespan,
+    dependencies=[Depends(deny_unannotated_route)],
 )
 
 # -- Session cookie (httpOnly, SameSite=lax) ---------------------------------
@@ -108,6 +110,7 @@ app.include_router(pages_router)
 
 # -- Health check -------------------------------------------------------------
 @app.get("/health")
+@public_route
 async def health_check():
     """API kiểm tra sức khỏe hệ thống (Health Check) -- dùng cho Docker/Load Balancer"""
     return {"status": "ok", "message": "Hệ thống đang hoạt động ổn định"}

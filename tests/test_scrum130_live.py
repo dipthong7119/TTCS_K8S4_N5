@@ -13,6 +13,8 @@ Kiểm chứng cơ chế dọn dẹp tin nhắn OCPP cũ và kiểm tra tính Id
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app.config import settings
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
@@ -21,6 +23,12 @@ from app.models.station import Station
 from app.services.jobs import cleanup_old_ocpp_messages, cleanup_old_ocpp_messages_once
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call
+
+
+@pytest.fixture
+def db(db_session):
+    """Run the acceptance cases on the isolated pytest database."""
+    return db_session
 
 
 def cleanup_test_messages(db):
@@ -185,13 +193,17 @@ def test_tc_130_05_bulk_deletion(db):
     print("TC-130-05 PASSED: Toàn bộ 50 bản ghi cũ bị xóa sạch hoàn toàn.")
 
 
-def test_tc_130_06_async_job_execution():
+def test_tc_130_06_async_job_execution(db, monkeypatch):
     """TC-130-06: Coroutine async chạy theo chu kỳ và không crash."""
     print("\n--- Chạy TC-130-06: Async job chu kỳ không crash ---")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
+    from contextlib import nullcontext
+
     import app.services.jobs
+
+    monkeypatch.setattr(app.services.jobs, "SessionLocal", lambda: nullcontext(db))
     original_sleep = asyncio.sleep
 
     called = False
@@ -260,7 +272,8 @@ def main():
             test_tc_130_03_boundary_retention(db)
             test_tc_130_04_idempotent_no_op(db)
             test_tc_130_05_bulk_deletion(db)
-            test_tc_130_06_async_job_execution()
+            with pytest.MonkeyPatch.context() as monkeypatch:
+                test_tc_130_06_async_job_execution(db, monkeypatch)
             test_idempotency_5_repeated_calls(db)
 
             print("\n" + "=" * 60)

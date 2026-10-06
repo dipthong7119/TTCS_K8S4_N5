@@ -28,12 +28,11 @@ def override_get_db():
 
 import app.routers.ocpp as ocpp_router_mod
 
-ocpp_router_mod.SessionLocal = SessionLocalTest
-
 client = TestClient(main_app)
 
 @pytest.fixture(scope="function", autouse=True)
-def apply_override():
+def apply_override(monkeypatch):
+    monkeypatch.setattr(ocpp_router_mod, "SessionLocal", SessionLocalTest)
     main_app.dependency_overrides[get_db] = override_get_db
     yield
     main_app.dependency_overrides.clear()

@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, public_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
 from app.services.ownership import get_station_for_user
@@ -56,29 +56,33 @@ def _page_context(request: Request, current_user, **extra):
 
 
 @router.get("/")
+@public_route
 async def root():
     """Redirect trang chủ tới trang đăng nhập."""
     return RedirectResponse(url="/login", status_code=302)
 
 
 @router.get("/login")
+@public_route
 async def login_page(request: Request):
     """Trang đăng nhập độc lập."""
     return templates.TemplateResponse(request, "auth/login.html", {"request": request})
 
 
 @router.get("/logout")
+@public_route
 async def logout_get(request: Request):
     return RedirectResponse(url="/login", status_code=302)
 
 
 @router.post("/auth/logout")
+@public_route
 async def logout_post(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
 
-@router.get("/monitoring")
+@router.get("/monitoring", dependencies=[Depends(require_role("admin", "operator", "station_owner"))])
 async def monitoring_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "operator", "station_owner")
     return templates.TemplateResponse(
@@ -92,7 +96,7 @@ async def monitoring_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/stations")
+@router.get("/stations", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
 async def stations_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "station_owner", "operator")
     return templates.TemplateResponse(
@@ -107,7 +111,7 @@ async def stations_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/stations/new")
+@router.get("/stations/new", dependencies=[Depends(require_role("admin", "station_owner"))])
 async def new_station_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "station_owner")
     return templates.TemplateResponse(
@@ -122,7 +126,7 @@ async def new_station_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/stations/{station_id}/edit")
+@router.get("/stations/{station_id}/edit", dependencies=[Depends(require_role("admin", "station_owner"))])
 async def edit_station_page(
     request: Request,
     station_id: int,
@@ -151,7 +155,7 @@ async def edit_station_page(
     )
 
 
-@router.get("/sessions")
+@router.get("/sessions", dependencies=[Depends(require_role("admin", "operator", "accountant", "station_owner"))])
 async def sessions_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "operator", "accountant", "station_owner")
     return templates.TemplateResponse(
@@ -169,7 +173,7 @@ async def sessions_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/sessions/mine")
+@router.get("/sessions/mine", dependencies=[Depends(require_role("driver"))])
 async def my_sessions_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "driver")
     return templates.TemplateResponse(
@@ -187,7 +191,7 @@ async def my_sessions_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/sessions/anomalies")
+@router.get("/sessions/anomalies", dependencies=[Depends(require_role("admin", "operator"))])
 async def anomalies_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "operator")
     return templates.TemplateResponse(
@@ -195,7 +199,7 @@ async def anomalies_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/audit")
+@router.get("/audit", dependencies=[Depends(require_role("admin", "operator"))])
 async def audit_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "operator")
     return templates.TemplateResponse(
@@ -203,7 +207,7 @@ async def audit_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/wallet")
+@router.get("/wallet", dependencies=[Depends(require_role("admin", "accountant", "driver"))])
 async def wallet_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "accountant", "driver")
     template_name = "wallet/admin_drivers.html" if "admin" in roles or "accountant" in roles else "wallet/wallet.html"

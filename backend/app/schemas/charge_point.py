@@ -27,10 +27,18 @@ class ChargePointCreate(BaseModel):
 
 
 class ChargePointUpdate(BaseModel):
+    code: str | None = Field(None, min_length=1, max_length=50)
     vendor: str | None = Field(None, max_length=255)
     model: str | None = Field(None, max_length=255)
     firmware_version: str | None = Field(None, max_length=100)
     status: str | None = Field(None, pattern="^(online|offline)$")
+
+    @field_validator("code")
+    @classmethod
+    def strip_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return ChargePointCreate.strip_code(value)
 
 
 # -- Response ---

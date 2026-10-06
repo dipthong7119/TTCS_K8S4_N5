@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy file requirements và cài đặt trước (tận dụng Docker layer cache)
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements.txt
 
 # Copy mã nguồn ứng dụng
 COPY backend/app/ ./app/

@@ -1,0 +1,51 @@
+# T-01/T-19/T-27: isolated PostgreSQL and real simulator acceptance checks.
+# Run with: docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --build db app
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: csms_acceptance
+      POSTGRES_USER: csms_acceptance
+      POSTGRES_PASSWORD: acceptance_only
+    ports:
+      - "127.0.0.1::5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csms_acceptance -d csms_acceptance"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    image: ${CSMS_IMAGE:-csms-app:acceptance}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1::8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://csms_acceptance:acceptance_only@db:5432/csms_acceptance
+      APP_ENV: development
+      SECRET_KEY: isolated-acceptance-environment-only
+      OCPP_HEARTBEAT_INTERVAL_SECONDS: "5"
+      OCPP_JOB_POLL_SECONDS: "1"
+      OCPP_REMOTE_CALL_TIMEOUT_SECONDS: "2"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  simulator:
+    image: ${CSMS_IMAGE:-csms-app:acceptance}
+    profiles: ["ocpp-simulator"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      TZ: UTC-5
+    command: ["python", "-m", "app.dev_tools.ocpp_simulator.simulator", "SIM-01", "--host", "app", "--port", "8000"]

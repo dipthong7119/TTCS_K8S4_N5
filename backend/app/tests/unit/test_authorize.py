@@ -79,6 +79,7 @@ def db_session():
     yield db
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 def _auth(db, id_tag: str, cp_code: str = "CP-1", msg_id: str = "msg-1") -> tuple:

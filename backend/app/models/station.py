@@ -21,7 +21,7 @@ class Station(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     # active | inactive | maintenance | locked (administrative OCPP boot block)
-    status = Column(String(20), default="active", nullable=False)
+    status = Column(String(20), default="inactive", server_default="inactive", nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

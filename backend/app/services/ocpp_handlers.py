@@ -6,9 +6,9 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func, update
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
@@ -23,6 +23,7 @@ from app.services.ocpp_parser import (
     pack_call_result,
     parse_message,
 )
+from app.services.ocpp_status import is_charge_point_stale, station_status_payload
 from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,12 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
     point = db.query(ChargePoint).filter(ChargePoint.code == charge_point_code).first()
     if point is None:
         return pack_call_error(msg_id, "SecurityError", "Charge point not found")
+
+    # A returning device must report fresh connector states even if the offline
+    # sweep has not run since the heartbeat deadline expired.
+    if point.status == "offline" or is_charge_point_stale(point.last_seen_at):
+        for connector in point.connectors:
+            connector.status = "unknown"
 
     canonical_request = json.dumps(
         {"action": action, "payload": payload},
@@ -152,20 +159,13 @@ def _parse_for_handler(raw_msg: str):
 def touch_last_seen(db: Session, charge_point_code: str) -> None:
     """Cập nhật last_seen_at cho mọi tin nhắn từ trụ bằng 1 câu UPDATE (không đọc-sửa-ghi)."""
     db.execute(
-        update(ChargePoint)
-        .where(ChargePoint.code == charge_point_code)
-        .values(last_seen_at=func.current_timestamp())
-        .execution_options(synchronize_session=False)
+        text("UPDATE charge_points SET last_seen_at = CURRENT_TIMESTAMP WHERE code = :code"),
+        {"code": charge_point_code},
     )
 
 
 def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
-    db.execute(
-        update(ChargePoint)
-        .where(ChargePoint.code == charge_point_code)
-        .values(last_seen_at=func.current_timestamp())
-        .execution_options(synchronize_session=False)
-    )
+    touch_last_seen(db, charge_point_code)
 
 def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
     if action == "BootNotification":
@@ -538,27 +538,24 @@ def _warn_missing_connector(charge_point_code: str, connector_id: int) -> None:
 
 
 def publish_charge_point_status(db: Session, charge_point_id: int) -> None:
-    point = db.query(ChargePoint).filter(ChargePoint.id == charge_point_id).first()
-    if point is None or point.station_id is None:
-        return
-    from sqlalchemy.orm import joinedload
+    from app.routers.monitoring import notify_status_change, sse_clients
 
-    from app.services.ocpp_status import station_status_payload
+    if not sse_clients:
+        return
+    # A heartbeat must not issue a separate connector query for every point.
+    # Load the authoritative station snapshot in one query, as the tree API does.
+    station_id = db.query(ChargePoint.station_id).filter(ChargePoint.id == charge_point_id).scalar_subquery()
     station = (
         db.query(Station)
         .options(joinedload(Station.charge_points).joinedload(ChargePoint.connectors))
-        .filter(Station.id == point.station_id)
+        .filter(Station.id == station_id)
         .first()
     )
     if station is None:
         return
+    snapshot = station_status_payload(station)
+    notify_status_change(station.id, snapshot["charge_points"], station.owner_id)
 
-    payload = station_status_payload(station)
-    charge_points = payload["charge_points"]
-
-    from app.routers.monitoring import notify_status_change
-
-    notify_status_change(station.id, charge_points, station.owner_id)
 
 
 def publish_session_update(

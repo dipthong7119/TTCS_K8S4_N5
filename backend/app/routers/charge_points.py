@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint, Connector
+from app.models.charging_session import ChargingSession
 from app.models.station import Station
 from app.schemas.charge_point import (
     ChargePointCreate,
@@ -23,7 +24,7 @@ from app.services.ownership import filter_by_owner, get_station_for_user
 router = APIRouter(prefix="/charge-points", tags=["charge_points"], dependencies=[Depends(deny_unannotated_route)])
 
 
-def _get_station_owner_role(db: Session, station_id: int) -> str | None:
+def _get_station_owner_role(db: Session, station_id: int) -> list[str] | None:
     """Lấy vai trò của người sở hữu trạm"""
     from app.models.station import Station
     station = db.query(Station).filter(Station.id == station_id).first()
@@ -84,7 +85,7 @@ async def create_charge_point(
             connector = Connector(
                 charge_point_id=cp.id,
                 connector_id=i,
-                status="unavailable",
+                status="unknown",
                 error_code="NoError",
                 created_at=now,
                 updated_at=now,
@@ -185,6 +186,12 @@ async def update_charge_point(
                 detail="Không có quyền sửa trụ này",
             )
 
+    if body.code is not None and body.code != cp.code:
+        if db.query(ChargingSession.id).filter(ChargingSession.charge_point_id == cp.id).first():
+            raise HTTPException(status_code=409, detail="Không thể đổi mã trụ đã có phiên sạc")
+        if db.query(ChargePoint.id).filter(ChargePoint.code == body.code).first():
+            raise HTTPException(status_code=409, detail="Mã trụ đã tồn tại trên toàn hệ thống")
+        cp.code = body.code
     if body.vendor is not None:
         cp.vendor = body.vendor
     if body.model is not None:
@@ -195,7 +202,11 @@ async def update_charge_point(
         cp.status = body.status
     cp.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Mã trụ đã tồn tại trên toàn hệ thống") from exc
     db.refresh(cp)
     return cp
 
@@ -221,6 +232,10 @@ async def delete_charge_point(
                 detail="Không có quyền xoá trụ này",
             )
 
+    if db.query(ChargingSession.id).filter(
+        ChargingSession.charge_point_id == cp.id, ChargingSession.ended_at.is_(None)
+    ).first():
+        raise HTTPException(status_code=409, detail="Không thể xóa trụ có phiên sạc đang mở")
     db.delete(cp)
     db.commit()
 

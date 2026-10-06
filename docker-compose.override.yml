@@ -1,0 +1,6 @@
+# Docker Compose loads this automatically for local development.
+# Staging uses only docker-compose.yml so its frontend comes from the image.
+services:
+  app:
+    volumes:
+      - ./frontend:/app/frontend
