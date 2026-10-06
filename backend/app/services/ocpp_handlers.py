@@ -19,7 +19,6 @@ from app.models.station import Station
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
-    pack_call_result,
     parse_message,
 )
 from app.services.ocpp_status import is_charge_point_stale, station_status_payload
@@ -191,7 +190,10 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         )
         return new_handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
-        return handle_meter_values(db, point, msg_id, payload)
+        from app.ocpp.handlers.meter_values import (
+            handle_meter_values as new_handle_meter_values,
+        )
+        return new_handle_meter_values(db, point, msg_id, payload)
     if action == "StopTransaction":
         from app.ocpp.handlers.stop_transaction import (
             handle_stop_transaction as new_handle_stop_transaction,
@@ -199,49 +201,6 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         return new_handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
-
-def handle_meter_values(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    connector_number = payload.get("connectorId")
-    transaction_id = payload.get("transactionId")
-    readings = payload.get("meterValue")
-    if type(connector_number) is not int or connector_number < 0:
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a non-negative integer")
-    if not isinstance(readings, list):
-        return pack_call_error(msg_id, "FormationViolation", "meterValue must be an array")
-    if transaction_id is not None and type(transaction_id) is not int:
-        return pack_call_error(msg_id, "FormationViolation", "transactionId must be an integer")
-
-    query = db.query(ChargingSession).filter(
-        ChargingSession.charge_point_id == point.id,
-        ChargingSession.ended_at.is_(None),
-    )
-    if transaction_id is not None:
-        query = query.filter(ChargingSession.id == transaction_id)
-    else:
-        query = query.filter(ChargingSession.connector_number == connector_number)
-    session = query.order_by(ChargingSession.id.desc()).first()
-    fallback_timestamp = _parse_timestamp(payload.get("timestamp"))
-    samples = _normalize_meter_values(readings, fallback_timestamp)
-    if session is None:
-        _save_orphan_message(
-            db,
-            point,
-            action="MeterValues",
-            transaction_id=transaction_id,
-            connector_number=connector_number,
-            reason="no_active_session",
-            payload={"connectorId": connector_number, "transactionId": transaction_id, "meterValue": samples},
-        )
-        logger.warning(
-            "Orphan MeterValues received: charge_point=%s connector=%s transaction_id=%s",
-            point.code,
-            connector_number,
-            transaction_id,
-        )
-        return pack_call_result(msg_id, {})
-
-    _store_meter_values(db, session, samples)
-    return pack_call_result(msg_id, {})
 
 
 KNOWN_MEASURANDS = {

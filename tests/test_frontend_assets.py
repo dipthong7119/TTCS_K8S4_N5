@@ -57,6 +57,8 @@ def test_rendered_pages_use_loadable_versioned_assets(client, user_factory, role
     if page == "/monitoring":
         assert "realtime_status.js" not in response.text
         assert any("pages/monitoring_grid.js?v=" in url for url in assets)
+    if page in {"/sessions", "/sessions/mine"}:
+        assert "btn-toggle-session-mock" not in response.text
 
 
 def test_monitoring_logout_form_clears_session(client, user_factory):

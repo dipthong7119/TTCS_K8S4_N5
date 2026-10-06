@@ -12,7 +12,7 @@ class MeterValue(Base):
     id = Column(Integer, primary_key=True)
     session_id = Column(
         Integer,
-        ForeignKey("charging_sessions.id", ondelete="CASCADE"),
+        ForeignKey("charging_sessions.id", ondelete="RESTRICT"),
         nullable=False,
     )
     measured_at = Column(DateTime, nullable=False)
@@ -22,5 +22,5 @@ class MeterValue(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
-        Index("ix_meter_values_session_measured", "session_id", "measured_at"),
+        Index("ix_meter_values_session_id_measured_at", "session_id", "measured_at"),
     )

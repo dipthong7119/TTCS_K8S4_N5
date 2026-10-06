@@ -12,6 +12,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_feature_branch_runs_checks_without_staging_deployment():
+    workflow = yaml.load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    assert "f" in workflow["on"]["push"]["branches"]
+    checks = workflow["jobs"]["test"]
+    assert not checks.get("if")
+    assert not checks.get("continue-on-error")
+    assert all(not step.get("continue-on-error") for step in checks["steps"])
+    deployment = workflow["jobs"]["deploy-staging"]
+    assert deployment["needs"] == "test"
+    assert deployment["if"] == "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'"
+
+
 def deploy_script():
     workflow = yaml.safe_load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"))
     step = next(item for item in workflow["jobs"]["deploy-staging"]["steps"] if "script" in item.get("with", {}))

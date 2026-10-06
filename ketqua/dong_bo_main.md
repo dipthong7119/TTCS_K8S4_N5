@@ -145,3 +145,38 @@ trên app local đạt với cả `/login` và `/login?mock=1`: không có banne
 logic, nút mắt hoạt động, mật khẩu `success` phải qua API, lỗi hiển thị theo API,
 tài khoản admin hợp lệ tạo cookie phiên. DOM emulation không hỗ trợ điều hướng;
 chuyển trang được kiểm chứng bằng kiểm thử JS với location spy.
+
+## Gộp code mới và sửa CI/CD trên f — 06/10/2026
+
+- Fetch `origin/f` tại `a47c491f611f430bce43b220a5d498b316132d6b`;
+  code `ghi_nhat_ky` đã được giữ trong merge `11aa36b`. Không ghi đè lịch sử
+  nhánh hoặc force-push. Gộp thêm `origin/main` tại `717cc62` với MeterValues
+  T-40/T-41 và giao diện phiên T-48/T-50, giữ các sửa lỗi local trước đó.
+- GitHub run `37432097816` trên f thất bại vì 15 lỗi Ruff; các run CI/CD
+  `37435549566`/`37435549518` trên main thất bại vì 34 lỗi Ruff. Bản gộp đã
+  sửa import, kiểu dữ liệu và các lỗi lint, vẫn chạy đủ kiểm tra hiện có.
+- Sửa ba test MeterValues gọi handler trực tiếp: commit giao dịch như dispatcher
+  trước khi đọc dữ liệu, vì fixture tắt autoflush. Không bỏ test hoặc nới assertion.
+- Migration mới nối sau `h20261004_defaults`, giữ bảng/số đo hiện có và điều
+  chỉnh foreign key/index. Kiểm tra upgrade/downgrade SQLite và PostgreSQL đạt.
+- Gỡ mock riêng của trang phiên từ upstream. API rỗng/lỗi không sinh phiên mẫu,
+  kWh lấy từ API/SSE. Báo cáo T-48/T-50 phân biệt kết quả tác giả upstream với
+  bằng chứng kiểm tra sau gộp, không suy ra nghiệm thu đầy đủ từ CI.
+- CD chạy job kiểm tra khi push f; job triển khai chỉ chạy trên main/master,
+  có test chống triển khai từ f và chống bỏ qua lỗi kiểm tra. Chưa có staging
+  thật để nghiệm thu SSH deploy; không đánh đồng workflow xanh với đã triển khai.
+
+### Kiểm chứng trước push
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| Linux/Python 3.11, nguồn từ Git index, đúng quyền file Git | **405 passed**, coverage nhánh/dòng tổng hợp **71%**, 64,78 giây |
+| Ruff / Mypy / pip-audit trong Linux | Đạt; Mypy **45 file**; không có lỗ hổng thư viện được báo |
+| Hành vi JavaScript | **51 passed**, không fail/skip |
+| Docker image từ code hiện tại | Build đạt |
+| Nghiệm thu Compose/PostgreSQL/OCPP | 8/9 đạt trong lượt đầy đủ; ca stop/start simulator đạt cả 3 vòng khi chạy lại riêng sau khi dừng lượt kiểm thử bị chồng |
+| Phạm vi dữ liệu | Chỉ dọn project Compose nghiệm thu tạm; giữ volume PostgreSQL thật và `.env` |
+| Excel | SHA256 vẫn `C106E9B5E8458F2F02EF00604BDDED75882E9CFAF4D60C32EECCF2837471BA30` |
+
+Snapshot trước khi hoàn tất merge vẫn giữ trong Git stash `257d1cd`.
+Kết quả GitHub phải đọc từ workflow của commit được push lên f sau bước này.

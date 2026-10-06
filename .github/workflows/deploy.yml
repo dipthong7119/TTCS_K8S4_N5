@@ -2,7 +2,7 @@ name: CD Pipeline - Deploy to Staging
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "f" ]
 
 # Phân quyền cho token để có thể đẩy package lên GitHub Container Registry
 permissions:
@@ -46,6 +46,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     # Chỉ build/push sau khi lint và toàn bộ test đã qua.
 
     steps:

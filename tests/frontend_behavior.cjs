@@ -700,3 +700,59 @@ test('connector selection enables only usable options and start button clearly r
   button.handlers.click(); assert.equal(message.textContent, '');
   assert.equal(page.apiResets.length, 0);
 });
+
+function sessionPage(getSessions) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) { const el = element(); el.style = {}; ids.set(id, el); }
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  document.getElementById('sessions-page').dataset = { scope: 'mine', canRemoteStop: 'false', liveUpdates: 'false' };
+  const calls = [], timers = [], toasts = [];
+  const api = { listMySessions: async params => { calls.push(params); return getSessions(); },
+    getCurrentSession: async () => null };
+  vm.runInContext(read('pages/my_session.js'), vm.createContext({ document, window: {}, ApiClient: api,
+    Date, Intl, console, setTimeout, clearTimeout, clearInterval() {},
+    setInterval: fn => { timers.push(fn); return timers.length; },
+    showToast: message => toasts.push(message),
+  }));
+  document.handlers.DOMContentLoaded();
+  return { document, calls, timers, toasts };
+}
+
+test('driver session page uses the API and stays empty without fabricated sessions', async () => {
+  const page = sessionPage(async () => ({ items: [], total: 0 }));
+  await flush();
+  assert.equal(page.calls.length, 1);
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /Chưa có phiên sạc nào/);
+  assert.equal(page.document.getElementById('active-session-banner').style.display, 'none');
+  assert.equal(page.document.getElementById('no-active-session-card').style.display, 'flex');
+  assert.equal(page.timers.length, 0);
+});
+
+test('driver session banner displays API energy and never increments energy with a timer', async () => {
+  const session = { id: 123, station_name: 'API station', charge_point_code: 'API-01', connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z', status: 'active', live_kwh: 1.234 };
+  const page = sessionPage(async () => ({ items: [session], total: 1 }));
+  await flush();
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /API-01/);
+  assert.equal(page.document.getElementById('active-session-id').textContent, '#123');
+  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
+  assert.equal(page.timers.length, 1);
+  page.timers[0]();
+  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
+});
+
+test('driver session API failure reports the error without displaying sample sessions', async () => {
+  const page = sessionPage(async () => { throw Error('Server unavailable'); });
+  await flush();
+  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /Server unavailable/);
+  assert.doesNotMatch(page.document.getElementById('sessions-tbody').innerHTML, /8888|EcoCharge/);
+  assert.equal(page.document.getElementById('session-count').textContent, 'Lỗi kết nối');
+  assert.equal(page.timers.length, 0);
+});
