@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -176,7 +177,7 @@ async def remote_start_transaction(
         )
         db.commit()
 
-    ocpp_payload = {"idTag": payload.id_tag}
+    ocpp_payload: dict[str, Any] = {"idTag": payload.id_tag}
     if payload.connector_id is not None:
         ocpp_payload["connectorId"] = payload.connector_id
 
