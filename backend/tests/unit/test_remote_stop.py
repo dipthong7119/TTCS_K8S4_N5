@@ -65,7 +65,7 @@ def setup_db():
         code="CP01",
         station_id=1,
         status="online",
-        last_seen_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(UTC),
     )
     connector = Connector(
         id=1,
@@ -83,7 +83,7 @@ def setup_db():
         user_id=1,
         driver_name="Driver Test",
         meter_start_wh=1000,
-        started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        started_at=datetime.now(UTC).replace(tzinfo=None),
         status="active",
     )
     db.add_all([user, station, point, connector, session])
@@ -185,7 +185,7 @@ def test_remote_stop_session_already_ended():
     """Phiên đã kết thúc -> báo lỗi 409, không gửi lệnh."""
     db = SessionLocalTest()
     session = db.query(ChargingSession).filter_by(id=101).one()
-    session.ended_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.ended_at = datetime.now(UTC).replace(tzinfo=None)
     session.status = "completed"
     db.commit()
     db.close()
