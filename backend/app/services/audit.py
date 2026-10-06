@@ -3,7 +3,7 @@
 from app.models.audit_log import AuditLog
 
 
-def append_audit(
+def ghi_nhat_ky(
     db,
     *,
     action: str,
@@ -27,3 +27,7 @@ def append_audit(
     )
     db.add(entry)
     return entry
+
+
+# Preserve the existing name for callers while standardizing on the T-57 API.
+append_audit = ghi_nhat_ky
