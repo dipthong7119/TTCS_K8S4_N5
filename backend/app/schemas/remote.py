@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +8,7 @@ class ResetRequest(BaseModel):
 
 
 class RemoteStartRequest(BaseModel):
-    connector_id: Optional[int] = Field(
+    connector_id: int | None = Field(
         default=None,
         ge=1,
         description="ID đầu nối (connectorId trong OCPP 1.6). Nếu bỏ trống, trụ tự chọn.",
