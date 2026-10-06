@@ -9,7 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.deps import CurrentUser, deny_unannotated_route, public_route, require_role
+from app.core.deps import (
+    CurrentUser,
+    deny_unannotated_route,
+    public_route,
+    require_role,
+)
 from app.core.security import verify_password
 from app.database import get_db
 from app.models.login_ip_attempt import LoginIPAttempt
