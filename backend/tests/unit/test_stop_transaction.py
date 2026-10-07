@@ -1,6 +1,7 @@
 """Test cases cho handler StopTransaction (SCRUM-163 / T-38)."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
@@ -102,6 +103,42 @@ def test_stop_transaction_valid(db_session):
     # Kiểm tra trạng thái connector trở về available
     conn = db_session.query(Connector).filter_by(connector_id=1).first()
     assert conn.status == "available"
+
+
+@pytest.mark.parametrize(
+    ("meter_start_wh", "meter_stop_wh", "expected_energy_kwh", "expected_status"),
+    [
+        (18_340, 30_685, Decimal("12.345"), "completed"),
+        (27_110, 26_000, None, "needs_review"),
+        (40_520, 40_520, Decimal(0), "completed"),
+    ],
+    ids=["ordinary-session", "regressing-meter", "unchanged-meter"],
+)
+def test_stop_transaction_persists_energy_for_sample_sessions(
+    db_session, meter_start_wh, meter_stop_wh, expected_energy_kwh, expected_status
+):
+    session = db_session.query(ChargingSession).get(1)
+    session.meter_start_wh = meter_start_wh
+    db_session.commit()
+
+    payload = {
+        "transactionId": 1,
+        "meterStop": meter_stop_wh,
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "reason": "Local",
+    }
+    raw_response = handle_ocpp_message(
+        db_session, "CP001", pack_call("sample-session", "StopTransaction", payload)
+    )
+
+    msg_type, _, _, response, _, _ = parse_message(raw_response)
+    assert msg_type == 3
+    assert response["idTagInfo"]["status"] == "Accepted"
+
+    db_session.refresh(session)
+    assert session.energy_kwh == expected_energy_kwh
+    assert session.status == expected_status
+    assert session.anomaly_reason == ("negative_kwh" if expected_energy_kwh is None else None)
 
 
 def test_stop_transaction_invalid_transaction_id(db_session):
