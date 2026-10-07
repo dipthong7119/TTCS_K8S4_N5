@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "sessions" if is_global_sessions else "my-sessions" %}
 
 {% block title %}{{ 'Danh sách phiên sạc' if is_global_sessions else 'Lịch sử sạc của tôi' }}{% endblock %}
@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/sessions.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/sessions.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -25,36 +25,94 @@
   </div>
 </div>
 
-<!-- Active session banner -->
+<!-- Active session banner / card (T-48, T-50) -->
 <div class="active-session-banner" id="active-session-banner" style="display:none;" aria-live="polite">
-  <div class="active-session-banner__content">
-    <div class="active-session-banner__indicator" aria-hidden="true"></div>
-    <div>
-      <div class="active-session-banner__title">Đang có phiên sạc hoạt động</div>
-      <div class="active-session-banner__meta" id="active-session-meta">—</div>
+  <div class="active-session-banner__main">
+    <div class="active-session-banner__header">
+      <div class="active-session-banner__status">
+        <span class="active-session-banner__indicator" aria-hidden="true"></span>
+        <span class="badge badge--charging">Đang sạc</span>
+        <span class="active-session-banner__tag" id="active-session-id">#—</span>
+      </div>
+      {% if can_remote_stop %}
+      <div class="active-session-banner__actions">
+        <button class="btn btn--danger btn--sm active-session-banner__stop-btn" id="active-stop-btn" type="button" aria-label="Dừng phiên sạc từ xa">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+          </svg>
+          <span class="stop-btn-text">Dừng từ xa</span>
+        </button>
+        <span class="active-session-banner__timer" id="active-stop-timer" style="display:none;" aria-live="assertive">120s</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="active-session-banner__body">
+      <div class="active-session-banner__info">
+        <div class="active-session-banner__location" id="active-session-meta">Đang tải thông tin...</div>
+        <div class="active-session-banner__submeta">
+          <span>Bắt đầu: <strong id="active-start-time">—</strong></span>
+          <span class="sep" aria-hidden="true">•</span>
+          <span>Cổng: <strong id="active-connector-num">—</strong></span>
+          {% if show_driver_column %}
+          <span class="sep" aria-hidden="true">•</span>
+          <span>Tài xế: <strong id="active-driver-name">—</strong></span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="active-session-banner__metrics">
+        <div class="active-metric-box">
+          <div class="active-metric-label">Điện năng nạp</div>
+          <div class="active-session-banner__kwh" id="active-kwh">0.000 <span class="active-unit">kWh</span></div>
+        </div>
+        <div class="active-metric-box">
+          <div class="active-metric-label">Thời gian đã sạc</div>
+          <div class="active-session-banner__duration" id="active-duration">00:00:00</div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="active-session-banner__right">
-    <div class="active-session-banner__kwh" id="active-kwh">0.000 kWh</div>
-    <div class="active-session-banner__duration" id="active-duration">00:00:00</div>
+</div>
+
+<!-- No active session card for driver (S-22 AC3) -->
+<div class="no-active-session-card" id="no-active-session-card" style="display:none;" aria-live="polite">
+  <div class="no-active-session-card__icon" aria-hidden="true">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+  </div>
+  <div class="no-active-session-card__content">
+    <div class="no-active-session-card__title">Không có phiên sạc nào đang hoạt động</div>
+    <div class="no-active-session-card__sub">Bạn hiện không cắm sạc xe tại trụ nào. Hãy tìm kiếm trạm sạc gần nhất để bắt đầu sạc xe.</div>
+  </div>
+  <div class="no-active-session-card__action">
+    <a href="/stations" class="btn btn--primary" id="btn-find-station">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Tìm trạm sạc
+    </a>
   </div>
 </div>
 
 <!-- Filters -->
-<div class="filters-bar" style="margin-bottom:var(--space-4);">
-  <select class="form-select" id="session-period" style="width:auto;min-width:160px;" aria-label="Khoảng thời gian">
-    <option value="7">7 ngày gần đây</option>
-    <option value="30" selected>30 ngày gần đây</option>
-    <option value="90">3 tháng gần đây</option>
-    <option value="365">1 năm qua</option>
-  </select>
-  <select class="form-select" id="session-status-filter" style="width:auto;min-width:150px;" aria-label="Trạng thái phiên">
-    <option value="">Tất cả</option>
-    <option value="completed">Hoàn thành</option>
-    <option value="active">Đang sạc</option>
-    <option value="anomaly">Bất thường</option>
-    <option value="needs_review">Cần xem xét</option>
-  </select>
+<div class="filters-bar" style="margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);">
+  <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+    <select class="form-select" id="session-period" style="width:auto;min-width:160px;" aria-label="Khoảng thời gian">
+      <option value="7">7 ngày gần đây</option>
+      <option value="30" selected>30 ngày gần đây</option>
+      <option value="90">3 tháng gần đây</option>
+      <option value="365">1 năm qua</option>
+    </select>
+    <select class="form-select" id="session-status-filter" style="width:auto;min-width:150px;" aria-label="Trạng thái phiên">
+      <option value="">Tất cả</option>
+      <option value="completed">Hoàn thành</option>
+      <option value="active">Đang sạc</option>
+      <option value="anomaly">Bất thường</option>
+      <option value="needs_review">Cần xem xét</option>
+    </select>
+  </div>
 </div>
 
 <!-- Summary cards -->
@@ -124,8 +182,37 @@
     </div>
   </div>
 </div>
+
+<!-- Remote Stop Confirmation Modal (T-50) -->
+<div class="modal-backdrop is-hidden" id="remote-stop-modal" role="dialog" aria-modal="true" aria-labelledby="remote-stop-modal-title">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="remote-stop-modal-title">Xác nhận dừng sạc từ xa</h2>
+      <button class="modal__close" id="remote-stop-modal-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <p id="remote-stop-modal-desc">Bạn có chắc chắn muốn gửi lệnh dừng phiên sạc này từ xa tới trụ sạc không?</p>
+      <div class="alert alert--warning" style="margin-top:var(--space-3);font-size:var(--font-size-sm);display:flex;gap:var(--space-2);align-items:flex-start;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <div>
+          Lệnh <code>RemoteStopTransaction</code> sẽ được gửi tới trụ sạc. Hệ thống sẽ đếm thời gian chờ tối đa <strong>2 phút</strong> để trụ gửi tin nhắn <code>StopTransaction</code> xác nhận kết thúc phiên.
+        </div>
+      </div>
+    </div>
+    <div class="modal__footer" style="display:flex;justify-content:flex-end;gap:var(--space-3);padding-top:var(--space-3);">
+      <button class="btn btn--secondary" id="remote-stop-modal-cancel" type="button">Hủy bỏ</button>
+      <button class="btn btn--danger" id="remote-stop-modal-confirm" type="button">Xác nhận dừng sạc</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/my_session.js"></script>
+<script src="{{ asset_url('js/pages/my_session.js') }}"></script>
 {% endblock %}

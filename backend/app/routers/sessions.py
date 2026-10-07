@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
@@ -16,7 +16,7 @@ from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.station import Station
 from app.models.user import User
-from app.services.audit import append_audit
+from app.services.audit import ghi_nhat_ky
 from app.services.connection_manager import manager
 from app.services.ocpp_parser import OCPPError
 from app.services.ocpp_status import is_charge_point_stale
@@ -183,6 +183,9 @@ async def get_current_driver_session(
     )
     row = (
         db.query(ChargingSession, MeterValue)
+        # The serializer reads item.invoice; eager-load it to keep this API to
+        # one SQL query alongside the correlated latest-meter lookup.
+        .options(joinedload(ChargingSession.invoice))
         .outerjoin(MeterValue, MeterValue.id == latest_meter_id)
         .filter(ChargingSession.user_id == current_user.id, ChargingSession.ended_at.is_(None))
         .order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
@@ -305,15 +308,19 @@ async def remote_stop_session(
     item = _session_query(db).filter(ChargingSession.id == session_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên sạc")
+    if item.ended_at is not None:
+        raise HTTPException(status_code=409, detail="Phiên sạc đã kết thúc, không thể dừng từ xa")
+
     point = db.query(ChargePoint).filter(ChargePoint.id == item.charge_point_id).first()
     if (
-        item.ended_at is not None
-        or point is None
+        point is None
         or point.code not in manager.active_connections
         or point.status != "online"
         or is_charge_point_stale(point.last_seen_at)
     ):
-        raise HTTPException(status_code=409, detail="Phiên/trụ không còn sẵn sàng để dừng từ xa")
+        raise HTTPException(
+            status_code=409, detail="Trụ sạc đang ngoại tuyến, không thể gửi lệnh dừng."
+        )
 
     try:
         result = await manager.send_call(
@@ -323,7 +330,7 @@ async def remote_stop_session(
             timeout=settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
-        append_audit(
+        ghi_nhat_ky(
             db,
             action="remote_stop.failed",
             object_type="charging_session",
@@ -335,9 +342,12 @@ async def remote_stop_session(
             details={"outcome": "timeout"},
         )
         db.commit()
-        raise HTTPException(status_code=504, detail="Trụ không phản hồi lệnh dừng từ xa") from exc
-    except (ConnectionError, OCPPError) as exc:
-        append_audit(
+        raise HTTPException(
+            status_code=504,
+            detail="Trụ không phản hồi lệnh dừng từ xa trong thời gian chờ.",
+        ) from exc
+    except ConnectionError as exc:
+        ghi_nhat_ky(
             db,
             action="remote_stop.failed",
             object_type="charging_session",
@@ -346,17 +356,37 @@ async def remote_stop_session(
             actor_email=current_user.email,
             actor_name=current_user.full_name,
             charge_point_code=point.code,
-            details={"outcome": "connection_error"},
+            details={"outcome": "disconnected"},
         )
         db.commit()
-        raise HTTPException(status_code=502, detail="Không gửi được lệnh dừng tới trụ") from exc
+        raise HTTPException(
+            status_code=409,
+            detail="Trụ sạc đã ngắt kết nối trước khi nhận lệnh dừng.",
+        ) from exc
+    except OCPPError as exc:
+        ghi_nhat_ky(
+            db,
+            action="remote_stop.failed",
+            object_type="charging_session",
+            object_id=item.id,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            actor_name=current_user.full_name,
+            charge_point_code=point.code,
+            details={"outcome": "call_error"},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Không gửi được lệnh dừng tới trụ.",
+        ) from exc
 
     accepted = result.get("status") == "Accepted"
     if accepted:
         db.refresh(item)
         if item.ended_at is None:
             item.remote_stop_requested_at = datetime.now(UTC).replace(tzinfo=None)
-    append_audit(
+    ghi_nhat_ky(
         db,
         action="remote_stop.accepted" if accepted else "remote_stop.rejected",
         object_type="charging_session",
@@ -369,7 +399,10 @@ async def remote_stop_session(
     )
     db.commit()
     if not accepted:
-        raise HTTPException(status_code=502, detail="Trụ không chấp nhận lệnh dừng từ xa")
+        raise HTTPException(
+            status_code=502,
+            detail="Trụ không chấp nhận lệnh dừng từ xa (Rejected).",
+        )
     if item.ended_at is None:
         station = db.query(Station).filter(Station.id == item.station_id).first()
         from app.routers.monitoring import notify_session_change

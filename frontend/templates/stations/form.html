@@ -14,7 +14,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/stations.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/stations.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -318,5 +318,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/stations_form.js"></script>
+<script src="{{ asset_url('js/pages/stations_form.js') }}"></script>
 {% endblock %}

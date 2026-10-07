@@ -38,7 +38,7 @@ services:
       retries: 3
 
   simulator:
-    image: ${CSMS_IMAGE:-csms-app:local}
+    image: ${CSMS_SIMULATOR_IMAGE:-csms-simulator:1.0.0}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -50,11 +50,12 @@ services:
       - python
       - -m
       - app.dev_tools.ocpp_simulator.simulator
-      - SIM-01
-      - --host
-      - app
-      - --port
-      - "8000"
+      - --count
+      - "${CSMS_SIMULATOR_COUNT:-20}"
+      - --include-demo-stations
+      - "${CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS:-false}"
+      - --server-url
+      - "${CSMS_SIMULATOR_URL:-ws://app:8000/ocpp}"
     restart: "no"
 
   backup:
@@ -69,7 +70,7 @@ services:
       BACKUP_DIR: /backups
       BACKUP_RETENTION_DAYS: ${CSMS_BACKUP_RETENTION_DAYS:-14}
     volumes:
-      - ./backups:/backups
+      - postgres_backups:/backups
       - ./backend/scripts/backup_postgres.sh:/usr/local/bin/backup_postgres.sh:ro
     depends_on:
       db:
@@ -80,3 +81,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_backups:

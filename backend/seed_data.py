@@ -16,7 +16,11 @@ from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import User
 from app.models.wallet_ledger import WalletLedgerEntry
-from app.services.pricing import DEMO_TARIFF_BANDS, DEMO_TARIFF_TIMEZONE, calculate_session_price
+from app.services.pricing import (
+    DEMO_TARIFF_BANDS,
+    DEMO_TARIFF_TIMEZONE,
+    calculate_session_price,
+)
 
 SIMULATOR_CODES = tuple(f"SIM-{number:02d}" for number in range(1, 21))
 
@@ -400,7 +404,7 @@ def _ensure_audit_samples(
 
 
 def _ensure_demo_tariffs(db: Session, stations: list[Station], counts: dict[str, int]) -> None:
-    effective_from = datetime(2000, 1, 1)
+    effective_from = datetime(2000, 1, 1, tzinfo=UTC).replace(tzinfo=None)
     for station in stations:
         tariff = (
             db.query(StationTariff)

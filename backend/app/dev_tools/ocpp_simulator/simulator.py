@@ -1,22 +1,20 @@
-"""
-simulator.py — Spike: Trụ sạc ảo nối WebSocket tối giản (K-01)
-Tham chieu: SPRINT_1.md K-01, 03_SSD_SPEC.md, 02_CODING_STANDARDS.md
+"""Independent OCPP 1.6J client and configurable fleet (K-01 / T-55).
 
-YÊU CẦU: cài đặt ws4py hoặc dùng websockets: pip install websockets
-Module này KHÔNG được import từ app/ và ngược lại (độc lập cho CI test).
-
-Module này tạo một client WebSocket kết nối đến /ocpp/{code} và gửi các message
-mẫu theo đặc tả OCPP 1.6J: BootNotification, Heartbeat, StatusNotification,
-Authorize, StartTransaction, MeterValues, StopTransaction, Reset.
-
-Module này độc lập — dùng để spike/K-01 test chứ không phải sản phẩm chính.
+The fleet uses registered SIM- codes from the adjacent seed_codes.txt and can
+opt into the five seeded demo-station devices with their declared connectors.
+Compose supplies configuration as CLI arguments; no server logic is imported.
 """
 
+import argparse
 import asyncio
 import json
+import re
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import quote, urlsplit, urlunsplit
 
 # OCPP 1.6J message formats (mang trong module riêng — T-14)
 # CALL:      [2, unique_id, action, payload]
@@ -26,6 +24,63 @@ from datetime import datetime, timezone
 VENDOR = "TestVendor"
 MODEL = "TestModel"
 FIRMWARE = "1.0.0"
+SEED_CODES_FILE = Path(__file__).with_name("seed_codes.txt")
+
+
+@dataclass(frozen=True)
+class PointProfile:
+    """Independent device settings matching the development seed inventory."""
+
+    connector_count: int = 1
+    vendor: str = VENDOR
+    model: str = MODEL
+    status: str = "Available"
+    error_code: str = "NoError"
+
+
+SIMULATOR_PROFILE = PointProfile(2, "CSMS Simulator", "OCPP 1.6J")
+DEMO_POINT_PROFILES = {
+    "CP_VINCOM_01": PointProfile(2, "VinFast", "VF-AC-11KW"),
+    "CP_VINCOM_02": PointProfile(1, "ABB", "Terra 54"),
+    "CP_AEON_01": PointProfile(3, "EVN", "EVN-FAST"),
+    "CP_AEON_FAULT": PointProfile(1, "ABB", "Terra AC", "Faulted", "GroundFailure"),
+    "CP_DEMO_MAINT_01": PointProfile(2, "Schneider", "EVlink", "Unavailable"),
+}
+
+
+def simulator_codes(
+    count: int, codes_file: Path = SEED_CODES_FILE, *, include_demo_stations: bool = False,
+) -> tuple[str, ...]:
+    """Select registered SIM- codes and optional seeded demo-station devices."""
+    codes = tuple(
+        line.strip() for line in codes_file.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    if not codes or len(set(codes)) != len(codes) or any(
+        not re.fullmatch(r"SIM-[0-9]+", code) for code in codes
+    ):
+        raise ValueError("seed_codes.txt must contain unique SIM- codes")
+    if not 1 <= count <= len(codes):
+        raise ValueError(f"count must be between 1 and {len(codes)} seeded charge points")
+    selected = codes[:count]
+    if include_demo_stations:
+        selected += tuple(DEMO_POINT_PROFILES)
+    return selected
+
+
+def charge_point_uri(server_url: str, code: str) -> str:
+    """Append the code to an OCPP base URL, including optional proxy path/TLS."""
+    parsed = urlsplit(server_url)
+    if (
+        parsed.scheme not in {"ws", "wss"} or not parsed.hostname
+        or parsed.username is not None or parsed.password is not None
+        or parsed.query or parsed.fragment
+    ):
+        raise ValueError("server URL must use ws:// or wss:// without credentials, query or fragment")
+    # Accessing port also validates malformed/out-of-range ports.
+    _ = parsed.port
+    path = (parsed.path.rstrip("/") or "/ocpp") + "/" + quote(code, safe="")
+    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 
 def make_call(action: str, data: dict | None = None) -> list:
@@ -48,11 +103,17 @@ def make_calleerror(request_id: str, error_code: str, description: str = "") -> 
 class SimpleSimulator:
     """Trụ sạc ảo đơn giản — kết nối WebSocket và xử lý các message."""
 
-    def __init__(self, host: str = "localhost", port: int = 8000, code: str = "TEST-01"):
+    def __init__(
+        self, host: str = "localhost", port: int = 8000, code: str = "TEST-01",
+        *, server_url: str | None = None,
+    ):
         self.host = host
         self.port = port
         self.code = code
-        self.uri = f"ws://{host}:{port}/ocpp/{code}"
+        self.profile = DEMO_POINT_PROFILES.get(
+            code, SIMULATOR_PROFILE if code.startswith("SIM-") else PointProfile(),
+        )
+        self.uri = charge_point_uri(server_url or f"ws://{host}:{port}/ocpp", code)
         self.connected = False
         self.session_id = str(uuid.uuid4())
         self.last_heartbeat = time.time()
@@ -132,26 +193,22 @@ class SimpleSimulator:
     async def _run_loop(self):
         """Vòng lặp chính: gửi BootNotification, rồi Heartbeat định kỳ."""
         boot_result = await self._call("BootNotification", {
-            "chargePointVendor": VENDOR,
-            "chargePointModel": MODEL,
+            "chargePointVendor": self.profile.vendor,
+            "chargePointModel": self.profile.model,
             "firmwareVersion": FIRMWARE,
         })
         if boot_result.get("status") != "Accepted":
             raise RuntimeError(f"BootNotification rejected: {boot_result}")
         heartbeat_interval = max(1, int(boot_result.get("interval", 10)))
-        await self._call("StatusNotification", {
-            "connectorId": 0,
-            "errorCode": "NoError",
-            "status": "Available",
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        })
-        await self._call("StatusNotification", {
-            "connectorId": 1,
-            "errorCode": "NoError",
-            "status": "Available",
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        })
-        print(f"[Simulator] Boot accepted, interval={heartbeat_interval}s")
+        # 0 describes the whole device; positive IDs describe every seeded connector.
+        for connector_id in range(self.profile.connector_count + 1):
+            await self._call("StatusNotification", {
+                "connectorId": connector_id,
+                "errorCode": self.profile.error_code,
+                "status": self.profile.status,
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            })
+        print(f"[Simulator {self.code}] Boot accepted, interval={heartbeat_interval}s")
 
         while self.connected:
             try:
@@ -211,19 +268,64 @@ class SimpleSimulator:
         return result
 
 
-async def run_simulator(code: str = "TEST-01", host: str = "localhost", port: int = 8000):
+async def run_simulator(
+    code: str = "TEST-01", host: str = "localhost", port: int = 8000,
+    *, server_url: str | None = None,
+):
     """Chạy spike một lần kết nối đến server."""
-    sim = SimpleSimulator(host=host, port=port, code=code)
+    sim = SimpleSimulator(host=host, port=port, code=code, server_url=server_url)
     await sim.connect()
 
 
-# Để chạy trực tiếp từ dòng lệnh: python -m simulator
-if __name__ == "__main__":
-    import argparse
+async def run_fleet(codes: tuple[str, ...], server_url: str) -> None:
+    """Run independent sockets concurrently; stop the fleet if a device fails."""
+    simulators = [SimpleSimulator(code=code, server_url=server_url) for code in codes]
+    if not simulators or len(set(codes)) != len(codes):
+        raise ValueError("fleet requires at least one charge point and unique codes")
 
+    async def connect(simulator: SimpleSimulator) -> None:
+        await simulator.connect()
+        raise RuntimeError(f"{simulator.code}: connection ended unexpectedly")
+
+    tasks = [asyncio.create_task(connect(simulator), name=simulator.code) for simulator in simulators]
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run a virtual OCPP 1.6J charge point")
-    parser.add_argument("code", nargs="?", default="TEST-01")
+    parser.add_argument("code", nargs="?", help="Single registered code (legacy mode)")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    asyncio.run(run_simulator(code=args.code, host=args.host, port=args.port))
+    parser.add_argument("--count", type=int, help="Number of seeded SIM- points to run concurrently")
+    parser.add_argument("--server-url", help="OCPP base URL, e.g. ws://app:8000/ocpp")
+    parser.add_argument(
+        "--include-demo-stations", choices=("true", "false"), default="false",
+        help="Also connect the five seeded Vincom/AEON/Thu Thiem demo points",
+    )
+    args = parser.parse_args(argv)
+    if args.count is not None and args.code is not None:
+        parser.error("use either a single code or --count")
+    if args.include_demo_stations == "true" and args.count is None:
+        parser.error("--include-demo-stations true requires --count")
+    server_url = args.server_url or f"ws://{args.host}:{args.port}/ocpp"
+    try:
+        charge_point_uri(server_url, "SIM-01")
+        codes = simulator_codes(
+            args.count, include_demo_stations=args.include_demo_stations == "true",
+        ) if args.count is not None else None
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+    if codes is None:
+        asyncio.run(run_simulator(code=args.code or "TEST-01", server_url=server_url))
+    else:
+        print(f"[Simulator] Starting {len(codes)} charge points: {', '.join(codes)}", flush=True)
+        asyncio.run(run_fleet(codes, server_url))
+
+
+if __name__ == "__main__":
+    main()

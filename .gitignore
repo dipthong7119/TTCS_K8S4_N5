@@ -27,3 +27,4 @@ htmlcov/
 
 # Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
 nhat_ky_lam_tung.md
+.vscode/

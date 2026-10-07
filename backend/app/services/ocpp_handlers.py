@@ -10,21 +10,18 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.charge_point import ChargePoint, Connector
+from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
-from app.services.billing import finalize_session_billing
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
-    pack_call_result,
     parse_message,
 )
 from app.services.ocpp_status import is_charge_point_stale, station_status_payload
-from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
 
@@ -188,199 +185,22 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
         from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
         return new_handle_authorize(db, point, msg_id, payload)
     if action == "StartTransaction":
-        return handle_start_transaction(db, point, msg_id, payload)
+        from app.ocpp.handlers.start_transaction import (
+            handle_start_transaction as new_handle_start_transaction,
+        )
+        return new_handle_start_transaction(db, point, msg_id, payload)
     if action == "MeterValues":
-        return handle_meter_values(db, point, msg_id, payload)
+        from app.ocpp.handlers.meter_values import (
+            handle_meter_values as new_handle_meter_values,
+        )
+        return new_handle_meter_values(db, point, msg_id, payload)
     if action == "StopTransaction":
-        return handle_stop_transaction(db, point, msg_id, payload)
+        from app.ocpp.handlers.stop_transaction import (
+            handle_stop_transaction as new_handle_stop_transaction,
+        )
+        return new_handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
 
-
-def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    connector_number = payload.get("connectorId")
-    meter_start = payload.get("meterStart")
-    id_tag_value = payload.get("idTag")
-    started_at = _parse_timestamp(payload.get("timestamp"))
-    if type(connector_number) is not int or connector_number <= 0:
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a positive integer")
-    if type(meter_start) is not int or meter_start < 0:
-        return pack_call_error(msg_id, "FormationViolation", "meterStart must be a non-negative integer")
-    if not isinstance(id_tag_value, str) or not 1 <= len(id_tag_value) <= 20 or started_at is None:
-        return pack_call_error(msg_id, "FormationViolation", "idTag and a valid timestamp are required")
-
-    connector = db.query(Connector).filter_by(
-        charge_point_id=point.id, connector_id=connector_number
-    ).first()
-    
-    from app.ocpp.handlers.authorize import authorize_tag
-    tag, user, auth_status = authorize_tag(db, point, id_tag_value)
-    station = db.query(Station).filter(Station.id == point.station_id).first()
-    effective_status = auth_status if connector is not None else "Invalid"
-    accepted = effective_status == "Accepted"
-
-    if accepted:
-        previous = (
-            db.query(ChargingSession)
-            .filter(
-                ChargingSession.charge_point_id == point.id,
-                ChargingSession.connector_number == connector_number,
-                ChargingSession.ended_at.is_(None),
-            )
-            .order_by(ChargingSession.id.desc())
-            .first()
-        )
-        if previous is not None:
-            previous.ended_at = max(started_at, previous.started_at)
-            previous.stop_reason = "ConcurrentStart"
-            previous.status = "anomaly"
-            previous.anomaly_reason = "concurrent_start"
-            logger.warning(
-                "Closing previous session after concurrent StartTransaction: charge_point=%s connector=%s session=%s",
-                point.code,
-                connector_number,
-                previous.id,
-            )
-
-    session = ChargingSession(
-        charge_point_id=point.id,
-        charge_point_code=point.code,
-        station_id=station.id if station else None,
-        station_name=station.name if station else "",
-        connector_number=connector_number,
-        user_id=user.id if user else None,
-        driver_name=user.full_name if user else None,
-        id_tag_id=tag.id if tag else None,
-        id_tag=id_tag_value,
-        meter_start_wh=meter_start,
-        started_at=started_at,
-        ended_at=None if accepted else started_at,
-        status="active" if accepted else "needs_review",
-        anomaly_reason=None if accepted else (
-            "invalid_connector" if connector is None else f"start_{effective_status.lower()}"
-        ),
-    )
-    db.add(session)
-    db.flush()
-    if accepted and connector is not None:
-        connector.status = "charging"
-    return pack_call_result(
-        msg_id,
-        {"transactionId": session.id, "idTagInfo": {"status": effective_status}},
-    )
-
-
-def handle_stop_transaction(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    transaction_id = payload.get("transactionId")
-    meter_stop = payload.get("meterStop")
-    ended_at = _parse_timestamp(payload.get("timestamp"))
-    reason = payload.get("reason", "Other")
-    if type(transaction_id) is not int or transaction_id <= 0:
-        return pack_call_error(msg_id, "FormationViolation", "transactionId must be a positive integer")
-    if type(meter_stop) is not int or meter_stop < 0:
-        return pack_call_error(msg_id, "FormationViolation", "meterStop must be a non-negative integer")
-    if ended_at is None or not isinstance(reason, str) or len(reason) > 50:
-        return pack_call_error(msg_id, "FormationViolation", "A valid timestamp and reason are required")
-    transaction_data = payload.get("transactionData", [])
-    if not isinstance(transaction_data, list):
-        return pack_call_error(msg_id, "FormationViolation", "transactionData must be an array")
-
-    session = (
-        db.query(ChargingSession)
-        .filter_by(id=transaction_id, charge_point_id=point.id)
-        .first()
-    )
-    if session is None:
-        samples = _normalize_meter_values(transaction_data, ended_at)
-        _save_orphan_message(
-            db,
-            point,
-            action="StopTransaction",
-            transaction_id=transaction_id,
-            connector_number=None,
-            reason="transaction_not_found",
-            payload={
-                "timestamp": ended_at.isoformat(),
-                "meterStop": meter_stop,
-                "reason": reason,
-                "transactionData": samples,
-            },
-        )
-        logger.warning(
-            "Orphan StopTransaction received: charge_point=%s transaction_id=%s",
-            point.code,
-            transaction_id,
-        )
-        return pack_call_result(msg_id, {})
-    if session.ended_at is not None:
-        return pack_call_result(msg_id, {"idTagInfo": {"status": "Accepted"}})
-
-    _store_meter_values(db, session, _normalize_meter_values(transaction_data, ended_at))
-    session.meter_stop_wh = meter_stop
-    session.ended_at = ended_at
-    session.stop_reason = reason
-    session.remote_stop_requested_at = None
-    connector = (
-        db.query(Connector)
-        .filter_by(charge_point_id=point.id, connector_id=session.connector_number)
-        .first()
-    )
-    calculated_kwh = calculate_energy_kwh(session.meter_start_wh, meter_stop)
-    if calculated_kwh is not None:
-        session.energy_kwh = calculated_kwh
-        session.status = "completed"
-        session.anomaly_reason = None
-        finalize_session_billing(db, session, _normalize_meter_values(transaction_data, ended_at))
-    else:
-        session.energy_kwh = None
-        session.status = "needs_review"
-        session.anomaly_reason = "negative_kwh"
-    if connector is not None:
-        connector.status = "available"
-    return pack_call_result(msg_id, {"idTagInfo": {"status": "Accepted"}})
-
-
-def handle_meter_values(db: Session, point: ChargePoint, msg_id: str, payload: dict) -> str:
-    connector_number = payload.get("connectorId")
-    transaction_id = payload.get("transactionId")
-    readings = payload.get("meterValue")
-    if type(connector_number) is not int or connector_number < 0:
-        return pack_call_error(msg_id, "FormationViolation", "connectorId must be a non-negative integer")
-    if not isinstance(readings, list):
-        return pack_call_error(msg_id, "FormationViolation", "meterValue must be an array")
-    if transaction_id is not None and type(transaction_id) is not int:
-        return pack_call_error(msg_id, "FormationViolation", "transactionId must be an integer")
-
-    query = db.query(ChargingSession).filter(
-        ChargingSession.charge_point_id == point.id,
-        ChargingSession.ended_at.is_(None),
-    )
-    if transaction_id is not None:
-        query = query.filter(ChargingSession.id == transaction_id)
-    else:
-        query = query.filter(ChargingSession.connector_number == connector_number)
-    session = query.order_by(ChargingSession.id.desc()).first()
-    fallback_timestamp = _parse_timestamp(payload.get("timestamp"))
-    samples = _normalize_meter_values(readings, fallback_timestamp)
-    if session is None:
-        _save_orphan_message(
-            db,
-            point,
-            action="MeterValues",
-            transaction_id=transaction_id,
-            connector_number=connector_number,
-            reason="no_active_session",
-            payload={"connectorId": connector_number, "transactionId": transaction_id, "meterValue": samples},
-        )
-        logger.warning(
-            "Orphan MeterValues received: charge_point=%s connector=%s transaction_id=%s",
-            point.code,
-            connector_number,
-            transaction_id,
-        )
-        return pack_call_result(msg_id, {})
-
-    _store_meter_values(db, session, samples)
-    return pack_call_result(msg_id, {})
 
 
 KNOWN_MEASURANDS = {

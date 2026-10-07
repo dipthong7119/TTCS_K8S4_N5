@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% set active_page = "wallet" %}
 
 {% block title %}Ví của tôi{% endblock %}
@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/wallet.css" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/wallet.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -111,5 +111,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/pages/wallet.js"></script>
+<script src="{{ asset_url('js/pages/wallet.js') }}"></script>
 {% endblock %}

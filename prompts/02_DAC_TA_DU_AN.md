@@ -1,6 +1,6 @@
 # ĐẶC TẢ DỰ ÁN — Nền tảng vận hành trạm sạc xe điện (CSMS)
 
-> Nguồn: tổng hợp và cấu trúc lại từ `sprint1.xlsx` (kế hoạch Scrum) và `01_CODEBASE_MAP.md` (cấu trúc mã nguồn).
+> Nguồn: workbook kế hoạch Scrum của dự án (hiện trong `huongdan/`) và `01_CODEBASE_MAP.md` (cấu trúc mã nguồn).
 > Tài liệu này là **nguồn tham chiếu nghiệp vụ duy nhất**. Không tự suy diễn yêu cầu ngoài những gì ghi ở đây — phần nào ghi "Chưa refine" nghĩa là **chưa đủ để code**, phải dừng và hỏi lại Product Owner / người dùng trước khi triển khai.
 
 ## 1. Thông tin chung
