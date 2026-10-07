@@ -90,11 +90,15 @@ jobs:
           docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --no-build --wait --wait-timeout 120 db app
           python -m pytest tests/sprint2_docker_acceptance.py tests/test_scrum182_20charger_scenario.py::test_scrum182_smoke_3_chargers --tb=short -v
 
+      - name: Build intentionally broken recovery image (T-56 verification only)
+        working-directory: .
+        run: docker build --builder default -t csms-app:t56-negative .github/t56-negative
+
       - name: T-56 / SCRUM-185 - 20-charger recovery and kWh gate
         id: sprint3-acceptance
         timeout-minutes: 5
         working-directory: .
-        run: python scripts/run_sprint3_ci.py --image csms-app:ci --no-build --project csms-sprint3-ci --repeat 3
+        run: python scripts/run_sprint3_ci.py --image csms-app:t56-negative --no-build --project csms-sprint3-ci --repeat 3
 
       - name: Save Sprint 3 acceptance evidence
         if: always() && steps.sprint3-acceptance.outcome != 'skipped'
