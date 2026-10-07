@@ -95,6 +95,36 @@ Lệnh chạy một trụ trực tiếp trước đây (`SIM-01 --host localhost
 vẫn được hỗ trợ. T-55 chỉ cung cấp dịch vụ trụ; kịch bản phiên ngắt–nối và gate CI
 là T-46/T-56, thực hiện riêng theo phân công.
 
+### CI 20 trụ và gate merge — T-56 / SCRUM-185
+
+CI chạy Ruff, Mypy, kiểm tra thư viện, unit test và frontend trước khi build
+image, kiểm thử Docker cũ, rồi gọi cùng gói kiểm thử Sprint 3 dùng trên máy local:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-dev.txt
+.\.venv\Scripts\python.exe scripts/run_sprint3_ci.py
+```
+
+Lệnh tự build image và tạo stack PostgreSQL/app riêng với cổng ngẫu nhiên.
+Mỗi lượt có **20 trụ**, mỗi trụ ngắt/nối **1–3 lần**, chạy **3 lượt** với seed
+42/43/44. Kết quả kiểm tra cả phiên bị mất/nhân đôi, MeterValues sau khi nối
+lại, trạng thái hoàn tất và kWh trong ngưỡng 0.001. Không dùng dữ liệu mẫu
+của trang web. Khi đã có image, thêm `--image <tag> --no-build`.
+
+Báo cáo nằm trong `outputs/sprint3-ci/<lượt chạy>/`: log pytest, JUnit,
+JSON kịch bản, JSON/Markdown theo định dạng SCRUM-183/184, log Docker và
+`manifest.json`. CI giữ artifact **sprint3-20-charger-evidence** trong 14 ngày,
+kể cả khi test thất bại; bảng đối chiếu cũng hiện trong Actions Summary.
+Lệnh trả mã lỗi nếu test lỗi/bị skip, thiếu phiên/báo cáo hoặc dọn stack thất bại.
+Stack được dọn sau mỗi lượt chạy; không tái sử dụng/xóa project Docker đã tồn tại.
+
+Check bắt buộc trên GitHub là **Sprint 3 CI**. Cấu hình cho `main` và
+`sprint-3` ở [.github/sprint3-branch-protection.json](.github/sprint3-branch-protection.json).
+GitHub phải áp dụng cấu hình này để chặn merge thực sự; YAML CI tự nó chưa
+đủ. Chính sách yêu cầu nhánh cập nhật với nhánh đích và check của GitHub Actions
+thành công, áp dụng cả quản trị viên. Các thay đổi tiếp theo đi qua PR.
+Kết quả nghiệm thu ở [T-56 / SCRUM-185](ketqua/T-56_SCRUM-185_ket_qua.md).
+
 Hướng dẫn thử trực tiếp các luồng sau khi đồng bộ main:
 [Kiểm thử web local](huongdan/kiem_thu_sau_pull_main.md).
 

@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   build-lint-test:
+    name: Sprint 3 CI
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -38,7 +39,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Run Linter (Ruff)
-        run: python -m ruff check app tests alembic ../tests
+        run: python -m ruff check app tests alembic ../tests ../scripts
 
       - name: Typecheck application (Mypy)
         run: python -m mypy app
@@ -78,16 +79,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Validate Docker Compose OCPP simulator and 20-charger scenario
+      - name: Validate existing Docker Compose OCPP acceptance
         id: smoke-tests
-        timeout-minutes: 8
+        timeout-minutes: 5
         working-directory: .
         shell: bash
         run: |
           set -euo pipefail
           export CSMS_IMAGE=csms-app:ci
           docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --no-build --wait --wait-timeout 120 db app
-          python -m pytest tests/sprint2_docker_acceptance.py tests/test_scrum182_20charger_scenario.py --tb=short -v
+          python -m pytest tests/sprint2_docker_acceptance.py tests/test_scrum182_20charger_scenario.py::test_scrum182_smoke_3_chargers --tb=short -v
+
+      - name: T-56 / SCRUM-185 - 20-charger recovery and kWh gate
+        id: sprint3-acceptance
+        timeout-minutes: 5
+        working-directory: .
+        run: python scripts/run_sprint3_ci.py --image csms-app:ci --no-build --project csms-sprint3-ci --repeat 3
+
+      - name: Save Sprint 3 acceptance evidence
+        if: always() && steps.sprint3-acceptance.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-20-charger-evidence
+          path: outputs/sprint3-ci/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Stop Sprint 3 acceptance stack
+        if: always() && steps.sprint3-acceptance.outcome != 'skipped'
+        working-directory: .
+        run: docker compose --env-file .env.example -p csms-sprint3-ci -f docker-compose.acceptance.yml down -v --remove-orphans
 
       - name: Collect failed Docker smoke-test diagnostics
         if: failure() && steps.smoke-tests.outcome == 'failure'

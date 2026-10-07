@@ -60,9 +60,12 @@ METER_STEP_WH = int(os.getenv("SCRUM182_METER_STEP_WH", "2500"))  # 2.5 kWh/lầ
 
 # Timeout tối đa để chờ một phiên đóng trong DB (giây)
 SESSION_CLOSE_TIMEOUT = int(os.getenv("SCRUM182_SESSION_CLOSE_TIMEOUT", "30"))
+RANDOM_SEED = int(os.getenv("SCRUM182_RANDOM_SEED", "42"))
+DISCONNECT_MIN = int(os.getenv("SCRUM182_DISCONNECT_MIN", "1"))
+DISCONNECT_MAX = int(os.getenv("SCRUM182_DISCONNECT_MAX", "1"))
 
 # File JSON kết quả — SCRUM-183 (Đức) sẽ đọc file này để đối chiếu
-RESULT_JSON_PATH = ROOT / "ketqua" / "scrum182_kwh_result.json"
+RESULT_JSON_PATH = Path(os.getenv("SCRUM182_RESULT_PATH", str(ROOT / "ketqua" / "scrum182_kwh_result.json")))
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +287,7 @@ async def _run_one_charger(
     meter_readings: int,
     meter_step_wh: int,
     rng: random.Random,
+    disconnect_count: int = 1,
 ) -> dict:
     """
     Chạy một trụ ảo qua vòng đời hoàn chỉnh.
@@ -293,6 +297,7 @@ async def _run_one_charger(
         "code":                code,
         "id_tag":              id_tag,
         "do_disconnect":       do_disconnect,
+        "disconnect_count":    0,
         "meter_readings_sent": [],
         "meter_start_wh":      0,
         "meter_stop_wh":       None,
@@ -303,6 +308,7 @@ async def _run_one_charger(
 
     client = _OCPPClient(ws_base, code)
     try:
+        disconnect_after = set(rng.sample(range(meter_readings - 1), disconnect_count)) if do_disconnect else set()
         # 1. Kết nối + BootNotification
         await client.connect()
         boot_result = await client.boot()
@@ -333,16 +339,16 @@ async def _run_one_charger(
             await client.meter_values(transaction_id, current_wh)
             record["meter_readings_sent"].append(current_wh)
 
-            # Ngắt giữa chừng sau reading đầu tiên
-            if do_disconnect and reading_idx == 0:
+            # Nối lại đúng transactionId; không tạo StartTransaction thứ hai.
+            if reading_idx in disconnect_after:
                 await client.disconnect()
                 await asyncio.sleep(rng.uniform(0.5, 1.5))
                 # Kết nối lại và boot lại
                 await client.connect()
                 await client.boot()
-                for cid in (0, 1):
-                    await client.status_notification(cid, "Available")
+                await client.status_notification(0, "Available")
                 await client.status_notification(1, "Charging")
+                record["disconnect_count"] += 1
 
         # 5. StopTransaction
         meter_stop = int(current_wh)
@@ -404,7 +410,7 @@ def _ensure_chargers_registered(http_url: str, codes: list[str]) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _wait_sessions_closed(engine, transaction_ids: list[int],
-                          timeout: int = 30) -> dict[int, dict]:
+                          timeout: int = 30, *, allow_incomplete: bool = False) -> dict[int, dict]:
     """Chờ đến khi tất cả phiên có ended_at != NULL trong DB."""
     result = {}
     deadline = time.monotonic() + timeout
@@ -425,6 +431,8 @@ def _wait_sessions_closed(engine, transaction_ids: list[int],
         if all_closed:
             return result
         time.sleep(0.5)
+    if allow_incomplete:
+        return result
     pytest.fail(
         f"Timeout {timeout}s — cac phien chua dong: "
         + str([tid for tid in transaction_ids
@@ -445,7 +453,8 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
     Kết quả xuất ra ketqua/scrum182_kwh_result.json
     để SCRUM-183 (Đức) dùng làm nguồn đối chiếu.
     """
-    rng   = random.Random(42)  # seed cố định để kết quả tái lập được
+    assert 1 <= DISCONNECT_MIN <= DISCONNECT_MAX < METER_READINGS_PER_SESSION
+    rng = random.Random(RANDOM_SEED)
     codes = [f"SCRUM182-SIM-{i:02d}" for i in range(1, CHARGER_COUNT + 1)]
 
     # Chọn ngẫu nhiên các trụ sẽ ngắt kết nối
@@ -453,6 +462,8 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
 
     # 1. Đăng ký trụ trong hệ thống
     station_id = _ensure_chargers_registered(docker_stack["http"], codes)
+    with docker_stack["db"].connect() as connection:
+        previous_session_id = connection.execute(text("SELECT COALESCE(MAX(id), 0) FROM charging_sessions")).scalar_one()
     print(f"\n[SCRUM-182] Station ID: {station_id}, Charger count: {len(codes)}, "
           f"Disconnect set: {sorted(disconnect_set)}")
 
@@ -466,6 +477,7 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
             meter_readings=METER_READINGS_PER_SESSION,
             meter_step_wh=METER_STEP_WH,
             rng=random.Random(rng.randint(0, 2**31)),
+            disconnect_count=rng.randint(DISCONNECT_MIN, DISCONNECT_MAX),
         )
         for code in codes
     ]
@@ -476,18 +488,20 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
     elapsed = time.monotonic() - t_start
     print(f"[SCRUM-182] Tat ca tru hoan thanh sau {elapsed:.2f}s")
 
-    # 3. Kiểm tra lỗi trong từng record
-    errors = [(r["code"], r["error"]) for r in records if r.get("error")]
-    assert not errors, "Mot so tru gap loi:\n" + "\n".join(f"  {c}: {e}" for c, e in errors)
-
-    # 4. Chờ DB cập nhật
+    # Luôn xuất kết quả cả khi lỗi để CI giữ bằng chứng theo mã phiên.
     transaction_ids = [r["transaction_id"] for r in records if r.get("transaction_id")]
-    assert len(transaction_ids) == CHARGER_COUNT, \
-        f"Chi co {len(transaction_ids)}/{CHARGER_COUNT} tru co transaction_id"
-
     db_rows = _wait_sessions_closed(
-        docker_stack["db"], transaction_ids, timeout=SESSION_CLOSE_TIMEOUT
-    )
+        docker_stack["db"], transaction_ids, timeout=SESSION_CLOSE_TIMEOUT, allow_incomplete=True
+    ) if transaction_ids else {}
+    with docker_stack["db"].connect() as connection:
+        sessions = connection.execute(text(
+            "SELECT id, charge_point_code FROM charging_sessions "
+            "WHERE id > :previous_id AND charge_point_code = ANY(:codes)"
+        ), {"previous_id": previous_session_id, "codes": codes}).mappings().all()
+        samples = connection.execute(text(
+            "SELECT session_id, value FROM meter_values WHERE session_id = ANY(:ids) "
+            "AND measurand = 'Energy.Active.Import.Register' ORDER BY measured_at, id"
+        ), {"ids": transaction_ids}).mappings().all()
 
     # 5. So sánh kWh kỳ vọng vs DB
     mismatches   = []
@@ -495,18 +509,30 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
 
     for rec in records:
         tid = rec["transaction_id"]
-        if tid is None:
-            continue
         db_row       = db_rows.get(tid, {})
         db_kwh       = float(db_row.get("energy_kwh") or 0)
         expected_kwh = rec["expected_kwh"] or 0.0
         delta        = abs(db_kwh - expected_kwh)
-        ok           = delta < 0.001  # sai so cho phep < 1 Wh
+        db_samples = [float(sample["value"]) for sample in samples if sample["session_id"] == tid]
+        session_ids = [row["id"] for row in sessions if row["charge_point_code"] == rec["code"]]
+        faults = []
+        if rec["error"]:
+            faults.append(rec["error"])
+        if session_ids != [tid]:
+            faults.append(f"lost/duplicate session: expected [{tid}], got {session_ids}")
+        if db_row.get("ended_at") is None or db_row.get("status") != "completed":
+            faults.append(f"session not completed: status={db_row.get('status')}")
+        if db_samples != rec["meter_readings_sent"]:
+            faults.append(f"MeterValues lost/duplicated: expected {rec['meter_readings_sent']}, got {db_samples}")
+        if expected_kwh <= 0 or db_kwh <= 0 or delta > 0.001:
+            faults.append(f"kWh mismatch: expected={expected_kwh:.3f}, actual={db_kwh:.3f}, delta={delta:.6f}")
+        ok = not faults
 
         result_items.append({
             "code":                  rec["code"],
             "transaction_id":        tid,
             "do_disconnect":         rec["do_disconnect"],
+            "disconnect_count":      rec["disconnect_count"],
             "id_tag":                rec["id_tag"],
             "meter_start_wh":        rec["meter_start_wh"],
             "meter_stop_wh":         rec["meter_stop_wh"],
@@ -516,18 +542,23 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
             "db_status":             db_row.get("status"),
             "kwh_delta":             round(delta, 6),
             "kwh_ok":                ok,
+            "errors":                faults,
         })
 
         if not ok:
             mismatches.append(
-                f"  {rec['code']}: ky_vong={expected_kwh:.3f} kWh, "
-                f"DB={db_kwh:.3f} kWh, delta={delta:.6f}"
+                f"  {rec['code']} session={tid}: ky_vong={expected_kwh:.3f} kWh, "
+                f"DB={db_kwh:.3f} kWh, delta={delta:.6f}: {'; '.join(faults)}"
             )
+        print(f"SESSION {tid} {rec['code']} expected={expected_kwh:.3f} kWh "
+              f"actual={db_kwh:.3f} kWh delta={delta:.6f} reconnects={rec['disconnect_count']} "
+              f"{'PASS' if ok else 'FAIL'} {'; '.join(faults)}")
 
     # 6. Xuất JSON để SCRUM-183 đối chiếu
     RESULT_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     result_payload = {
         "scrum_task":                 "SCRUM-182",
+        "random_seed":                RANDOM_SEED,
         "generated_at":               _utc_now(),
         "charger_count":              CHARGER_COUNT,
         "disconnect_count":           DISCONNECT_COUNT,

@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 outputs/sprint2-2026-09-27/*.png
 outputs/sprint2-2026-09-27/*.inspect.ndjson
+/outputs/sprint3-ci/
 .venv/
 .env
 .env.*
