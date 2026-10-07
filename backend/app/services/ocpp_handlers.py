@@ -56,6 +56,11 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
 
     if msg_type in (3, 4):
         return ""
+    if action == "MeterValues":
+        # Khóa SQLite phải có trước tra cứu trụ, phiên và số đo mới nhất.
+        from app.ocpp.handlers.meter_values import begin_meter_values_transaction
+
+        begin_meter_values_transaction(db)
     point = db.query(ChargePoint).filter(ChargePoint.code == charge_point_code).first()
     if point is None:
         return pack_call_error(msg_id, "SecurityError", "Charge point not found")

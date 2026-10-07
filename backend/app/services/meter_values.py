@@ -14,7 +14,7 @@ def get_latest_meter_value(db: Session, session_id: int, measurand: str) -> Mete
     stmt = (
         select(MeterValue)
         .where(MeterValue.session_id == session_id, MeterValue.measurand == measurand)
-        .order_by(MeterValue.measured_at.desc())
+        .order_by(MeterValue.measured_at.desc(), MeterValue.id.desc())
         .limit(1)
     )
     result = db.execute(stmt).scalars().first()

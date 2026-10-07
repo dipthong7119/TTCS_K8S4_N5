@@ -42,6 +42,8 @@ class ChargingSession(Base):
     status = Column(String(20), nullable=False, default="active", server_default="active")
     stop_reason = Column(String(50), nullable=True)
     anomaly_reason = Column(String(50), nullable=True)
+    needs_review = Column(Boolean, nullable=False, default=False, server_default=false())
+    review_reason = Column(String(255), nullable=True)
     is_demo = Column(Boolean, nullable=False, default=False, server_default=false())
     demo_key = Column(String(80), nullable=True, unique=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
