@@ -1,5 +1,12 @@
 ﻿# run.ps1 - Khởi chạy hệ thống CSMS trên Windows (không dùng Docker)
 
+param(
+    [ValidateRange(1, 20)]
+    [int]$SimulatorCount = 20,
+    [switch]$SkipDemoStations,
+    [switch]$SkipSimulator
+)
+
 $ErrorActionPreference = "Stop"
 
 $RootDir = $PSScriptRoot
@@ -9,6 +16,10 @@ $EnvFile = Join-Path $RootDir ".env"
 $EnvExample = Join-Path $RootDir ".env.example"
 $PreviousEnvFile = $env:CSMS_ENV_FILE
 $PreviousDatabaseUrl = $env:DATABASE_URL
+$PreviousLocalSimulatorEnabled = $env:CSMS_LOCAL_SIMULATOR_ENABLED
+$PreviousLocalSimulatorCount = $env:CSMS_LOCAL_SIMULATOR_COUNT
+$PreviousLocalIncludeDemoStations = $env:CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS
+$PreviousLocalSimulatorUrl = $env:CSMS_LOCAL_SIMULATOR_URL
 
 function New-ProjectVirtualEnvironment {
     param([switch]$Clear)
@@ -114,6 +125,10 @@ if (-not (Test-Path $EnvFile)) {
 }
 $env:CSMS_ENV_FILE = $EnvFile
 $env:DATABASE_URL = "sqlite:///./csms.db"
+$env:CSMS_LOCAL_SIMULATOR_ENABLED = (-not $SkipSimulator).ToString().ToLowerInvariant()
+$env:CSMS_LOCAL_SIMULATOR_COUNT = [string]$SimulatorCount
+$env:CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS = (-not $SkipDemoStations).ToString().ToLowerInvariant()
+$env:CSMS_LOCAL_SIMULATOR_URL = "ws://127.0.0.1:8000/ocpp"
 
 # 4. Chạy Alembic để cập nhật database
 Write-Host "Chạy Alembic database migrations..." -ForegroundColor Yellow
@@ -128,6 +143,13 @@ try {
 # 5. Khởi động Uvicorn server thông qua run.py
 Write-Host "Đang khởi chạy Uvicorn server..." -ForegroundColor Green
 Write-Host "Truy cập ứng dụng tại: http://localhost:8000/login" -ForegroundColor Green
+if ($SkipSimulator) {
+    Write-Host "OCPP simulator đã tắt theo tuỳ chọn -SkipSimulator." -ForegroundColor Yellow
+} elseif ($SkipDemoStations) {
+    Write-Host "OCPP simulator sẽ kết nối $SimulatorCount trụ SIM-* mẫu." -ForegroundColor Cyan
+} else {
+    Write-Host "OCPP simulator sẽ kết nối $SimulatorCount trụ SIM-* và 5 trụ demo (sẵn sàng/lỗi/bảo trì)." -ForegroundColor Cyan
+}
 & $PythonExe (Join-Path $RootDir "run.py")
 if ($LASTEXITCODE -ne 0) { throw "Ứng dụng kết thúc với mã lỗi $LASTEXITCODE." }
 } finally {
@@ -140,5 +162,25 @@ if ($LASTEXITCODE -ne 0) { throw "Ứng dụng kết thúc với mã lỗi $LAST
         Remove-Item Env:\DATABASE_URL -ErrorAction SilentlyContinue
     } else {
         $env:DATABASE_URL = $PreviousDatabaseUrl
+    }
+    if ($null -eq $PreviousLocalSimulatorEnabled) {
+        Remove-Item Env:\CSMS_LOCAL_SIMULATOR_ENABLED -ErrorAction SilentlyContinue
+    } else {
+        $env:CSMS_LOCAL_SIMULATOR_ENABLED = $PreviousLocalSimulatorEnabled
+    }
+    if ($null -eq $PreviousLocalSimulatorCount) {
+        Remove-Item Env:\CSMS_LOCAL_SIMULATOR_COUNT -ErrorAction SilentlyContinue
+    } else {
+        $env:CSMS_LOCAL_SIMULATOR_COUNT = $PreviousLocalSimulatorCount
+    }
+    if ($null -eq $PreviousLocalIncludeDemoStations) {
+        Remove-Item Env:\CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS -ErrorAction SilentlyContinue
+    } else {
+        $env:CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS = $PreviousLocalIncludeDemoStations
+    }
+    if ($null -eq $PreviousLocalSimulatorUrl) {
+        Remove-Item Env:\CSMS_LOCAL_SIMULATOR_URL -ErrorAction SilentlyContinue
+    } else {
+        $env:CSMS_LOCAL_SIMULATOR_URL = $PreviousLocalSimulatorUrl
     }
 }

@@ -69,10 +69,16 @@
   function renderStats(stations) {
     const counts = { active: 0, inactive: 0, maintenance: 0 };
     stations.forEach(s => { if (counts[s.status] !== undefined) counts[s.status]++; });
-    document.getElementById('stat-total').textContent       = stations.length;
-    document.getElementById('stat-active').textContent      = counts.active;
-    document.getElementById('stat-maintenance').textContent = counts.maintenance;
-    document.getElementById('stat-inactive').textContent    = counts.inactive;
+    const values = {
+      'stat-total': stations.length,
+      'stat-active': counts.active,
+      'stat-maintenance': counts.maintenance,
+      'stat-inactive': counts.inactive,
+    };
+    Object.entries(values).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    });
   }
 
   // ── Render bảng danh sách ──
