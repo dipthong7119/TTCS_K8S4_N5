@@ -5,7 +5,7 @@
  *
  * Chiến lược dữ liệu:
  *   1. Gọi GET /api/reconciliation/kwh  (API thật khi BE xong)
- *   2. Fallback: đọc file JSON mẫu SCRUM-183 (mock)
+ *   2. Fallback: đọc file JSON mẫu và gắn với các trụ đang đăng ký
  *   3. Render bảng, lọc, sắp xếp, tìm kiếm, xuất CSV / Markdown
  */
 
@@ -14,6 +14,7 @@
 /* ── Constants ──────────────────────────────────────────── */
 const API_ENDPOINT = '/api/reconciliation/kwh';
 const MOCK_ENDPOINT = '/static/data/kwh_reconciliation_sample.json';
+const INVENTORY_ENDPOINT = '/api/monitoring/tree';
 
 /* ── State ──────────────────────────────────────────────── */
 let allSessions = [];
@@ -21,14 +22,17 @@ let filteredSessions = [];
 let sortState = { col: 'session_id', dir: 'asc' };
 let activeFilter = 'all';
 let searchQuery = '';
+let reportIsSample = false;
 
 /* ── DOM refs ───────────────────────────────────────────── */
 const tbody        = document.getElementById('recon-tbody');
 const searchInput  = document.getElementById('recon-search');
+const stationFilter = document.getElementById('recon-station-filter');
 const filterBtns   = document.querySelectorAll('.recon-filter-btn[data-filter]');
 const exportCsvBtn = document.getElementById('recon-export-csv');
 const exportMdBtn  = document.getElementById('recon-export-md');
 const totalSessions    = document.getElementById('stat-total-sessions');
+const totalPoints      = document.getElementById('stat-total-points');
 const matchedSessions  = document.getElementById('stat-matched');
 const mismatchSessions = document.getElementById('stat-mismatch');
 const matchPct         = document.getElementById('stat-match-pct');
@@ -51,22 +55,85 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ── Data loading ───────────────────────────────────────── */
 async function loadData() {
   try {
+    let data;
+    let isSample = false;
     const res = await fetch(API_ENDPOINT, { credentials: 'include' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    initPage(json);
-  } catch (_) {
-    // Fallback to mock JSON (dữ liệu mẫu SCRUM-183)
-    try {
-      const res = await fetch(MOCK_ENDPOINT);
-      if (!res.ok) throw new Error('mock not found');
-      const json = await res.json();
-      showMockNotice();
-      initPage(json);
-    } catch (err) {
-      showError('Không thể tải dữ liệu đối chiếu. Vui lòng thử lại sau.');
+    if (res.ok) {
+      data = await res.json();
+      isSample = data.metadata?.is_sample === true;
+    } else if (res.status === 404) {
+      const sample = await fetch(MOCK_ENDPOINT, { cache: 'no-store' });
+      if (!sample.ok) throw new Error('Không thể tải dữ liệu đối chiếu mẫu.');
+      data = await sample.json();
+      isSample = true;
+    } else {
+      throw new Error('Không thể tải dữ liệu đối chiếu. Vui lòng đăng nhập lại hoặc thử lại sau.');
     }
+
+    const inventory = await fetch(INVENTORY_ENDPOINT, { credentials: 'include', cache: 'no-store' });
+    if (!inventory.ok) throw new Error('Không thể đồng bộ danh sách trạm và mã trụ. Vui lòng thử lại sau.');
+    reportIsSample = isSample;
+    const synced = syncReportInventory(data, await inventory.json(), isSample);
+    if (isSample) showMockNotice();
+    initPage(synced);
+  } catch (err) {
+    showError(err.message || 'Không thể tải dữ liệu đối chiếu. Vui lòng thử lại sau.');
   }
+}
+
+function syncReportInventory(data, stations, isSample) {
+  const points = [...stations].sort((a, b) => a.id - b.id).flatMap(station =>
+    [...station.charge_points].sort((a, b) => a.code.localeCompare(b.code)).map(point => ({
+      ...point, station_id: station.id, station_name: station.name,
+    }))
+  );
+  const byCode = new Map(points.map(point => [point.code, point]));
+  if (!isSample) {
+    // Historical energy always stays attached to its original charge-point code.
+    return { ...data, sessions: data.sessions.map(session => {
+      const point = byCode.get(session.charge_point_code);
+      return { ...session,
+        station_id: point?.station_id ?? session.station_id ?? null,
+        station_name: point?.station_name ?? session.station_name ?? 'Trụ chưa có trong danh sách hiện tại',
+      };
+    }) };
+  }
+
+  const available = points.filter(point => point.connectors.some(connector => connector.connector_id > 0));
+  const used = new Set();
+  // Keep a missing fixture code from taking another row's registered device.
+  const reserved = new Set(data.sessions.map(session => session.charge_point_code));
+  const sessions = data.sessions.flatMap(session => {
+    let point = byCode.get(session.charge_point_code);
+    if (!point || used.has(point.code) || !available.includes(point)) {
+      point = available.find(candidate => !used.has(candidate.code) && !reserved.has(candidate.code));
+    }
+    if (!point) return [];
+    used.add(point.code);
+    const connectors = point.connectors.filter(connector => connector.connector_id > 0);
+    const connector = connectors.find(item => item.connector_id === session.connector_id)
+      ?? [...connectors].sort((a, b) => a.connector_id - b.connector_id)[0];
+    return [{ ...session, charge_point_code: point.code, charge_point_id: point.id,
+      station_id: point.station_id, station_name: point.station_name,
+      connector_id: connector.connector_id,
+    }];
+  });
+  const matched = sessions.filter(session => session.status === 'MATCH').length;
+  const sum = field => Number(sessions.reduce((total, session) => total + session[field], 0).toFixed(3));
+  return { ...data,
+    metadata: { ...data.metadata,
+      title: `Dữ liệu mẫu đối chiếu kWh theo các trạm sạc hiện có (${sessions.length} trụ)`,
+      is_sample: true, inventory_synced: true, total_charge_points: sessions.length,
+    },
+    sessions,
+    summary: { total_sessions: sessions.length, matched_sessions: matched,
+      mismatched_sessions: sessions.length - matched,
+      match_percentage: sessions.length ? Number((100 * matched / sessions.length).toFixed(2)) : 0,
+      total_system_kwh: sum('system_kwh'), total_simulator_kwh: sum('simulator_kwh'),
+      total_difference_kwh: sum('difference_kwh'),
+      verdict: sessions.length > 0 && matched === sessions.length ? 'PASSED' : 'FAILED',
+    },
+  };
 }
 
 /* ── Init page with data ────────────────────────────────── */
@@ -80,6 +147,7 @@ function initPage(data) {
 
   /* Summary cards */
   setText(totalSessions,    summary.total_sessions);
+  setText(totalPoints, `${new Set(sessions.map(session => session.charge_point_code)).size} trụ sạc`);
   setText(matchedSessions,  summary.matched_sessions);
   setText(mismatchSessions, summary.mismatched_sessions);
   setText(matchPct,         `${summary.match_percentage.toFixed(1)}%`);
@@ -93,7 +161,7 @@ function initPage(data) {
     verdictBanner.className = `recon-verdict recon-verdict--${passed ? 'passed' : 'failed'}`;
     verdictBanner.innerHTML = `
       <div class="recon-verdict__icon">${passed ? '✓' : '✗'}</div>
-      <span>${passed
+      <span>${summary.total_sessions === 0 ? 'Chưa có phiên đối chiếu cho các trụ hiện có' : passed
         ? `Tất cả ${summary.matched_sessions}/${summary.total_sessions} phiên đều khớp — sai số trong ngưỡng cho phép`
         : `${summary.mismatched_sessions} phiên không khớp — cần xem xét lại`
       }</span>
@@ -103,12 +171,25 @@ function initPage(data) {
 
   /* Table */
   allSessions = sessions;
+  populateStationFilter(sessions);
   applyFiltersAndRender();
+}
+
+function populateStationFilter(sessions) {
+  if (!stationFilter) return;
+  const stations = new Map(sessions.map(session => [String(session.station_id ?? 'unregistered'), session.station_name]));
+  stationFilter.innerHTML = '<option value="">Tất cả trạm</option>' + [...stations].map(([id, name]) =>
+    `<option value="${escHtml(id)}">${escHtml(name)}</option>`
+  ).join('');
 }
 
 /* ── Filter + Search + Sort ─────────────────────────────── */
 function applyFiltersAndRender() {
   let result = [...allSessions];
+
+  if (stationFilter?.value) {
+    result = result.filter(session => String(session.station_id ?? 'unregistered') === stationFilter.value);
+  }
 
   /* Filter by status */
   if (activeFilter !== 'all') {
@@ -120,6 +201,7 @@ function applyFiltersAndRender() {
     const q = searchQuery.toLowerCase();
     result = result.filter(s =>
       s.charge_point_code.toLowerCase().includes(q) ||
+      (s.station_name || '').toLowerCase().includes(q) ||
       String(s.session_id).includes(q) ||
       (s.notes || '').toLowerCase().includes(q)
     );
@@ -145,7 +227,7 @@ function renderTable(sessions) {
 
   if (sessions.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="10">
+      <tr><td colspan="12">
         <div class="recon-empty">
           <div class="recon-empty__icon">🔍</div>
           <div class="recon-empty__title">Không tìm thấy phiên nào</div>
@@ -166,6 +248,7 @@ function renderTable(sessions) {
     <tr id="row-session-${s.session_id}" data-status="${s.status}">
       <td>${idx + 1}</td>
       <td><strong>${escHtml(s.charge_point_code)}</strong></td>
+      <td class="station-cell">${escHtml(s.station_name || '—')}</td>
       <td>${s.connector_id}</td>
       <td>${s.meter_start_wh.toLocaleString('vi-VN')}</td>
       <td>${s.meter_stop_wh.toLocaleString('vi-VN')}</td>
@@ -198,6 +281,7 @@ function renderTable(sessions) {
 
 /* ── Bind events ────────────────────────────────────────── */
 function bindEvents() {
+  if (stationFilter) stationFilter.addEventListener('change', applyFiltersAndRender);
   /* Filter buttons */
   filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -256,14 +340,15 @@ function updateSortIcons(activeTh, dir) {
 /* ── Export CSV ─────────────────────────────────────────── */
 function exportCsv() {
   const headers = [
-    'STT', 'Mã trụ', 'Đầu nối', 'Đo đầu (Wh)', 'Đo cuối (Wh)',
+    'STT', 'Mã trụ', 'Trạm sạc', 'Đầu nối', 'Đo đầu (Wh)', 'Đo cuối (Wh)',
     'Ngắt nối', 'System kWh', 'Simulator kWh', 'Chênh lệch kWh',
-    'Trạng thái', 'Ghi chú'
+    'Trạng thái', 'Ghi chú', 'Nguồn dữ liệu'
   ];
 
   const rows = filteredSessions.map((s, i) => [
     i + 1,
     s.charge_point_code,
+    s.station_name || '—',
     s.connector_id,
     s.meter_start_wh,
     s.meter_stop_wh,
@@ -272,25 +357,29 @@ function exportCsv() {
     s.simulator_kwh.toFixed(3),
     s.difference_kwh.toFixed(3),
     s.status,
-    `"${(s.notes || '').replace(/"/g, '""')}"`
+    s.notes || '',
+    reportIsSample ? 'Dữ liệu kWh mẫu' : 'Báo cáo đối chiếu'
   ]);
 
-  const csv = [headers, ...rows].map(r => r.join(',')).join('\r\n');
+  const csvCell = value => `"${String(value).replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
   downloadText(csv, `kwh_reconciliation_${dateSuffix()}.csv`, 'text/csv;charset=utf-8;');
 }
 
 /* ── Export Markdown ────────────────────────────────────── */
 function exportMarkdown() {
-  const sep = '|---|---|---|---:|---:|---:|---:|---:|---:|---|---|';
-  const header = '| STT | Mã trụ | Đầu nối | Đo đầu (Wh) | Đo cuối (Wh) | Ngắt nối | System kWh | Sim kWh | Δ kWh | Trạng thái | Ghi chú |';
+  const sep = '|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|';
+  const header = '| STT | Mã trụ | Trạm sạc | Đầu nối | Đo đầu (Wh) | Đo cuối (Wh) | Ngắt nối | System kWh | Sim kWh | Δ kWh | Trạng thái | Ghi chú |';
+  const cell = value => String(value).replace(/\|/g, '\\|').replace(/[\r\n]/g, ' ');
 
   const rows = filteredSessions.map((s, i) =>
-    `| ${i+1} | ${s.charge_point_code} | ${s.connector_id} | ${s.meter_start_wh.toLocaleString()} | ${s.meter_stop_wh.toLocaleString()} | ${s.disconnect_count}× | ${s.system_kwh.toFixed(3)} | ${s.simulator_kwh.toFixed(3)} | ${s.difference_kwh.toFixed(3)} | ${s.status} | ${s.notes || '—'} |`
+    `| ${i+1} | ${cell(s.charge_point_code)} | ${cell(s.station_name || '—')} | ${s.connector_id} | ${s.meter_start_wh.toLocaleString()} | ${s.meter_stop_wh.toLocaleString()} | ${s.disconnect_count}× | ${s.system_kwh.toFixed(3)} | ${s.simulator_kwh.toFixed(3)} | ${s.difference_kwh.toFixed(3)} | ${s.status} | ${cell(s.notes || '—')} |`
   );
 
   const md = [
     `# Bảng đối chiếu kWh — SCRUM-184`,
     `_Xuất lúc: ${new Date().toLocaleString('vi-VN')}_`,
+    reportIsSample ? '_Dữ liệu kWh mẫu; mã trụ và tên trạm theo danh sách hiện tại._' : '_Báo cáo đối chiếu._',
     '',
     header,
     sep,
@@ -304,7 +393,7 @@ function exportMarkdown() {
 function renderSkeletons() {
   if (!tbody) return;
   tbody.innerHTML = Array.from({ length: 6 }).map(() => `
-    <tr><td colspan="11"><div class="recon-skeleton"></div></td></tr>
+    <tr><td colspan="12"><div class="recon-skeleton"></div></td></tr>
   `).join('');
 }
 
@@ -318,10 +407,10 @@ function showMockNotice() {
 function showError(msg) {
   if (!tbody) return;
   tbody.innerHTML = `
-    <tr><td colspan="11">
+    <tr><td colspan="12">
       <div class="recon-empty">
         <div class="recon-empty__icon">⚠️</div>
-        <div class="recon-empty__title">${msg}</div>
+        <div class="recon-empty__title">${escHtml(msg)}</div>
       </div>
     </td></tr>`;
 }

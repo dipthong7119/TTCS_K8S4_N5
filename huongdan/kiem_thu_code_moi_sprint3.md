@@ -87,10 +87,12 @@ http://localhost:8000/sessions/kwh-reconciliation
 | --- | --- |
 | Mở trang | Hiện cảnh báo đang sử dụng dữ liệu mẫu; có 20 phiên |
 | Xem màu và chữ | Nền sáng, chữ/số rõ; bảng, ô tìm kiếm và thẻ tổng kết cùng tông màu |
-| Xem tổng kết | 20 khớp, 0 lệch, 100%; System và Simulator cùng 372.450 kWh |
+| Xem tổng kết | 20 khớp, 0 lệch, 100%; System và Simulator cùng 382.350 kWh (tổng đúng của 20 dòng mẫu) |
 | Bấm Khớp | Hiện cả 20 phiên |
 | Bấm Lệch hoặc Thiếu CSMS | Danh sách rỗng vì mẫu hiện tại không có các ca này |
-| Chọn Tất cả, tìm `CP01` | Chỉ hiện dòng có mã trụ khớp |
+| Chọn Tất cả, tìm `CP_VINCOM_01` | Chỉ hiện dòng có mã trụ khớp |
+| Chọn bộ lọc Trạm: AEON Mall | Chỉ hiện các phiên mẫu của trụ thuộc AEON |
+| Tìm theo tên trạm | Hiện các phiên mẫu thuộc trạm đó |
 | Tìm mã không tồn tại | Hiện trạng thái không có kết quả |
 | Bấm tiêu đề cột kWh hoặc mã trụ hai lần | Đổi thứ tự tăng/giảm |
 | Bấm CSV và Markdown | Tải file có các dòng đang được lọc trên màn hình |
@@ -98,9 +100,13 @@ http://localhost:8000/sessions/kwh-reconciliation
 Xóa nội dung tìm kiếm và chọn Tất cả trước khi muốn xuất đủ 20 dòng.
 
 Hiện chưa có route backend `/api/reconciliation/kwh`; frontend gọi thử rồi
-đọc `/static/data/kwh_reconciliation_sample.json`. HTTP 404 của API này trong
-Network là nguyên nhân fallback. Số liệu trên trang chưa phải kết quả của lượt
-chạy kịch bản SCRUM-182 trên máy bạn.
+đọc `/static/data/kwh_reconciliation_sample.json`. Mã trụ, đầu nối và tên trạm
+được đồng bộ với `/api/monitoring/tree` mỗi lần mở lại trang. Hai file dữ liệu
+mẫu dùng 20 mã đã đăng ký của Vincom, AEON, Thủ Thiêm và trạm thử nghiệm OCPP.
+Khi trụ đổi mã hoặc bị xóa, chỉ các dòng kWh mẫu được gắn lại với trụ hiện có;
+báo cáo thật luôn giữ mã trụ gốc. Nếu còn ít hơn 20 trụ hợp lệ, bảng chỉ dùng
+số trụ hiện có và tính lại tổng tương ứng. CSV/Markdown có tên trạm và ghi rõ
+nguồn kWh mẫu. Số liệu trên trang chưa phải kết quả của lượt chạy SCRUM-182.
 
 ## 4. Danh sách trạm dành cho tài xế
 

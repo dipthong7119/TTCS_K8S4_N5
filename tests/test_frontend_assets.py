@@ -34,6 +34,8 @@ def test_asset_url_changes_for_same_size_file_update(tmp_path, monkeypatch):
         ("admin", "/stations"),
         ("admin", "/stations/new"),
         ("admin", "/sessions"),
+        ("admin", "/sessions/kwh-reconciliation"),
+        ("operator", "/sessions/kwh-reconciliation"),
         ("admin", "/sessions/anomalies"),
         ("admin", "/audit"),
         ("admin", "/wallet"),
@@ -80,3 +82,28 @@ def test_login_has_no_simulated_login_mode(client, url):
     assert "login-mock-notice" not in response.text
     assert "mock@example.test" not in response.text
     assert "Chế độ mock" not in response.text
+
+
+def test_reconciliation_samples_use_registered_station_codes():
+    import json
+    from pathlib import Path
+
+    from seed_data import STATIONS
+
+    root = Path(__file__).resolve().parents[1]
+    reports = [json.loads((root / path).read_text(encoding="utf-8")) for path in (
+        "ketqua/kwh_reconciliation_sample.json", "frontend/static/data/kwh_reconciliation_sample.json",
+    )]
+    assert reports[0] == reports[1]
+    inventory = {point["code"]: (station["name"], point["connectors"])
+                 for station in STATIONS for point in station["charge_points"]}
+    report = reports[0]
+    assert report["metadata"]["is_sample"] is True
+    assert len({session["charge_point_code"] for session in report["sessions"]}) == 20
+    assert report["summary"]["total_system_kwh"] == pytest.approx(
+        sum(session["system_kwh"] for session in report["sessions"])
+    )
+    for session in report["sessions"]:
+        station_name, connector_count = inventory[session["charge_point_code"]]
+        assert session["station_name"] == station_name
+        assert 1 <= session["connector_id"] <= connector_count
