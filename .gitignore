@@ -25,6 +25,9 @@ htmlcov/
 /prompts/ke_hoach_sprint2_extracted/
 /baseline_test_results.txt
 
+# Prevent accidentally adding a nested copy of this repository
+/TTCS_K8S4_N5/
+
 # Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
 nhat_ky_lam_tung.md
 .vscode/
