@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% set active_page = "sessions" %}
+{% set active_page = "kwh-reconciliation" %}
 
-{% block title %}Bảng đối chiếu kWh — SCRUM-184{% endblock %}
-{% block meta_description %}Xuất bảng đối chiếu kết quả năng lượng kWh giữa hệ thống CSMS và simulator cho kịch bản 20 trụ ảo ngắt–nối ngẫu nhiên (S-21, E-04).{% endblock %}
+{% block title %}Bảng đối chiếu kWh{% endblock %}
+{% block meta_description %}So sánh điện năng ghi nhận giữa hệ thống CSMS và trụ mô phỏng; lọc và xuất kết quả đối chiếu.{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -18,48 +18,49 @@
 
 {% block content %}
 
+<section class="recon-page" aria-labelledby="recon-page-title">
 <!-- ═══════════════════ Page Header ═══════════════════ -->
 <div class="page-header" id="kwh-reconciliation-page">
   <div class="page-header__info">
-    <h1 class="page-header__title">Bảng đối chiếu kWh</h1>
+    <h1 class="page-header__title" id="recon-page-title">Bảng đối chiếu kWh</h1>
     <p class="page-header__subtitle">
-      So sánh điện năng hệ thống CSMS tính toán với giá trị simulator báo cáo —
-      kịch bản 20 trụ ảo ngắt–nối ngẫu nhiên (<abbr title="Story S-21: Phiên đang dở được khôi phục đúng">S-21</abbr>,
-      <abbr title="Epic E-04: Kết nối OCPP và phiên sạc">E-04</abbr>).
+      So sánh điện năng hệ thống CSMS ghi nhận với dữ liệu từ trụ mô phỏng.
     </p>
   </div>
+  <a href="/sessions" class="btn btn--secondary" id="btn-back-to-sessions">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="m12 19-7-7 7-7M5 12h14"/>
+    </svg>
+    Về phiên sạc
+  </a>
 
   <!-- Meta info -->
-  <dl class="page-header__meta" style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:.6rem;font-size:.8rem;color:var(--text-muted,#8490a8);">
+  <dl class="recon-meta">
     <div>
-      <dt style="display:inline;font-weight:600;">Tiêu đề:</dt>
-      <dd style="display:inline;margin-left:.3rem;" id="recon-meta-title">—</dd>
+      <dt>Dữ liệu:</dt>
+      <dd id="recon-meta-title">—</dd>
     </div>
     <div>
-      <dt style="display:inline;font-weight:600;">Tạo lúc:</dt>
-      <dd style="display:inline;margin-left:.3rem;" id="recon-meta-generated">—</dd>
+      <dt>Tạo lúc:</dt>
+      <dd id="recon-meta-generated">—</dd>
     </div>
     <div>
-      <dt style="display:inline;font-weight:600;">Sai số tối đa:</dt>
-      <dd style="display:inline;margin-left:.3rem;" id="recon-meta-tolerance">—</dd>
+      <dt>Sai số tối đa:</dt>
+      <dd id="recon-meta-tolerance">—</dd>
     </div>
   </dl>
 </div>
 
 <!-- Mock data notice (ẩn mặc định, hiện khi dùng dữ liệu mẫu) -->
-<div id="recon-mock-notice"
-     style="display:none;align-items:center;gap:.6rem;padding:.65rem 1rem;
-            background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);
-            border-radius:10px;margin-bottom:1.25rem;font-size:.82rem;
-            color:#fbbf24;">
+<div id="recon-mock-notice" class="recon-notice" style="display:none;" role="note">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
     <line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>
   <span>
-    Đang hiển thị <strong>dữ liệu mẫu</strong> (SCRUM-183). API thật sẽ được kết nối
-    sau khi Đức hoàn thành chạy kịch bản 20 trụ.
+    Đang hiển thị <strong>dữ liệu mẫu</strong> để kiểm tra giao diện.
+    Các số liệu này chưa phản ánh kết quả sạc thực tế.
   </span>
 </div>
 
@@ -113,7 +114,7 @@
 <!-- ═══════════════════ Toolbar ═══════════════════ -->
 <div class="recon-toolbar">
   <div class="recon-toolbar__left">
-    <span style="font-size:.8rem;color:var(--text-muted,#8490a8);font-weight:600;">Lọc:</span>
+    <span class="recon-toolbar__label">Lọc:</span>
 
     <button class="recon-filter-btn is-active" id="filter-all"
             data-filter="all" type="button"
@@ -137,11 +138,9 @@
   </div>
 
   <div class="recon-export-group">
-    <span id="recon-row-count"
-          style="font-size:.8rem;color:var(--text-muted,#8490a8);
-                 align-self:center;margin-right:.3rem;">—</span>
+    <span id="recon-row-count" class="recon-row-count">—</span>
 
-    <button class="btn btn--ghost btn--sm" id="recon-export-csv"
+    <button class="btn btn--secondary" id="recon-export-csv"
             type="button" title="Xuất CSV">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
@@ -153,7 +152,7 @@
       CSV
     </button>
 
-    <button class="btn btn--ghost btn--sm" id="recon-export-md"
+    <button class="btn btn--secondary" id="recon-export-md"
             type="button" title="Xuất Markdown">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2"
@@ -167,7 +166,7 @@
 </div>
 
 <!-- ═══════════════════ Table ═══════════════════ -->
-<div class="recon-table-wrapper" role="region" aria-label="Bảng đối chiếu kWh">
+<div class="recon-table-wrapper" role="region" aria-label="Bảng đối chiếu kWh" tabindex="0">
   <table class="recon-table" id="recon-table">
     <thead>
       <tr>
@@ -210,6 +209,7 @@
   </table>
 </div>
 
+</section>
 {% endblock %}
 
 {% block extra_js %}
