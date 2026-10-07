@@ -66,10 +66,12 @@ const ApiClient = (() => {
     getMonitoringTree: () => _request('GET', '/monitoring/tree'),
     resetChargePoint: (code, type = 'Soft') => _request('POST', `/charge_points/${encodeURIComponent(code)}/reset`, { type }),
 
+    remoteStartChargePoint: (code, connectorId, idTag, opts) => _request('POST', `/charge_points/${encodeURIComponent(code)}/remote-start`, { connector_id: connectorId, id_tag: idTag }, opts),
+
     // --- Sessions ---
     listMySessions:   (params = {}) => _request('GET', '/sessions/mine?' + new URLSearchParams(params)),
-    getCurrentSession: ()           => _request('GET', '/sessions/current'),
-    listAllSessions:  (params = {}) => _request('GET', '/sessions?' + new URLSearchParams(params)),
+    getCurrentSession: (opts)       => _request('GET', '/sessions/current', null, opts),
+    listAllSessions:  (params = {}, opts) => _request('GET', '/sessions?' + new URLSearchParams(params), null, opts),
     getSession:       (id)          => _request('GET', `/sessions/${id}`),
     remoteStop:       (id)          => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies:    (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),

@@ -48,8 +48,11 @@ function monitoring(getTree, clock = Date, options = {}) {
   const apiResets = [];
   let requests = 0;
   const context = vm.createContext({
-    document, window: {}, setTimeout, clearTimeout, Date: clock, console,
+    document, window: { location: { assign: url => options.redirects?.push(url) } }, AbortController, setTimeout: options.setTimeout || setTimeout, clearTimeout: options.clearTimeout || clearTimeout, Date: clock, console,
     ApiClient: {
+      remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
+      listAllSessions: options.listSessions || (async () => ({ items: [] })),
+      getCurrentSession: options.currentSession || (async () => null),
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
@@ -682,23 +685,136 @@ test('valid login follows the server response even with the legacy mock query', 
   assert.equal(page.button.disabled, true);
 });
 
-test('connector selection enables only usable options and start button clearly reports UI preview', async () => {
+
+// SCRUM-194: run the real drawer handlers and API contract with a deterministic clock.
+async function startPage(options = {}) {
   const controls = element();
   const select = controls.querySelector('[data-start-connector]');
   const button = controls.querySelector('[data-start-charging]');
+  const tag = controls.querySelector('[data-start-tag]');
   const message = controls.querySelector('[data-start-message]');
-  select.selectedOptions = [{ disabled: false }]; button.dataset.cpCode = 'REAL-01';
-  const page = monitoring(async () => tree, Date, { startControls: [controls] });
+  button.dataset.cpCode = 'REAL-01';
+  const timers = new Map(); let timerId = 0; let now = Date.now();
+  class Clock extends Date { static now() { return now; } }
+  const calls = []; const redirects = [];
+  const page = monitoring(options.getTree || (async () => tree), Clock, {
+    startControls: [controls], redirects,
+    remoteStart: async (...args) => { calls.push(args); return options.remoteStart ? options.remoteStart(...args) : { status: 'Rejected' }; },
+    listSessions: options.listSessions, currentSession: options.currentSession,
+    setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, time: now + ms }); return id; },
+    clearTimeout: id => timers.delete(id),
+  });
+  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['driver'] });
   await flush(); page.openDetail();
-  select.handlers.change(); assert.equal(button.disabled, true);
-  select.value = '1'; select.handlers.change(); assert.equal(button.disabled, false);
-  button.handlers.click();
-  assert.match(message.textContent, /REAL-01, đầu nối 1/);
-  assert.match(message.textContent, /chưa gửi yêu cầu sạc/);
-  select.selectedOptions[0].disabled = true;
-  select.handlers.change(); assert.equal(button.disabled, true);
-  button.handlers.click(); assert.equal(message.textContent, '');
-  assert.equal(page.apiResets.length, 0);
+  select.value = '1'; select.handlers.change(); tag.value = 'CARD-01'; tag.handlers.input();
+  return { ...page, select, button, tag, message, calls, timers, redirects,
+    click: () => button.handlers.click(),
+    async advance(ms) {
+      now += ms;
+      for (const [id, timer] of [...timers]) if (timer.time <= now && timers.delete(id)) await timer.fn();
+      await flush();
+    },
+  };
+}
+
+test('SCRUM-191: blocks duplicate commands, survives drawer rerender and waits after Accepted', async () => {
+  let resolve;
+  const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
+  const pending = page.click(); await page.click();
+  assert.equal(page.calls.length, 1); assert.equal(page.button.disabled, true);
+  assert.equal(page.select.disabled, true); assert.equal(page.tag.disabled, true);
+  page.openDetail(); await page.click(); assert.equal(page.calls.length, 1);
+  resolve({ status: 'Accepted' }); await pending;
+  assert.equal(page.button.disabled, true); assert.match(page.message.textContent, /chờ phiên/);
+  await page.advance(60000);
+  assert.match(page.message.textContent, /Hết thời gian/); assert.equal(page.button.disabled, false);
+  assert.equal(page.timers.size, 0); assert.equal(page.calls[0][3].signal.aborted, true);
+});
+
+test('SCRUM-192: Rejected suggests checking cable and allows retry', async () => {
+  const page = await startPage(); await page.click();
+  assert.match(page.message.textContent, /từ chối/); assert.match(page.message.textContent, /súng sạc/);
+  assert.equal(page.button.disabled, false); assert.equal(page.timers.size, 0);
+  await page.click(); assert.equal(page.calls.length, 2);
+});
+
+for (const [status, expected] of [[409, /đang bận/], [504, /Hết thời gian/], [502, /từ chối/], [0, /Mất mạng/]]) {
+  test(`SCRUM-192: API error ${status} releases controls`, async () => {
+    const page = await startPage({ remoteStart: async () => { throw { status, message: status === 0 ? 'Mất mạng' : 'error' }; } });
+    await page.click(); assert.match(page.message.textContent, expected);
+    assert.equal(page.button.disabled, false); assert.equal(page.timers.size, 0);
+  });
+}
+
+test('SCRUM-191: timeout ignores a late Accepted response and never navigates', async () => {
+  let resolve;
+  const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
+  const pending = page.click(); await page.advance(60000);
+  resolve({ status: 'Accepted' }); await pending;
+  assert.match(page.message.textContent, /Hết thời gian/); assert.deepEqual(page.redirects, []);
+  assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-194: only a new session on the chosen point and connector navigates to T-48', async () => {
+  let session = { id: 1, charge_point_code: 'OTHER', connector_number: 1, started_at: new Date().toISOString() };
+  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }), currentSession: async () => session });
+  await page.click(); assert.deepEqual(page.redirects, []);
+  session = { ...session, charge_point_code: 'REAL-01', connector_number: 2 };
+  await page.advance(2000); assert.deepEqual(page.redirects, []);
+  session = { ...session, connector_number: 1, started_at: '2000-01-01T00:00:00Z' };
+  await page.advance(2000); assert.deepEqual(page.redirects, []);
+  session.started_at = new Date(Date.now() + 10000).toISOString();
+  await page.advance(2000); assert.deepEqual(page.redirects, ['/sessions/mine']);
+  assert.match(page.message.textContent, /đã bắt đầu/); assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-191: an old response after timeout cannot finish or replace a retry', async () => {
+  const resolves = [];
+  const page = await startPage({ remoteStart: () => new Promise(resolve => resolves.push(resolve)) });
+  const first = page.click(); await page.advance(60000);
+  const second = page.click();
+  resolves[0]({ status: 'Rejected' }); await first;
+  assert.equal(page.button.disabled, true); assert.match(page.message.textContent, /Đang gửi/);
+  resolves[1]({ status: 'Accepted' }); await second;
+  assert.match(page.message.textContent, /chờ phiên/);
+  await page.advance(60000); assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-194: operator uses visible session list and navigates to audit only after real session', async () => {
+  const page = await startPage({ roles: ['operator'], remoteStart: async () => ({ status: 'Accepted' }),
+    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] }) });
+  await page.click(); assert.deepEqual(page.redirects, ['/audit']); assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-194: station owner stays on permitted detail page after session starts', async () => {
+  const page = await startPage({ roles: ['station_owner'], remoteStart: async () => ({ status: 'Accepted' }),
+    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] }) });
+  await page.click(); assert.deepEqual(page.redirects, []); assert.match(page.message.textContent, /đã bắt đầu/);
+});
+
+test('SCRUM-194: busy/offline connectors and missing or oversized tags cannot send a command', async () => {
+  const page = await startPage();
+  for (const value of ['', ' ', 'x'.repeat(21)]) {
+    page.tag.value = value; page.tag.handlers.input(); await page.click();
+    assert.equal(page.button.disabled, true);
+  }
+  page.tag.value = 'CARD-01'; page.tag.handlers.input();
+  page.callbacks.status_update({ station_id: 42, charge_points: [{ ...tree[0].charge_points[0], connectors: [{ connector_id: 1, ocpp_status: 'Charging' }] }] });
+  await page.click(); assert.equal(page.calls.length, 0);
+  assert.equal(page.button.disabled, true);
+});
+
+test('SCRUM-194: remote start API encodes code and sends connector, tag and cancellation signal', async () => {
+  const calls = []; const controller = new AbortController();
+  const client = authClient(async (url, config) => {
+    calls.push({ url, config });
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ status: 'Accepted' }) };
+  });
+  await client.api.remoteStartChargePoint('CP/01', 2, 'TAG', { signal: controller.signal });
+  assert.equal(calls[0].url, '/api/charge_points/CP%2F01/remote-start');
+  assert.equal(calls[0].config.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].config.body), { connector_id: 2, id_tag: 'TAG' });
+  assert.equal(calls[0].config.signal, controller.signal);
 });
 
 function sessionPage(getSessions) {

@@ -2,6 +2,7 @@
 (function () {
   'use strict';
 
+  const startRequests = new Map();
   let stations = [];
   let isSseConnected = false;
   let loadRequestId = 0;
@@ -246,6 +247,7 @@
           </select>
         </label>
 
+        <label>Mã thẻ RFID <input class="form-input" data-start-tag maxlength="20" autocomplete="off" placeholder="Nhập mã thẻ được cấp" /></label>
         <button class="btn btn--primary"
                 type="button"
                 data-start-charging
@@ -269,22 +271,95 @@
           ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connector => connectorMarkup(connector, point.status === 'offline')).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${startChargingMarkup(point)}${restartMarkup}</section>`;
       }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
     RestartButton.bindEvents(body);
-    body.querySelectorAll('.start-charging-controls').forEach(controls => {
-      const select = controls.querySelector('[data-start-connector]');
-      const button = controls.querySelector('[data-start-charging]');
-      const message = controls.querySelector('[data-start-message]');
-      const hasSelection = () => Boolean(select.value) && !select.selectedOptions[0]?.disabled;
-      select.addEventListener('change', () => {
-        button.disabled = !hasSelection();
-        message.textContent = '';
-      });
-      button.addEventListener('click', () => {
-        if (!hasSelection()) return;
-        message.textContent =
-          `Đã chọn trụ ${button.dataset.cpCode}, đầu nối ${select.value}. ` +
-          'Đây là bản thử giao diện; chưa gửi yêu cầu sạc.';
-      });
+    body.querySelectorAll('.start-charging-controls').forEach(bindStartControls);
+  }
+
+  function startState(code) {
+    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '' });
+    return startRequests.get(code);
+  }
+
+  function bindStartControls(controls) {
+    const select = controls.querySelector('[data-start-connector]');
+    const button = controls.querySelector('[data-start-charging]');
+    const tag = controls.querySelector('[data-start-tag]');
+    const message = controls.querySelector('[data-start-message]');
+    const state = startState(button.dataset.cpCode);
+    const usable = () => {
+      const point = stations.flatMap(station => station.charge_points || []).find(point => point.code === button.dataset.cpCode);
+      const connector = point?.connectors?.find(item => String(item.connector_id) === select.value);
+      return point?.status === 'online' && connector &&
+        (connector.ocpp_status ? connector.ocpp_status === 'Available' : connector.status === 'rảnh');
+    };
+    const update = () => {
+      select.disabled = tag.disabled = state.pending;
+      button.disabled = state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20;
+      button.textContent = state.pending ? 'Đang chờ bắt đầu sạc…' : 'Bắt đầu sạc';
+      message.textContent = state.message;
+    };
+    if (state.selected) select.value = state.selected;
+    state.update = update;
+    select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; } update(); });
+    tag.addEventListener('input', update);
+    button.addEventListener('click', async () => {
+      if (state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20) return;
+      state.selected = select.value;
+      state.pending = true;
+      state.message = 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
+      const started = Date.now();
+      const controller = new AbortController();
+      state.controller = controller;
+      const active = () => state.pending && state.controller === controller;
+      const finish = text => {
+        if (!active()) return;
+        state.pending = false; state.message = text;
+        clearTimeout(state.deadline); clearTimeout(state.poll);
+        controller.abort(); state.update();
+      };
+      state.deadline = setTimeout(() => finish('Hết thời gian chờ 60 giây, chưa xác nhận được phiên sạc. Kiểm tra trạng thái trước khi thử lại.'), 60000);
+      update();
+      const poll = async () => {
+        if (!active()) return;
+        try {
+          let user = {};
+          try { user = JSON.parse(document.getElementById('auth-context')?.textContent || '{}'); } catch (_) {}
+          const driver = user.roles?.includes('driver');
+          const response = driver
+            ? await ApiClient.getCurrentSession({ signal: controller.signal })
+            : await ApiClient.listAllSessions({ status: 'active', page_size: 100 }, { signal: controller.signal });
+          if (!active()) return;
+          const sessions = driver ? [response] : (response?.items || []);
+          const session = sessions.find(item => item && item.charge_point_code === button.dataset.cpCode &&
+            Number(item.connector_number) === Number(state.selected) && !item.ended_at &&
+            Date.parse(item.started_at) >= started - 1000);
+          if (session) {
+            finish('Phiên sạc đã bắt đầu.');
+            if (driver) window.location.assign('/sessions/mine');
+            else if (user.roles?.some(role => ['admin', 'operator'].includes(role))) window.location.assign('/audit');
+            return;
+          }
+        } catch (error) {
+          if (!active()) return;
+          if ([401, 403].includes(error.status)) { finish(error.message || 'Không có quyền kiểm tra phiên sạc.'); return; }
+        }
+        if (active()) state.poll = setTimeout(poll, 2000);
+      };
+      try {
+        const result = await ApiClient.remoteStartChargePoint(button.dataset.cpCode, Number(state.selected), tag.value.trim(), { signal: controller.signal });
+        if (!active()) return;
+        if (result?.status !== 'Accepted') { finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.'); return; }
+        state.message = 'Trụ đã nhận lệnh. Đang chờ phiên sạc bắt đầu (tối đa 60 giây)…';
+        state.update();
+        await poll();
+      } catch (error) {
+        if (!active()) return;
+        if (error.status === 409) finish(/ngoại tuyến|ngắt kết nối/i.test(error.message || '') ? error.message : 'Trụ hoặc đầu nối đang bận. Vui lòng chọn đầu nối khác.');
+        else if (error.status === 504 || error.name === 'AbortError') finish('Hết thời gian chờ, trụ chưa phản hồi. Kiểm tra trạng thái trước khi thử lại.');
+        else if (error.status === 502) finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.');
+        else finish(error.message || 'Không thể gửi yêu cầu bắt đầu sạc. Vui lòng thử lại.');
+      }
     });
+    update();
   }
 
   function openDetail(station) {
