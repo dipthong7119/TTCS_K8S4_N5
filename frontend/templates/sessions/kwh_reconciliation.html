@@ -59,8 +59,8 @@
     <line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>
   <span>
-    Đang hiển thị <strong>dữ liệu mẫu</strong> để kiểm tra giao diện.
-    Các số liệu này chưa phản ánh kết quả sạc thực tế.
+    Đang hiển thị <strong>dữ liệu kWh mẫu</strong> để kiểm tra giao diện.
+    Mã trụ, đầu nối và tên trạm được đồng bộ với danh sách trạm sạc hiện có.
   </span>
 </div>
 
@@ -76,7 +76,7 @@
   <div class="recon-card recon-card--info">
     <span class="recon-card__label">Tổng phiên</span>
     <span class="recon-card__value" id="stat-total-sessions">—</span>
-    <span class="recon-card__sub">20 trụ ảo</span>
+    <span class="recon-card__sub" id="stat-total-points">— trụ sạc</span>
   </div>
 
   <div class="recon-card recon-card--pass">
@@ -132,9 +132,13 @@
             data-filter="MISSING_IN_SYSTEM" type="button"
             aria-pressed="false">Thiếu CSMS</button>
 
+    <label for="recon-station-filter" class="recon-toolbar__label">Trạm:</label>
+    <select class="recon-station-filter" id="recon-station-filter">
+      <option value="">Tất cả trạm</option>
+    </select>
     <input class="recon-search" id="recon-search"
-           type="search" placeholder="Tìm theo mã trụ, phiên…"
-           aria-label="Tìm kiếm phiên sạc" />
+           type="search" placeholder="Tìm mã trụ, tên trạm, phiên…"
+           aria-label="Tìm theo mã trụ, tên trạm hoặc phiên sạc" />
   </div>
 
   <div class="recon-export-group">
@@ -174,6 +178,9 @@
           <i class="sort-icon" aria-hidden="true"></i>
         </th>
         <th data-sort="charge_point_code">Mã trụ
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="station_name">Trạm sạc
           <i class="sort-icon" aria-hidden="true">↕</i>
         </th>
         <th data-sort="connector_id">Đầu nối

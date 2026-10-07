@@ -80,6 +80,38 @@ def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
     assert roles == ["accountant", "admin", "driver", "operator", "station_owner"]
 
 
+def test_meter_review_migration_preserves_existing_sessions(migrated_database):
+    config, engine = migrated_database
+    previous_revision = "h20261006_meter_values"
+    command.downgrade(config, previous_revision)
+    with engine.begin() as db:
+        db.execute(text(
+            "INSERT INTO charging_sessions "
+            "(charge_point_code, station_name, connector_number, meter_start_wh, started_at) "
+            "VALUES ('MIGRATION-TEST', 'Migration station', 1, 12500, CURRENT_TIMESTAMP)"
+        ))
+    command.upgrade(config, "head")
+    with engine.begin() as db:
+        row = db.execute(text(
+            "SELECT meter_start_wh, needs_review, review_reason FROM charging_sessions "
+            "WHERE charge_point_code = 'MIGRATION-TEST'"
+        )).one()
+        assert row[0] == 12500 and not row[1] and row[2] is None
+        db.execute(text(
+            "UPDATE charging_sessions SET needs_review = true, review_reason = 'meter_value_decreased' "
+            "WHERE charge_point_code = 'MIGRATION-TEST'"
+        ))
+    command.downgrade(config, previous_revision)
+    assert not {"needs_review", "review_reason"}.intersection(
+        column["name"] for column in inspect(engine).get_columns("charging_sessions")
+    )
+    with engine.connect() as db:
+        assert db.execute(text(
+            "SELECT meter_start_wh FROM charging_sessions WHERE charge_point_code = 'MIGRATION-TEST'"
+        )).scalar_one() == 12500
+    command.upgrade(config, "head")
+
+
 def test_postgres_version_table_holds_all_revision_ids(migrated_database):
     config, engine = migrated_database
     if engine.dialect.name == "postgresql":

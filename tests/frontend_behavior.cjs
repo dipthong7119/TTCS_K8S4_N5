@@ -933,3 +933,160 @@ test('driver session API failure reports the error without displaying sample ses
   assert.equal(page.document.getElementById('session-count').textContent, 'Lỗi kết nối');
   assert.equal(page.timers.length, 0);
 });
+
+const reconciliationSample = JSON.parse(fs.readFileSync(
+  path.join(root, 'frontend/static/data/kwh_reconciliation_sample.json'), 'utf8'));
+const inventoryTree = [
+  { id: 10, name: 'Vincom mới', charge_points: ['CP_VINCOM_01', 'CP_VINCOM_02'] },
+  { id: 20, name: 'AEON Mall', charge_points: ['CP_AEON_01', 'CP_AEON_FAULT'] },
+  { id: 30, name: 'Thủ Thiêm', charge_points: ['CP_DEMO_MAINT_01'] },
+  { id: 40, name: 'Thử nghiệm OCPP', charge_points: Array.from({ length: 20 }, (_, i) => `SIM-${String(i + 1).padStart(2, '0')}`) },
+].map(station => ({ ...station, charge_points: station.charge_points.map((code, i) => ({
+  id: station.id * 10 + i, code, connectors: [{ connector_id: 1 }],
+})) }));
+
+function reconciliationPage(tree = inventoryTree, options = {}) {
+  const ids = new Map();
+  const document = {
+    handlers: {}, querySelectorAll: () => [],
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, { ...element(), style: {} });
+      return ids.get(id);
+    },
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  const requests = [], downloads = [];
+  const context = vm.createContext({ document, console, Date, downloads,
+    fetch: async url => {
+      requests.push(url);
+      if (url === '/api/reconciliation/kwh') {
+        return { ok: Boolean(options.report), status: options.apiStatus ?? (options.report ? 200 : 404),
+          json: async () => options.report };
+      }
+      if (url === '/static/data/kwh_reconciliation_sample.json') {
+        return { ok: true, json: async () => structuredClone(options.sample ?? reconciliationSample) };
+      }
+      assert.equal(url, '/api/monitoring/tree');
+      return { ok: !options.inventoryFailure, json: async () => structuredClone(tree) };
+    },
+  });
+  vm.runInContext(read('pages/kwh_reconciliation.js'), context);
+  vm.runInContext('downloadText = (text, filename, mime) => downloads.push({ text, filename, mime });', context);
+  document.handlers.DOMContentLoaded();
+  return { document, requests, downloads, context,
+    state: name => JSON.parse(vm.runInContext(`JSON.stringify(${name})`, context)),
+    html: () => document.getElementById('recon-tbody').innerHTML,
+    filter(id) {
+      document.getElementById('recon-station-filter').value = String(id);
+      document.getElementById('recon-station-filter').handlers.change();
+    },
+    search(query) {
+      document.getElementById('recon-search').value = query;
+      document.getElementById('recon-search').handlers.input();
+    },
+    csv: () => document.getElementById('recon-export-csv').handlers.click(),
+    markdown: () => document.getElementById('recon-export-md').handlers.click(),
+  };
+}
+
+test('reconciliation synchronizes fixture codes and station names from the current inventory', async () => {
+  const page = reconciliationPage();
+  await flush();
+  const sessions = page.state('allSessions');
+  assert.equal(sessions.length, 20);
+  assert.equal(new Set(sessions.map(s => s.charge_point_code)).size, 20);
+  assert.equal(sessions[0].station_name, 'Vincom mới');
+  assert.equal(sessions[0].station_id, 10);
+  assert.equal(sessions[0].system_kwh, 16.2);
+  assert.match(page.html(), /CP_VINCOM_01/);
+  assert.doesNotMatch(page.html(), />CP01</);
+  assert.equal(page.document.getElementById('stat-system-kwh').textContent, '382.350 kWh');
+  assert.equal(page.document.getElementById('recon-mock-notice').style.display, 'flex');
+});
+
+test('renamed sample devices use registered codes and connector numbers without mutating inventory', async () => {
+  const tree = [{ id: 7, name: 'Trạm thực tế', charge_points: [
+    { id: 91, code: 'NEW-01', connectors: [{ connector_id: 3 }] },
+    { id: 92, code: 'NEW-02', connectors: [{ connector_id: 2 }] },
+    { id: 93, code: 'NO-CONNECTORS', connectors: [] },
+  ] }];
+  const original = JSON.stringify(tree);
+  const page = reconciliationPage(tree);
+  await flush();
+  const sessions = page.state('allSessions');
+  assert.deepEqual(sessions.map(s => [s.charge_point_code, s.connector_id]), [['NEW-01', 3], ['NEW-02', 2]]);
+  assert.equal(JSON.stringify(tree), original);
+  assert.equal(page.document.getElementById('stat-total-sessions').textContent, 2);
+  assert.equal(page.document.getElementById('stat-system-kwh').textContent, '39.600 kWh');
+});
+
+test('sample reconciliation with no registered devices stays empty and cannot claim a pass', async () => {
+  const page = reconciliationPage([]);
+  await flush();
+  assert.deepEqual(page.state('allSessions'), []);
+  assert.equal(page.document.getElementById('stat-total-sessions').textContent, 0);
+  assert.match(page.document.getElementById('recon-verdict').innerHTML, /Chưa có phiên đối chiếu/);
+  assert.doesNotMatch(page.document.getElementById('recon-verdict').innerHTML, /đều khớp/);
+});
+
+test('reconciliation keeps historical energy on its original device even after deletion', async () => {
+  const report = structuredClone(reconciliationSample);
+  report.metadata.is_sample = false;
+  report.sessions = [report.sessions[0], { ...report.sessions[1], charge_point_code: 'DELETED-CP', station_name: 'Trạm cũ', station_id: 999 }];
+  const original = JSON.stringify(report);
+  const page = reconciliationPage(inventoryTree, { report });
+  await flush();
+  const sessions = page.state('allSessions');
+  assert.equal(sessions[0].station_name, 'Vincom mới');
+  assert.equal(sessions[1].charge_point_code, 'DELETED-CP');
+  assert.equal(sessions[1].station_name, 'Trạm cũ');
+  assert.equal(sessions[1].system_kwh, 23.4);
+  assert.equal(JSON.stringify(report), original);
+  assert.equal(page.document.getElementById('recon-mock-notice').style.display, undefined);
+});
+
+test('station and text filters select the same synchronized rows for display and export', async () => {
+  const page = reconciliationPage();
+  await flush();
+  page.filter(20);
+  assert.deepEqual(page.state('filteredSessions').map(s => s.charge_point_code), ['CP_AEON_01', 'CP_AEON_FAULT']);
+  page.csv();
+  assert.match(page.downloads[0].text, /AEON Mall/);
+  assert.doesNotMatch(page.downloads[0].text, /CP_VINCOM/);
+  page.filter('');
+  page.search('Vincom mới');
+  assert.equal(page.state('filteredSessions').length, 2);
+  assert.equal(page.document.getElementById('recon-row-count').textContent, '2 phiên');
+});
+
+test('exports escape station names and label energy as sample data', async () => {
+  const tree = structuredClone(inventoryTree);
+  tree[0].name = 'Vincom, "Center" | Q1';
+  const page = reconciliationPage(tree);
+  await flush();
+  page.filter(10);
+  page.csv();
+  page.markdown();
+  assert.match(page.downloads[0].text, /"Vincom, ""Center"" \| Q1"/);
+  assert.match(page.downloads[0].text, /Dữ liệu kWh mẫu/);
+  assert.match(page.downloads[1].text, /Vincom, "Center" \\\| Q1/);
+  assert.match(page.downloads[1].text, /Dữ liệu kWh mẫu/);
+  const tableLines = page.downloads[1].text.split('\n').filter(line => line.startsWith('|'));
+  assert.equal(tableLines[0].split('|').length, tableLines[1].split('|').length);
+});
+
+test('inventory failures never display unsynchronized sample codes', async () => {
+  const page = reconciliationPage(inventoryTree, { inventoryFailure: true });
+  await flush();
+  assert.match(page.html(), /Không thể đồng bộ danh sách trạm và mã trụ/);
+  assert.deepEqual(page.state('allSessions'), []);
+  assert.doesNotMatch(page.html(), /CP01|CP_VINCOM/);
+});
+
+test('reconciliation authorization failures do not fall back to sample data', async () => {
+  const page = reconciliationPage(inventoryTree, { apiStatus: 403 });
+  await flush();
+  assert.equal(page.requests.length, 1);
+  assert.match(page.html(), /đăng nhập lại/);
+  assert.deepEqual(page.state('allSessions'), []);
+});

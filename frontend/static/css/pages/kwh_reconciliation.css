@@ -185,7 +185,8 @@
   color: #fff;
 }
 
-.recon-search {
+.recon-search,
+.recon-station-filter {
   min-height: 40px;
   padding: .38rem .85rem;
   border-radius: 8px;
@@ -200,9 +201,12 @@
 
 .recon-search::placeholder { color: var(--color-text-secondary); }
 
-.recon-search:focus {
+.recon-search:focus,
+.recon-station-filter:focus {
   border-color: var(--color-primary-dark);
 }
+
+.recon-station-filter { max-width: 300px; }
 
 /* ── Export Buttons ─────────────────────────────────────── */
 .recon-export-group {
@@ -222,7 +226,7 @@
 
 .recon-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1320px;
   border-collapse: collapse;
   font-size: .95rem;
   font-variant-numeric: tabular-nums;
@@ -285,6 +289,13 @@
 }
 
 /* ── Status Badge ───────────────────────────────────────── */
+.recon-table td.station-cell {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 250px;
+  line-height: 1.5;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
