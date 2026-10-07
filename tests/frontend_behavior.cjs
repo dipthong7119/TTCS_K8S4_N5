@@ -47,8 +47,9 @@ function monitoring(getTree, clock = Date, options = {}) {
   const resetBindings = [];
   const apiResets = [];
   let requests = 0;
+  const windowHandlers = {};
   const context = vm.createContext({
-    document, window: { location: { assign: url => options.redirects?.push(url) } }, AbortController, setTimeout: options.setTimeout || setTimeout, clearTimeout: options.clearTimeout || clearTimeout, Date: clock, console,
+    document, window: { location: { assign: url => options.redirects?.push(url) }, addEventListener: (name, fn) => { windowHandlers[name] = fn; } }, AbortController, setTimeout: options.setTimeout || setTimeout, clearTimeout: options.clearTimeout || clearTimeout, Date: clock, console,
     ApiClient: {
       remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
       listAllSessions: options.listSessions || (async () => ({ items: [] })),
@@ -71,7 +72,7 @@ function monitoring(getTree, clock = Date, options = {}) {
   }
   vm.runInContext(read('pages/monitoring_grid.js'), context);
   document.handlers.DOMContentLoaded();
-  return { document, callbacks, toasts, apiResets, resetBindings,
+  return { document, callbacks, toasts, apiResets, resetBindings, windowHandlers,
     restart: context.window.RestartButton,
     confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click(),
     openDetail: () => document.getElementById('monitoring-grid').children[0].querySelector('.station-card__open').handlers.click(),
@@ -697,7 +698,7 @@ async function startPage(options = {}) {
   const timers = new Map(); let timerId = 0; let now = Date.now();
   class Clock extends Date { static now() { return now; } }
   const calls = []; const redirects = [];
-  const page = monitoring(options.getTree || (async () => tree), Clock, {
+  const page = monitoring(options.getTree || (async () => structuredClone(tree)), Clock, {
     startControls: [controls], redirects,
     remoteStart: async (...args) => { calls.push(args); return options.remoteStart ? options.remoteStart(...args) : { status: 'Rejected' }; },
     listSessions: options.listSessions, currentSession: options.currentSession,
@@ -815,6 +816,66 @@ test('SCRUM-194: remote start API encodes code and sends connector, tag and canc
   assert.equal(calls[0].config.method, 'POST');
   assert.deepEqual(JSON.parse(calls[0].config.body), { connector_id: 2, id_tag: 'TAG' });
   assert.equal(calls[0].config.signal, controller.signal);
+});
+
+test('SCRUM-194: closing and reopening drawer during pending request preserves connector, tag and waiting state', async () => {
+  let resolve;
+  const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
+  assert.equal(page.tag.value, 'CARD-01');
+  assert.equal(page.select.value, '1');
+  const pending = page.click();
+  await flush();
+  assert.equal(page.calls.length, 1);
+  assert.equal(page.button.disabled, true);
+  assert.match(page.message.textContent, /Đang gửi yêu cầu/);
+
+  page.document.getElementById('detail-close').handlers.click();
+  assert.equal(page.document.getElementById('detail-backdrop').classList.contains('is-hidden'), true);
+
+  const freshControls = element();
+  freshControls.querySelector('[data-start-charging]').dataset.cpCode = 'REAL-01';
+  page.document.getElementById('detail-body').querySelectorAll = selector =>
+    selector === '.start-charging-controls' ? [freshControls] : [];
+  page.openDetail();
+
+  const freshSelect = freshControls.querySelector('[data-start-connector]');
+  const freshButton = freshControls.querySelector('[data-start-charging]');
+  const freshTag = freshControls.querySelector('[data-start-tag]');
+  const freshMessage = freshControls.querySelector('[data-start-message]');
+
+  assert.equal(freshSelect.value, '1');
+  assert.equal(freshTag.value, 'CARD-01');
+  assert.equal(freshSelect.disabled, true);
+  assert.equal(freshTag.disabled, true);
+  assert.equal(freshButton.disabled, true);
+  assert.equal(freshButton.textContent, 'Đang chờ bắt đầu sạc…');
+  assert.match(freshMessage.textContent, /Đang gửi yêu cầu/);
+
+  await freshButton.handlers.click();
+  assert.equal(page.calls.length, 1);
+
+  await page.advance(60000);
+  assert.match(freshMessage.textContent, /Hết thời gian/);
+  assert.equal(freshButton.disabled, false);
+  assert.equal(freshTag.disabled, false);
+  assert.equal(freshSelect.disabled, false);
+  assert.equal(freshTag.value, 'CARD-01');
+
+  resolve({ status: 'Accepted' });
+  await pending;
+});
+
+test('SCRUM-194: leaving page (pagehide) clears pending timers and aborts in-flight request', async () => {
+  const page = await startPage({ remoteStart: () => new Promise(() => {}) });
+  page.click();
+  await flush();
+  assert.equal(page.timers.size, 1);
+  assert.equal(page.calls[0][3].signal.aborted, false);
+  assert.equal(typeof page.windowHandlers.pagehide, 'function');
+
+  page.windowHandlers.pagehide();
+  assert.equal(page.timers.size, 0);
+  assert.equal(page.calls[0][3].signal.aborted, true);
 });
 
 function sessionPage(getSessions) {

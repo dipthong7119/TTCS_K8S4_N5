@@ -275,7 +275,7 @@
   }
 
   function startState(code) {
-    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '' });
+    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '', tag: '' });
     return startRequests.get(code);
   }
 
@@ -298,12 +298,14 @@
       message.textContent = state.message;
     };
     if (state.selected) select.value = state.selected;
+    if (state.tag !== undefined) tag.value = state.tag;
     state.update = update;
     select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; } update(); });
-    tag.addEventListener('input', update);
+    tag.addEventListener('input', () => { if (!state.pending) state.tag = tag.value; update(); });
     button.addEventListener('click', async () => {
       if (state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20) return;
       state.selected = select.value;
+      state.tag = tag.value.trim();
       state.pending = true;
       state.message = 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
       const started = Date.now();
@@ -436,5 +438,14 @@
   function closeDetail() {
     activeDetailStationId = null;
     document.getElementById('detail-backdrop')?.classList.add('is-hidden');
+  }
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pagehide', () => {
+      startRequests.forEach(state => {
+        clearTimeout(state.deadline);
+        clearTimeout(state.poll);
+        state.controller?.abort();
+      });
+    });
   }
 })();
