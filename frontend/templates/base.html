@@ -95,6 +95,19 @@
       </a>
       {% endif %}
 
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+      <a href="/sessions/kwh-reconciliation" id="nav-kwh-reconciliation"
+         class="sidebar__link {% if active_page == 'kwh-reconciliation' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'kwh-reconciliation' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+          <polyline points="2 20 22 20"/>
+        </svg>
+        Đối chiếu kWh
+      </a>
+      {% endif %}
+
       <div class="sidebar__section-label">Tài khoản</div>
 
       {% if 'admin' in current_user.roles or 'accountant' in current_user.roles or 'driver' in current_user.roles %}

@@ -209,6 +209,15 @@ async def anomalies_page(request: Request, current_user: CurrentUser):
     )
 
 
+# SCRUM-184 — Xuất bảng đối chiếu kWh (Phạm Văn Tuấn)
+@router.get("/sessions/kwh-reconciliation", dependencies=[Depends(require_role("admin", "operator"))])
+async def kwh_reconciliation_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "sessions/kwh_reconciliation.html", _page_context(request, current_user)
+    )
+
+
 @router.get("/audit", dependencies=[Depends(require_role("admin", "operator"))])
 async def audit_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "operator")

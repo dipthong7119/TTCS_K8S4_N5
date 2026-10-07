@@ -1,0 +1,337 @@
+/* ═══════════════════════════════════════════════════════════
+   SCRUM-184 — Bảng đối chiếu kWh (kwh_reconciliation.css)
+   Người thực hiện: Phạm Văn Tuấn
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Summary Cards ─────────────────────────────────────── */
+.recon-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.recon-card {
+  background: var(--surface-2, #1e2533);
+  border: 1px solid var(--border, rgba(255,255,255,.08));
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.recon-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.25);
+}
+
+.recon-card__label {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8490a8);
+}
+
+.recon-card__value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary, #e8edf5);
+}
+
+.recon-card__sub {
+  font-size: .78rem;
+  color: var(--text-muted, #8490a8);
+}
+
+.recon-card--pass  { border-color: rgba(34, 197, 94, .35); }
+.recon-card--pass .recon-card__value  { color: #4ade80; }
+.recon-card--fail  { border-color: rgba(239, 68, 68, .35); }
+.recon-card--fail .recon-card__value  { color: #f87171; }
+.recon-card--info  { border-color: rgba(99, 179, 237, .25); }
+.recon-card--info .recon-card__value  { color: #93c5fd; }
+.recon-card--kwh   { border-color: rgba(251, 191, 36, .25); }
+.recon-card--kwh .recon-card__value   { color: #fbbf24; }
+
+/* ── Verdict Banner ─────────────────────────────────────── */
+.recon-verdict {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  margin-bottom: 1.75rem;
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.recon-verdict--passed {
+  background: rgba(34, 197, 94, .1);
+  border: 1px solid rgba(34, 197, 94, .3);
+  color: #4ade80;
+}
+
+.recon-verdict--failed {
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(239, 68, 68, .3);
+  color: #f87171;
+}
+
+.recon-verdict__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.recon-verdict--passed .recon-verdict__icon { background: rgba(34, 197, 94, .2); }
+.recon-verdict--failed .recon-verdict__icon { background: rgba(239, 68, 68, .2); }
+
+.recon-verdict__meta {
+  margin-left: auto;
+  font-size: .78rem;
+  font-weight: 400;
+  opacity: .7;
+}
+
+/* ── Toolbar ────────────────────────────────────────────── */
+.recon-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+
+.recon-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.recon-filter-btn {
+  padding: .38rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  background: transparent;
+  color: var(--text-muted, #8490a8);
+  font-size: .8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.recon-filter-btn:hover,
+.recon-filter-btn.is-active {
+  background: var(--accent, #4f8ef7);
+  border-color: var(--accent, #4f8ef7);
+  color: #fff;
+}
+
+.recon-search {
+  padding: .38rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  background: var(--surface-2, #1e2533);
+  color: var(--text-primary, #e8edf5);
+  font-size: .82rem;
+  min-width: 180px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+
+.recon-search:focus {
+  border-color: var(--accent, #4f8ef7);
+}
+
+/* ── Export Buttons ─────────────────────────────────────── */
+.recon-export-group {
+  display: flex;
+  gap: .5rem;
+}
+
+/* ── Table ──────────────────────────────────────────────── */
+.recon-table-wrapper {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border, rgba(255,255,255,.08));
+}
+
+.recon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .84rem;
+}
+
+.recon-table thead th {
+  background: var(--surface-2, #1e2533);
+  padding: .75rem 1rem;
+  text-align: left;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8490a8);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+  cursor: pointer;
+  user-select: none;
+}
+
+.recon-table thead th:hover { color: var(--text-primary, #e8edf5); }
+
+.recon-table thead th .sort-icon {
+  display: inline-block;
+  margin-left: .3em;
+  opacity: .35;
+  font-style: normal;
+}
+
+.recon-table thead th.sorted-asc .sort-icon,
+.recon-table thead th.sorted-desc .sort-icon {
+  opacity: 1;
+  color: var(--accent, #4f8ef7);
+}
+
+.recon-table tbody tr {
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.05));
+  transition: background .12s ease;
+}
+
+.recon-table tbody tr:last-child { border-bottom: none; }
+
+.recon-table tbody tr:hover {
+  background: var(--surface-hover, rgba(255,255,255,.03));
+}
+
+.recon-table td {
+  padding: .7rem 1rem;
+  color: var(--text-primary, #e8edf5);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.recon-table td.notes-cell {
+  white-space: normal;
+  min-width: 200px;
+  color: var(--text-muted, #8490a8);
+  font-size: .8rem;
+}
+
+/* ── Status Badge ───────────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .22rem .65rem;
+  border-radius: 20px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.status-badge--match {
+  background: rgba(34, 197, 94, .12);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, .25);
+}
+
+.status-badge--mismatch {
+  background: rgba(239, 68, 68, .12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, .25);
+}
+
+.status-badge--missing-system {
+  background: rgba(251, 191, 36, .12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, .25);
+}
+
+.status-badge--missing-simulator {
+  background: rgba(167, 139, 250, .12);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, .25);
+}
+
+.status-badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Diff value ─────────────────────────────────────────── */
+.diff-zero  { color: #4ade80; }
+.diff-warn  { color: #fbbf24; }
+.diff-error { color: #f87171; }
+
+/* ── Disconnect badge ───────────────────────────────────── */
+.disconnect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .78rem;
+  color: var(--text-muted, #8490a8);
+}
+
+.disconnect-badge--hot { color: #fb923c; }
+
+/* ── Empty state ────────────────────────────────────────── */
+.recon-empty {
+  text-align: center;
+  padding: 3.5rem 1rem;
+  color: var(--text-muted, #8490a8);
+}
+
+.recon-empty__icon { font-size: 2.5rem; margin-bottom: .5rem; }
+.recon-empty__title { font-weight: 600; font-size: 1rem; margin-bottom: .3rem; color: var(--text-primary, #e8edf5); }
+.recon-empty__sub { font-size: .85rem; }
+
+/* ── Loading skeleton ───────────────────────────────────── */
+.recon-skeleton {
+  height: 44px;
+  background: linear-gradient(90deg,
+    var(--surface-2, #1e2533) 25%,
+    rgba(255,255,255,.04) 50%,
+    var(--surface-2, #1e2533) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+  margin-bottom: .5rem;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .recon-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .recon-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .recon-toolbar__left {
+    flex-wrap: wrap;
+  }
+  .recon-export-group {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 400px) {
+  .recon-summary { grid-template-columns: 1fr; }
+}
