@@ -19,7 +19,7 @@ Chạy thủ công:
         -p csms-scrum182 -f docker-compose.acceptance.yml `
         up -d --build --wait db app
 
-    .venv/Scripts/python.exe -m pytest tests/test_scrum182_20charger_scenario.py -v -s
+    .venv/Scripts/python.exe -m pytest tests/test_scrum182_20charger_scenario.py --docker-project csms-scrum182 -v -s
 
     docker compose --env-file .env.example `
         -p csms-scrum182 -f docker-compose.acceptance.yml `
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import random
 import time
@@ -63,8 +64,7 @@ SESSION_CLOSE_TIMEOUT = int(os.getenv("SCRUM182_SESSION_CLOSE_TIMEOUT", "30"))
 # File JSON kết quả — SCRUM-183 (Đức) sẽ đọc file này để đối chiếu
 RESULT_JSON_PATH = ROOT / "ketqua" / "scrum182_kwh_result.json"
 
-# ID tag hợp lệ từ seed
-_ID_TAG = "DRIVER-TAG-01"
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,8 +114,22 @@ def docker_stack(request):
     resp = httpx.get(f"{http_url}/health", timeout=5)
     assert resp.status_code == 200, f"App chua chay: {resp.status_code}"
 
-    yield {"http": http_url, "ws": ws_url, "db": engine}
-    engine.dispose()
+    try:
+        with engine.connect() as connection:
+            id_tag = connection.execute(
+                text(
+                    "SELECT tags.id_tag FROM id_tags tags "
+                    "JOIN users ON users.id = tags.user_id "
+                    "WHERE users.email = :email AND tags.is_blocked = false "
+                    "AND (tags.expiry_date IS NULL OR tags.expiry_date > CURRENT_TIMESTAMP) "
+                    "ORDER BY tags.id LIMIT 1"
+                ),
+                {"email": "driver@csms.local"},
+            ).scalar_one_or_none()
+        assert id_tag, "Acceptance seed did not create a valid driver RFID tag"
+        yield {"http": http_url, "ws": ws_url, "db": engine, "id_tag": id_tag}
+    finally:
+        engine.dispose()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,8 +162,10 @@ class _OCPPClient:
             self._recv_task.cancel()
             try:
                 await self._recv_task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except asyncio.CancelledError:
+                logger.debug("Cancelled OCPP receiver for %s", self.code)
+            except Exception:
+                logger.exception("OCPP receiver failed while disconnecting %s", self.code)
         self._ws = None
 
     async def _recv_loop(self) -> None:
@@ -172,9 +188,12 @@ class _OCPPClient:
                     _, srv_id, action, _payload = msg
                     await self._handle_server_call(srv_id, action)
         except websockets.ConnectionClosed:
-            pass
-        except Exception:
-            pass
+            logger.debug("OCPP connection closed for %s", self.code)
+        except Exception as exc:
+            logger.exception("OCPP receive failed for %s", self.code)
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(exc)
         finally:
             for fut in self._pending.values():
                 if not fut.done():
@@ -185,7 +204,7 @@ class _OCPPClient:
             resp = [3, msg_id, {"status": "Accepted"}]
         else:
             resp = [4, msg_id, "NotImplemented", f"{action} not handled", {}]
-        if self._ws and not self._ws.closed:
+        if self._ws:
             await self._ws.send(json.dumps(resp))
 
     async def call(self, action: str, payload: dict | None = None,
@@ -400,7 +419,9 @@ def _wait_sessions_closed(engine, transaction_ids: list[int],
                 {"ids": transaction_ids},
             ).mappings().all()
         result = {row["id"]: dict(row) for row in rows}
-        all_closed = all(row["ended_at"] is not None for row in result.values())
+        all_closed = len(result) == len(set(transaction_ids)) and all(
+            row["ended_at"] is not None for row in result.values()
+        )
         if all_closed:
             return result
         time.sleep(0.5)
@@ -441,7 +462,7 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
             docker_stack["ws"],
             code,
             do_disconnect=(code in disconnect_set),
-            id_tag=_ID_TAG,
+            id_tag=docker_stack["id_tag"],
             meter_readings=METER_READINGS_PER_SESSION,
             meter_step_wh=METER_STEP_WH,
             rng=random.Random(rng.randint(0, 2**31)),
@@ -569,7 +590,7 @@ async def test_scrum182_smoke_3_chargers(docker_stack):
         _run_one_charger(
             docker_stack["ws"], code,
             do_disconnect=False,
-            id_tag=_ID_TAG,
+            id_tag=docker_stack["id_tag"],
             meter_readings=2,
             meter_step_wh=1000,
             rng=random.Random(rng.randint(0, 2**31)),
@@ -590,4 +611,4 @@ async def test_scrum182_smoke_3_chargers(docker_stack):
         assert db_row.get("energy_kwh") is not None and float(db_row["energy_kwh"]) > 0, \
             f"Smoke {rec['code']}: energy_kwh khong hop le trong DB: {db_row}"
 
-    print(f"\n[SCRUM-182 Smoke] 3/3 tru — kWh hop le trong DB")
+    print("\n[SCRUM-182 Smoke] 3/3 tru — kWh hop le trong DB")

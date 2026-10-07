@@ -47,7 +47,7 @@ jobs:
         run: python -m pip_audit --local --progress-spinner off
 
       - name: Run Unit Tests (Pytest)
-        run: python -m pytest tests ../tests --tb=short -v --cov=app --cov-branch --cov-report=term --cov-report=xml
+        run: python -m pytest tests ../tests --ignore=../tests/test_scrum182_20charger_scenario.py --tb=short -v --cov=app --cov-branch --cov-report=term --cov-report=xml
 
       - name: Save coverage report
         uses: actions/upload-artifact@v4
@@ -78,16 +78,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke-test Docker Compose OCPP simulator
+      - name: Validate Docker Compose OCPP simulator and 20-charger scenario
         id: smoke-tests
-        timeout-minutes: 5
+        timeout-minutes: 8
         working-directory: .
         shell: bash
         run: |
           set -euo pipefail
           export CSMS_IMAGE=csms-app:ci
           docker compose --env-file .env.example -p csms-sprint12-acceptance -f docker-compose.acceptance.yml up -d --no-build --wait --wait-timeout 120 db app
-          python -m pytest tests/sprint2_docker_acceptance.py --tb=short -v
+          python -m pytest tests/sprint2_docker_acceptance.py tests/test_scrum182_20charger_scenario.py --tb=short -v
 
       - name: Collect failed Docker smoke-test diagnostics
         if: failure() && steps.smoke-tests.outcome == 'failure'
