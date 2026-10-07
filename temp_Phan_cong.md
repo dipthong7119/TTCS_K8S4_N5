@@ -168,4 +168,3 @@ Buffer cuối sprint dùng để sửa lỗi phát sinh khi chạy kịch bản 
 | Quang Tùng là đường găng của cả sprint (T-36 → T-37 → T-38 → 189). | Chỉ giữ việc lõi, ưu tiên cho T-36 trước; Lâm Tùng review nhanh. |
 | T-46 (20 trụ ngắt–nối ngẫu nhiên) dễ lộ lỗi muộn. | Chạy thử bản nhỏ (3 trụ) trên CI từ giữa sprint, tăng dần lên 20 trụ. |
 | SP subtask ước lượng, có thể lệch. | Poker lại đầu sprint; điều chỉnh nhưng giữ tổng SP task cha. |
-đang test
