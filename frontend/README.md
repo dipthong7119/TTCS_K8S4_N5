@@ -64,9 +64,7 @@ Các template dùng `asset_url(...)` từ router trang để gắn phiên bản 
 vào URL JS/CSS. Giữ helper này khi thêm trang để tránh nạp script cũ từ cache.
 
 Sau gộp DANG-DAI, chi tiết trạm có danh sách chọn đầu nối và nút bắt đầu sạc
-(SCRUM-190). Chỉ đầu nối Available của trụ online chọn được. Nút hiện thông báo
-bản thử giao diện; chưa gọi API bắt đầu phiên. Trạng thái chờ 60 giây và các lỗi
-từ chối/bận/hết thời gian chưa được nối vào luồng chạy (SCRUM-191/192).
+(SCRUM-190/191/192). Chỉ đầu nối Available của trụ online chọn được. Nhập mã thẻ RFID hợp lệ (tối đa 20 ký tự) rồi gửi yêu cầu; nút khóa tối đa 60 giây. Accepted chưa được coi là phiên đã bắt đầu: FE kiểm tra phiên thật mỗi 2 giây. Có thông báo riêng cho từ chối/bận/hết thời gian. Chi tiết test SCRUM-194 và các phụ thuộc backend chưa đủ để nghiệm thu nằm trong ketqua/SCRUM-191-192-194_DANG_DAI.md.
 
 Đăng nhập và hiện/ẩn mật khẩu đã có trước lần gộp này. Trang login sử dụng API
 đăng nhập và tài khoản trong database; chế độ mock login ngoài yêu cầu đã gỡ.
