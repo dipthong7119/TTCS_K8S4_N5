@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     CSMS_SIMULATOR_URL: str = "ws://app:8000/ocpp"
     CSMS_SIMULATOR_IMAGE: str | None = None
 
+    # Local Windows development can start its own OCPP fleet without Compose.
+    CSMS_LOCAL_SIMULATOR_ENABLED: bool = False
+    CSMS_LOCAL_SIMULATOR_COUNT: int = Field(20, ge=1, le=20)
+    CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS: bool = True
+    CSMS_LOCAL_SIMULATOR_URL: str = "ws://127.0.0.1:8000/ocpp"
+
     # Bảo mật
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

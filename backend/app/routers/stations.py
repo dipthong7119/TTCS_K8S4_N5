@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.station import Station
-from app.schemas.station import StationCreate, StationResponse, StationUpdate
+from app.schemas.station import (
+    StationCreate,
+    StationDirectoryResponse,
+    StationResponse,
+    StationUpdate,
+)
 from app.services.ownership import filter_by_owner, get_station_for_user
 
 router = APIRouter(prefix="/stations", tags=["stations"], dependencies=[Depends(deny_unannotated_route)])
@@ -24,7 +29,7 @@ def _paginate(query, page: int, size: int):
     return items, total
 
 
-@router.get("", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get("", dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))])
 async def list_stations(
     current_user: CurrentUser,
     status: str | None = Query(None, description="Lọc theo trạng thái"),
@@ -37,7 +42,14 @@ async def list_stations(
     Áp dụng lọc theo sở hữu ở tầng truy vấn — T-07."""
     role_names = [r.name for r in current_user.roles]
     q = db.query(Station).options(joinedload(Station.owner))
-    q = filter_by_owner(q, current_user.id, role_names)
+    driver_directory = "driver" in role_names and not {
+        "admin", "station_owner", "operator"
+    }.intersection(role_names)
+    if driver_directory:
+        # Drivers may browse public stations, but only those available for charging.
+        q = q.filter(Station.status == "active")
+    else:
+        q = filter_by_owner(q, current_user.id, role_names)
 
     if status:
         q = q.filter(Station.status == status)
@@ -52,10 +64,28 @@ async def list_stations(
         item.charge_point_count = db.query(ChargePoint).filter(
             ChargePoint.station_id == item.id
         ).count()
+    if driver_directory:
+        items = [
+            {
+                "id": item.id,
+                "name": item.name,
+                "address": item.address,
+                "latitude": item.latitude,
+                "longitude": item.longitude,
+                "status": item.status,
+                "created_at": item.created_at,
+                "charge_point_count": item.charge_point_count,
+            }
+            for item in items
+        ]
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
-@router.get("/{station_id}", response_model=StationResponse, dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get(
+    "/{station_id}",
+    response_model=StationResponse | StationDirectoryResponse,
+    dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))],
+)
 async def get_station(
     station_id: int,
     current_user: CurrentUser,
@@ -63,6 +93,31 @@ async def get_station(
 ):
     """Chi tiết một trạm — kiểm tra quyền sở hữu."""
     role_names = [r.name for r in current_user.roles]
+    driver_directory = "driver" in role_names and not {
+        "admin", "station_owner", "operator"
+    }.intersection(role_names)
+    if driver_directory:
+        station = db.query(Station).filter(
+            Station.id == station_id,
+            Station.status == "active",
+        ).first()
+        if station is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy trạm")
+        from app.models.charge_point import ChargePoint
+        station.charge_point_count = db.query(ChargePoint).filter(
+            ChargePoint.station_id == station_id
+        ).count()
+        return {
+            "id": station.id,
+            "name": station.name,
+            "address": station.address,
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+            "status": station.status,
+            "created_at": station.created_at,
+            "charge_point_count": station.charge_point_count,
+        }
+
     station = get_station_for_user(db, station_id, current_user.id, role_names, "view")
     if not station:
         raise HTTPException(status_code=404, detail="Không tìm thấy trạm")

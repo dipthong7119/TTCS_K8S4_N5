@@ -27,8 +27,8 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 | Công cụ | Phiên bản tối thiểu |
 |---|---|
 | Python | 3.11+ |
-| Docker | 24+ |
-| Docker Compose | 2.20+ |
+| Docker | 24+ (chỉ khi chạy bằng Docker) |
+| Docker Compose | 2.20+ (chỉ khi chạy bằng Docker) |
 
 Docker Compose chạy FastAPI cùng PostgreSQL 15 và lưu dữ liệu trong volume riêng.
 `run.ps1` chạy trực tiếp trên Windows với SQLite tại `backend/csms.db`. Hai cách
@@ -167,8 +167,19 @@ Các file dump nằm trong volume Docker, ngoài thư mục mã nguồn và Git.
 ```
 
 Lần đầu script tạo `.venv`, cài thư viện, lấy `.env` từ `.env.example` nếu chưa có,
-chạy Alembic rồi khởi động server. Tắt bằng `Ctrl+C`; ứng dụng thoát gọn không in
-traceback `KeyboardInterrupt`.
+chạy Alembic rồi khởi động server cùng simulator OCPP cục bộ. Mặc định simulator
+kết nối 20 trụ `SIM-*` và 5 trụ mẫu, nên trang giám sát có trạng thái sẵn sàng,
+lỗi (`CP_AEON_FAULT`) và bảo trì (`CP_DEMO_MAINT_01`) mà không cần Docker.
+Dùng `-SimulatorCount 1` đến `20` để đổi số trụ `SIM-*`; thêm `-SkipDemoStations`
+nếu không muốn 5 trụ mẫu, hoặc `-SkipSimulator` để chỉ chạy web/API. Ví dụ:
+
+```powershell
+.\run.ps1 -SimulatorCount 5
+.\run.ps1 -SimulatorCount 5 -SkipDemoStations
+```
+
+Tắt bằng `Ctrl+C`; ứng dụng dừng cả web server và fleet simulator.
+SQLite local nằm trong `backend/csms.db` và độc lập với dữ liệu Docker.
 
 Không chép thư mục `.venv` giữa các máy vì virtualenv lưu đường dẫn Python của máy
 tạo ra nó. Nếu `.venv` được chép hoặc Python gốc không còn ở đúng đường dẫn,
@@ -362,6 +373,10 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | `CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS` | `false` | Thêm 5 client mẫu ở Vincom/AEON/Thủ Thiêm; tổng 25 trụ khi count=20 |
 | `CSMS_SIMULATOR_URL` | `ws://app:8000/ocpp` | URL cơ sở của server OCPP cho simulator |
 | `CSMS_SIMULATOR_IMAGE` | `csms-simulator:1.0.0` (Compose chính) | Tag image simulator; stack nghiệm thu mặc định dùng image ứng dụng đang kiểm tra |
+| `CSMS_LOCAL_SIMULATOR_ENABLED` | `false` | Bật fleet simulator nhúng cho phát triển local; `run.ps1` tự bật |
+| `CSMS_LOCAL_SIMULATOR_COUNT` | `20` | Số trụ `SIM-*` khi chạy local bằng `run.ps1` (1–20) |
+| `CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS` | `true` | Thêm 5 trụ mẫu có trạng thái sẵn sàng, lỗi và bảo trì khi chạy local |
+| `CSMS_LOCAL_SIMULATOR_URL` | `ws://127.0.0.1:8000/ocpp` | WebSocket OCPP đích cho simulator local |
 | `SECRET_KEY` | *(phải đổi)* | Khoá ký session/JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Thời gian hết hạn token |
 | `APP_ENV` | `development` | Môi trường (`development`/`production`) |

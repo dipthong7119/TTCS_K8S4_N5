@@ -19,7 +19,7 @@
      data-can-lock-stations="{{ 'true' if can_lock_stations else 'false' }}">
   <div class="page-header__info">
     <h1 class="page-header__title">Trạm sạc</h1>
-    <p class="page-header__subtitle">Quản lý toàn bộ trạm và trụ sạc của bạn</p>
+    <p class="page-header__subtitle">{% if is_driver_view %}Danh sách các trạm đang hoạt động{% else %}Quản lý toàn bộ trạm và trụ sạc của bạn{% endif %}</p>
   </div>
   {% if can_manage_stations %}
   <a href="/stations/new" class="btn btn--primary" id="btn-add-station">
@@ -34,6 +34,18 @@
 
 <!-- Thẻ thống kê -->
 <div class="stats-grid" id="station-stats" aria-label="Thống kê trạm sạc">
+  {% if is_driver_view %}
+  <div class="stat-card stat-card--green" role="img" aria-label="Trạm đang hoạt động">
+    <div class="stat-card__label">Trạm đang hoạt động</div>
+    <div class="stat-card__value" id="stat-total" aria-live="polite">—</div>
+    <div class="stat-card__sub">có thể tìm thấy</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/>
+      </svg>
+    </div>
+  </div>
+  {% else %}
   <div class="stat-card stat-card--blue" role="img" aria-label="Tổng trạm">
     <div class="stat-card__label">Tổng trạm</div>
     <div class="stat-card__value" id="stat-total" aria-live="polite">—</div>
@@ -75,6 +87,7 @@
       </svg>
     </div>
   </div>
+  {% endif %}
 </div>
 
 <!-- Bộ lọc -->
@@ -91,11 +104,15 @@
       </div>
       <select class="form-select" id="status-filter"
               style="width:auto;min-width:160px;" aria-label="Lọc theo trạng thái">
+        {% if is_driver_view %}
+        <option value="active">Đang hoạt động</option>
+        {% else %}
         <option value="">Tất cả trạng thái</option>
         <option value="active">Hoạt động</option>
         <option value="inactive">Tạm dừng</option>
         <option value="maintenance">Bảo trì</option>
         {% if can_lock_stations %}<option value="locked">Bị quản trị khóa</option>{% endif %}
+        {% endif %}
       </select>
       <button class="btn btn--secondary btn--sm" id="btn-refresh" type="button"
               aria-label="Làm mới danh sách">

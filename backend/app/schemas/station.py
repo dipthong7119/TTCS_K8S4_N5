@@ -39,3 +39,18 @@ class StationResponse(BaseModel):
     charge_point_count: int = 0  # số trụ trong trạm (hiển thị trên danh sách)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StationDirectoryResponse(BaseModel):
+    """Public, read-only station data shown to drivers."""
+
+    id: int
+    name: str
+    address: str | None
+    latitude: float | None
+    longitude: float | None
+    status: str
+    created_at: datetime
+    charge_point_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
