@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
+from websockets.typing import Subprotocol
+
 # OCPP 1.6J message formats (mang trong module riêng — T-14)
 # CALL:      [2, unique_id, action, payload]
 # CALLRESULT: [3, unique_id, payload]
@@ -128,7 +130,7 @@ class SimpleSimulator:
         while True:
             self._disconnect_event.clear()
             self._reboot_requested = False
-            async with websockets.connect(self.uri, subprotocols=["ocpp1.6"]) as ws:
+            async with websockets.connect(self.uri, subprotocols=[Subprotocol("ocpp1.6")]) as ws:
                 self.ws = ws
                 self.connected = True
                 print(f"[Simulator] Connected to {self.uri}")

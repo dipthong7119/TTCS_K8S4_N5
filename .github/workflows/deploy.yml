@@ -2,52 +2,32 @@ name: CD Pipeline - Deploy to Staging
 
 on:
   push:
-    branches: [ "main", "master", "f" ]
+    branches: [ "main", "master", "sprint-3" ]
 
-# Phân quyền cho token để có thể đẩy package lên GitHub Container Registry
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: deploy-staging
+  group: cd-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-      - name: Run Linter (Ruff)
-        run: ruff check app tests alembic ../tests
-      - name: Typecheck application (Mypy)
-        run: python -m mypy app
-      - name: Audit installed dependencies
-        run: python -m pip_audit --local --progress-spinner off
-      - name: Run Unit Tests (Pytest)
-        run: pytest tests ../tests
-      - name: Check frontend behavior
-        working-directory: .
-        run: node --test tests/frontend_behavior.cjs
+    # Reuse all CI checks from this commit, including Docker and OCPP acceptance.
+    uses: ./.github/workflows/ci.yml
 
   deploy-staging:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: test
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    # Chỉ build/push sau khi lint và toàn bộ test đã qua.
+    permissions:
+      contents: read
+      packages: write
+    # Serialize deployments to the same server across main and master.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
 
     steps:
       - name: Checkout Code

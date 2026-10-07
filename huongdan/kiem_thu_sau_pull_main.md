@@ -48,6 +48,31 @@ không triển khai tiếp các task đó. Xem kết quả và phạm vi Git ở
 Đợt pull này không thêm template, JS hoặc trang web mới. Các handler giữ luồng
 nghiệp vụ đã có; thay đổi chủ yếu là tổ chức backend, kiểm thử và truy vấn API.
 
+## Bổ sung sau đồng bộ HOANG-DUC — 06/10/2026
+
+Nhận đầu nhánh `3520f1c` vào f. Nhánh này không sửa frontend:
+
+- T-51/SCRUM-193 thêm `POST /api/charge_points/{code}/remote-start`, nhận
+  `id_tag` và `connector_id`, gửi lệnh OCPP và map Accepted/Rejected/lỗi kết nối.
+  Có thể xem hợp đồng ở `/docs` và `ketqua/T-51_hop_dong_api.md`.
+  Nút Bắt đầu sạc hiện tại vẫn chỉ là giao diện thử. T-51 chưa đủ AC:
+  chưa chặn đầu nối bận/trạm ngừng ở server, chưa ràng buộc thẻ ảo theo tài xế
+  hoặc lưu yêu cầu chờ 60 giây. Không đánh dấu T-51/T-52 Done chỉ vì unit test đạt.
+- T-49 cải tiến API dừng đã có: phân biệt phiên đã kết thúc, trụ ngoại tuyến,
+  mất kết nối, từ chối và timeout; ghi audit qua hàm dùng chung. Trên `/sessions`,
+  admin/operator có thể thử nút Dừng từ xa với một phiên đang chạy. Simulator
+  fleet hiện chưa xử lý RemoteStop, nên chưa nghiệm thu ca dừng thành công với fleet.
+- SCRUM-183 thêm hàm đối chiếu hai tập dữ liệu kWh và xuất Markdown. JSON 20
+  phiên trong `ketqua/kwh_reconciliation_sample.json` là dữ liệu mẫu, không phải
+  log của một lượt chạy 20 trụ. Chưa có màn hình hoặc bước tự thu thập dữ liệu.
+
+Backend mới đã được build vào app local; các trang phiên của T-48/T-50 và
+bộ lọc, đóng chi tiết, đăng nhập được giữ. Lệnh chạy tất cả trong một lượt:
+
+```powershell
+docker compose --profile ocpp-simulator up -d --build
+```
+
 ## Tài khoản development
 
 Đây là tài khoản mẫu đã công khai trong README, chỉ dùng kiểm thử local.

@@ -23,6 +23,14 @@
       Chi phí sẽ hiển thị sau khi hệ thống có cấu hình biểu giá.
     </p>
   </div>
+  {% if is_global_sessions and ('admin' in current_user.roles or 'operator' in current_user.roles) %}
+  <a href="/sessions/kwh-reconciliation" class="btn btn--secondary session-reconciliation-link" id="btn-kwh-reconciliation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 3v18h18"/><path d="M7 14v3M12 9v8M17 5v12"/>
+    </svg>
+    Đối chiếu kWh
+  </a>
+  {% endif %}
 </div>
 
 <!-- Active session banner / card (T-48, T-50) -->

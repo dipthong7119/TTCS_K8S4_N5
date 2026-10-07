@@ -24,4 +24,3 @@ class RemoteStartRequest(BaseModel):
 class RemoteCommandResponse(BaseModel):
     status: Literal["Accepted", "Rejected"]
     message: str
-

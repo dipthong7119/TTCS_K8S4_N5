@@ -27,8 +27,8 @@ Trụ sạc trong dự án là **phần mềm giả lập** OCPP 1.6J, không ph
 | Công cụ | Phiên bản tối thiểu |
 |---|---|
 | Python | 3.11+ |
-| Docker | 24+ |
-| Docker Compose | 2.20+ |
+| Docker | 24+ (chỉ khi chạy bằng Docker) |
+| Docker Compose | 2.20+ (chỉ khi chạy bằng Docker) |
 
 Docker Compose chạy FastAPI cùng PostgreSQL 15 và lưu dữ liệu trong volume riêng.
 `run.ps1` chạy trực tiếp trên Windows với SQLite tại `backend/csms.db`. Hai cách
@@ -95,6 +95,36 @@ Lệnh chạy một trụ trực tiếp trước đây (`SIM-01 --host localhost
 vẫn được hỗ trợ. T-55 chỉ cung cấp dịch vụ trụ; kịch bản phiên ngắt–nối và gate CI
 là T-46/T-56, thực hiện riêng theo phân công.
 
+### CI 20 trụ và gate merge — T-56 / SCRUM-185
+
+CI chạy Ruff, Mypy, kiểm tra thư viện, unit test và frontend trước khi build
+image, kiểm thử Docker cũ, rồi gọi cùng gói kiểm thử Sprint 3 dùng trên máy local:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-dev.txt
+.\.venv\Scripts\python.exe scripts/run_sprint3_ci.py
+```
+
+Lệnh tự build image và tạo stack PostgreSQL/app riêng với cổng ngẫu nhiên.
+Mỗi lượt có **20 trụ**, mỗi trụ ngắt/nối **1–3 lần**, chạy **3 lượt** với seed
+42/43/44. Kết quả kiểm tra cả phiên bị mất/nhân đôi, MeterValues sau khi nối
+lại, trạng thái hoàn tất và kWh trong ngưỡng 0.001. Không dùng dữ liệu mẫu
+của trang web. Khi đã có image, thêm `--image <tag> --no-build`.
+
+Báo cáo nằm trong `outputs/sprint3-ci/<lượt chạy>/`: log pytest, JUnit,
+JSON kịch bản, JSON/Markdown theo định dạng SCRUM-183/184, log Docker và
+`manifest.json`. CI giữ artifact **sprint3-20-charger-evidence** trong 14 ngày,
+kể cả khi test thất bại; bảng đối chiếu cũng hiện trong Actions Summary.
+Lệnh trả mã lỗi nếu test lỗi/bị skip, thiếu phiên/báo cáo hoặc dọn stack thất bại.
+Stack được dọn sau mỗi lượt chạy; không tái sử dụng/xóa project Docker đã tồn tại.
+
+Check bắt buộc trên GitHub là **Sprint 3 CI**. Cấu hình cho `main` và
+`sprint-3` ở [.github/sprint3-branch-protection.json](.github/sprint3-branch-protection.json).
+GitHub phải áp dụng cấu hình này để chặn merge thực sự; YAML CI tự nó chưa
+đủ. Chính sách yêu cầu nhánh cập nhật với nhánh đích và check của GitHub Actions
+thành công, áp dụng cả quản trị viên. Các thay đổi tiếp theo đi qua PR.
+Kết quả nghiệm thu ở [T-56 / SCRUM-185](ketqua/T-56_SCRUM-185_ket_qua.md).
+
 Hướng dẫn thử trực tiếp các luồng sau khi đồng bộ main:
 [Kiểm thử web local](huongdan/kiem_thu_sau_pull_main.md).
 
@@ -116,6 +146,18 @@ Tìm mã trụ chỉ hiện trụ khớp; tìm tên/địa chỉ trạm có th�
 **Khởi động lại** trên một trụ online. Sau xác nhận Reset Soft/Hard, lệnh đi qua
 backend tới simulator OCPP; trụ kết nối lại và báo trạng thái theo profile đã cấu hình.
 Trụ lỗi và bảo trì vẫn giữ trạng thái kiểm thử sau Reset.
+
+### Điều khiển phiên và đối chiếu kWh sau gộp HOANG-DUC
+
+Nhánh f đã nhận API `POST /api/charge_points/{code}/remote-start` (T-51 /
+SCRUM-193), cải tiến xử lý lỗi dừng phiên T-49 và công cụ đối chiếu kWh
+SCRUM-183. Hợp đồng API ở [T-51](ketqua/T-51_hop_dong_api.md) và
+[T-49](ketqua/T-49_hop_dong_api.md); cách thử và giới hạn hiện tại ở
+[hướng dẫn web local](huongdan/kiem_thu_sau_pull_main.md).
+
+Nút Bắt đầu sạc trên web vẫn là giao diện thử; simulator fleet chưa xử lý
+RemoteStart/RemoteStop. Công cụ đối chiếu nhận hai tập dữ liệu đầu vào,
+chưa tự thu thập kết quả 20 trụ. JSON mẫu phục vụ kiểm thử định dạng.
 
 ### Sao lưu và khôi phục PostgreSQL
 
@@ -155,8 +197,19 @@ Các file dump nằm trong volume Docker, ngoài thư mục mã nguồn và Git.
 ```
 
 Lần đầu script tạo `.venv`, cài thư viện, lấy `.env` từ `.env.example` nếu chưa có,
-chạy Alembic rồi khởi động server. Tắt bằng `Ctrl+C`; ứng dụng thoát gọn không in
-traceback `KeyboardInterrupt`.
+chạy Alembic rồi khởi động server cùng simulator OCPP cục bộ. Mặc định simulator
+kết nối 20 trụ `SIM-*` và 5 trụ mẫu, nên trang giám sát có trạng thái sẵn sàng,
+lỗi (`CP_AEON_FAULT`) và bảo trì (`CP_DEMO_MAINT_01`) mà không cần Docker.
+Dùng `-SimulatorCount 1` đến `20` để đổi số trụ `SIM-*`; thêm `-SkipDemoStations`
+nếu không muốn 5 trụ mẫu, hoặc `-SkipSimulator` để chỉ chạy web/API. Ví dụ:
+
+```powershell
+.\run.ps1 -SimulatorCount 5
+.\run.ps1 -SimulatorCount 5 -SkipDemoStations
+```
+
+Tắt bằng `Ctrl+C`; ứng dụng dừng cả web server và fleet simulator.
+SQLite local nằm trong `backend/csms.db` và độc lập với dữ liệu Docker.
 
 Không chép thư mục `.venv` giữa các máy vì virtualenv lưu đường dẫn Python của máy
 tạo ra nó. Nếu `.venv` được chép hoặc Python gốc không còn ở đúng đường dẫn,
@@ -350,6 +403,10 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | `CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS` | `false` | Thêm 5 client mẫu ở Vincom/AEON/Thủ Thiêm; tổng 25 trụ khi count=20 |
 | `CSMS_SIMULATOR_URL` | `ws://app:8000/ocpp` | URL cơ sở của server OCPP cho simulator |
 | `CSMS_SIMULATOR_IMAGE` | `csms-simulator:1.0.0` (Compose chính) | Tag image simulator; stack nghiệm thu mặc định dùng image ứng dụng đang kiểm tra |
+| `CSMS_LOCAL_SIMULATOR_ENABLED` | `false` | Bật fleet simulator nhúng cho phát triển local; `run.ps1` tự bật |
+| `CSMS_LOCAL_SIMULATOR_COUNT` | `20` | Số trụ `SIM-*` khi chạy local bằng `run.ps1` (1–20) |
+| `CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS` | `true` | Thêm 5 trụ mẫu có trạng thái sẵn sàng, lỗi và bảo trì khi chạy local |
+| `CSMS_LOCAL_SIMULATOR_URL` | `ws://127.0.0.1:8000/ocpp` | WebSocket OCPP đích cho simulator local |
 | `SECRET_KEY` | *(phải đổi)* | Khoá ký session/JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Thời gian hết hạn token |
 | `APP_ENV` | `development` | Môi trường (`development`/`production`) |
@@ -371,8 +428,13 @@ Pipeline GitHub Actions gồm 2 workflow:
 
 | File | Kích hoạt | Tác vụ |
 |---|---|---|
-| `.github/workflows/ci.yml` | Mọi push / PR; có thể chạy thủ công | Ruff, Mypy, audit phụ thuộc, pytest, build Docker image |
-| `.github/workflows/deploy.yml` | Merge vào `main` | Deploy lên staging server |
+| `.github/workflows/ci.yml` | Mọi push / PR; chạy thủ công hoặc được CD gọi | Ruff, Mypy, audit phụ thuộc, pytest, JS, build Docker và nghiệm thu Compose/OCPP |
+| `.github/workflows/deploy.yml` | Push vào `main`, `master`, `f` | Gọi toàn bộ CI; chỉ triển khai staging từ `main`/`master` sau khi kiểm tra đạt |
+
+CD dùng lại workflow CI tại cùng commit, nên lỗi Docker/OCPP cũng chặn triển khai.
+Kiểm tra trên các nhánh chạy độc lập; các lần triển khai cùng server được xếp
+tuần tự và không hủy giữa chừng khi có push mới. Node.js được chọn phiên bản 22;
+bước nghiệm thu có giới hạn 5 phút, thu log khi lỗi và luôn dọn stack test.
 
 **Secrets cần cấu hình** tại `Settings > Secrets and variables > Actions`:
 
@@ -445,4 +507,3 @@ lại các AC trên máy chủ staging khi có môi trường đó.
 6. **Không commit** file `.env`, `csms.db`, `*.sqlite`.
 7. **Tối đa ~250 dòng/file** backend; ~150 dòng/template HTML.
 8. Ghi log kết quả mỗi task vào `ketqua/T-XX_ket_qua.md`.
-

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest import mock
 
 import pytest
@@ -17,7 +17,7 @@ from app.models.user import User
 from app.services.connection_manager import manager
 
 engine_test = create_engine(
-    "sqlite:///:memory:", 
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool
 )
@@ -45,7 +45,7 @@ def setup_db():
         code="CP01",
         station_id=1,
         status="offline",
-        last_seen_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(UTC),
     )
     db.add_all([user, station, point])
     db.commit()
@@ -63,7 +63,7 @@ def test_reset_offline(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     send_call = mock.AsyncMock()
     monkeypatch.setattr(manager, "send_call", send_call)
@@ -106,12 +106,12 @@ def test_reset_online(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     connector = Connector(
         charge_point_id=point.id, connector_id=1, status="bận"
     )
@@ -130,7 +130,7 @@ def test_reset_online(monkeypatch):
         return {"status": "Accepted"}
 
     monkeypatch.setattr(manager, "send_call", acknowledged)
-    
+
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 200
     assert resp.json()["status"] == "Accepted"
@@ -159,21 +159,21 @@ def test_reset_rejected(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
-    
+
     async def rejected(code, action, payload, timeout):
         return {"status": "Rejected"}
 
     monkeypatch.setattr(manager, "send_call", rejected)
-    
+
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Hard"})
     assert resp.status_code == 502
     assert "chấp nhận" in resp.json()["detail"] or "chấp nhận" in resp.json()["detail"].lower() or "chấp nhận" in resp.text
@@ -188,21 +188,21 @@ def test_reset_timeout(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
-    
+
     async def timeout_call(code, action, payload, timeout):
         raise asyncio.TimeoutError()
 
     monkeypatch.setattr(manager, "send_call", timeout_call)
-    
+
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 504
     assert "thời gian" in resp.text
@@ -217,21 +217,21 @@ def test_reset_disconnect(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
-    
+
     async def disconnect_call(code, action, payload, timeout):
         raise ConnectionError()
 
     monkeypatch.setattr(manager, "send_call", disconnect_call)
-    
+
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 409
     assert "ngắt kết nối" in resp.text
@@ -247,21 +247,21 @@ def test_reset_ocpp_error(monkeypatch):
             self.email = "admin@test.com"
             self.full_name = "Admin"
             self.roles = [MockRole(r) for r in roles]
-            
+
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
-    
+
     async def ocpp_error_call(code, action, payload, timeout):
         raise OCPPError("msg_id", "NotSupported", "Error desc", {})
 
     monkeypatch.setattr(manager, "send_call", ocpp_error_call)
-    
+
     resp = client.post("/api/charge_points/CP01/reset", json={"type": "Soft"})
     assert resp.status_code == 502
     assert "từ chối" in resp.text
@@ -312,7 +312,7 @@ def test_remote_start_online_accepted(monkeypatch):
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
@@ -352,7 +352,7 @@ def test_remote_start_online_rejected(monkeypatch):
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
@@ -391,7 +391,7 @@ def test_remote_start_timeout(monkeypatch):
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
@@ -425,7 +425,7 @@ def test_remote_start_disconnect(monkeypatch):
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
-    point.last_seen_at = datetime.now(timezone.utc)
+    point.last_seen_at = datetime.now(UTC)
     db.commit()
     db.close()
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
@@ -461,4 +461,3 @@ def test_remote_start_not_found():
         json={"id_tag": "TAG12345"},
     )
     assert resp.status_code == 404
-

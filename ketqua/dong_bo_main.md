@@ -180,3 +180,80 @@ chuyển trang được kiểm chứng bằng kiểm thử JS với location spy
 
 Snapshot trước khi hoàn tất merge vẫn giữ trong Git stash `257d1cd`.
 Kết quả GitHub phải đọc từ workflow của commit được push lên f sau bước này.
+
+## Đồng bộ HOANG-DUC — 06/10/2026
+
+### Git và sửa lỗi tích hợp
+
+- Fetch `origin/HOANG-DUC` từ `ef3a8e5` tới
+  `3520f1c421b038cd36e0533f3b3641fac7822864`. Nhánh này đã gộp f `a48c28e`,
+  nên đồng bộ f local bằng fast-forward và giữ toàn bộ thay đổi trước đó.
+- Xóa dấu conflict marker đã bị commit trong test BootNotification.
+- Khôi phục tham chiếu migration T-21 đã dùng
+  `h20261003_t21_ocpp_request_payload` và lệnh `upgrade head`.
+  Chuỗi Alembic vẫn có một head `h20261006_meter_values`; không đổi schema.
+- Giữ rule EXE002, không tắt lint để che lỗi quyền file khi mount từ Windows.
+- Sửa tham chiếu UTC trong các test remote, cô lập dependency override của
+  test RemoteStop để không ảnh hưởng các module test khác.
+- Báo cáo Markdown đối chiếu hiển thị tỷ lệ/verdict thật thay vì luôn ghi
+  đạt 100%. Bổ sung test dữ liệu lệch và trường hợp không có bản ghi đầu vào.
+- Cập nhật hướng dẫn và ghi chú báo cáo upstream để phân biệt API/công cụ
+  đã có với tiêu chí đầu cuối còn thiếu; không thêm mock trình duyệt.
+
+### Chức năng nhận được và giới hạn
+
+| Task | Thay đổi thực tế | Phần chưa đủ để kết luận Done |
+| --- | --- | --- |
+| T-51 / SCRUM-180, SCRUM-193 | API gửi RemoteStartTransaction, map Accepted/Rejected và lỗi ngoại tuyến/mất kết nối/timeout; ghi audit không lưu mã thẻ đầy đủ | Chưa kiểm đầu nối bận hoặc trạm ngừng trước khi gửi; chưa ràng buộc thẻ ảo theo tài xế/quyền sở hữu trạm và lưu yêu cầu chờ 60 giây. Frontend hiện vẫn là bản thử, fleet chưa xử lý lệnh. |
+| T-49 / SCRUM-172 | Cải tiến API dừng đã có: phân biệt phiên đã đóng, ngoại tuyến, mất kết nối, từ chối và timeout; thêm 9 unit test | Mốc chờ 2 phút/job/đóng theo StopTransaction đã có từ trước. Chưa nghiệm thu dừng thành công trên fleet hiện tại vì simulator chưa xử lý RemoteStop. |
+| SCRUM-183 | Đối chiếu hai tập dữ liệu, xác định khớp/lệch/thiếu phiên, tổng hợp kết quả và xuất Markdown; JSON mẫu 20 phiên | Chưa tự thu thập dữ liệu từ API/DB và chưa chạy kịch bản 20 phiên ngắt nối thật. Không có màn hình mới. |
+
+### Kiểm chứng sau đồng bộ
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| Pytest toàn bộ local | **428 passed**, 26 warnings, 77,04 giây |
+| Các phần đổi trên Linux/Python 3.11 | **40 passed**: remote start/stop, đối chiếu kWh và migration, 10,82 giây |
+| Ruff / Mypy / pip-audit trên Linux | Đạt; Mypy **46 file**; không có lỗ hổng thư viện được báo |
+| Hành vi JavaScript | **51 passed**, không fail/skip |
+| Docker local | Build app và simulator đạt; app/PostgreSQL healthy, backup và simulator chạy |
+| HTTP local | Health ok; OpenAPI có endpoint remote-start; đăng nhập admin và API giám sát đạt, **25 trụ online** |
+| Dữ liệu và cấu trúc | Excel SHA256 giữ nguyên; giữ `.env` và volume PostgreSQL; không sinh thư mục backup hoặc test trùng trong app |
+
+Phạm vi đồng bộ là HOANG-DUC, không nhận nhánh frontend DANG-DAI-REMOTE-START.
+Kết quả này được ghi nhận tại thời điểm đồng bộ local; bước sửa pipeline và
+kiểm chứng GitHub tiếp theo nằm ở mục dưới.
+
+## Kiểm tra độ ổn định CI/CD — T-02, T-03
+
+- Run HOANG-DUC `37476960203` thất bại ở Ruff do dấu conflict marker bị commit.
+  Run LAM-TUNG `37472521730` lỗi import/type/lint trong bản main cũ. Những lỗi
+  này đã được sửa trong lịch sử f hiện tại; chạy lại commit cũ không sửa được lỗi.
+  Run HOANG-DUC mới `37480905045` vẫn lỗi thứ tự import và tên `timezone` chưa
+  định nghĩa; bản f đã qua Ruff và các test remote với tham chiếu UTC đúng.
+- CD trước đây chỉ lặp lại lint/unit test, không chờ Docker và nghiệm thu OCPP.
+  Chuyển job `test` sang gọi `ci.yml` bằng `workflow_call` tại cùng commit để
+  mọi kiểm tra CI đều là điều kiện bắt buộc trước khi build/push/deploy staging.
+- Chọn Node.js 22, giới hạn chờ Compose 120 giây và bước nghiệm thu 5 phút.
+  Thu trạng thái/log container khi smoke test lỗi trước khi luôn dọn stack tạm.
+- Tách concurrency kiểm tra CD theo nhánh; giữ mutex triển khai chung main/master
+  để không thay hai image trên cùng server cùng lúc. Quyền ghi package chỉ nằm
+  ở job triển khai; f chỉ chạy kiểm tra. Không bỏ qua test hoặc audit.
+- Giữ kiểm thử các nhánh rollback và bổ sung kiểm thử điều kiện Docker/OCPP,
+  phạm vi nhánh và concurrency. Không có staging thật để xác nhận SSH deploy.
+
+### Kiểm chứng trước push bản sửa CI/CD
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| actionlint 1.7.12, cả hai workflow | Đạt kiểm tra cú pháp/cấu trúc Actions |
+| Linux/Python 3.11.16, nguồn từ Git index | **429 passed**, 26 warnings, 61,40 giây; coverage tổng hợp **74%** |
+| Ruff / Mypy / pip-audit trên Linux | Đạt; Mypy **46 file**; không có lỗ hổng thư viện được báo |
+| Hành vi JavaScript local | **51 passed**, không fail/skip |
+| Điều kiện triển khai và rollback | **8 passed**, gồm các nhánh ứng viên lỗi, thay image lỗi, health lỗi và pull lỗi |
+
+Kết quả workflow GitHub được đối chiếu theo SHA sau khi push lên f; trạng thái
+xanh trên f không xác nhận đã triển khai staging, vì job triển khai chỉ dành
+cho main/master.
+Nhánh f remote đã bị xóa trước lần push này (PR #30 đã đóng, chưa merge).
+Đẩy lại f theo yêu cầu trước đó; không mở lại PR hoặc đẩy lên main/HOANG-DUC.

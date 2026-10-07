@@ -14,14 +14,56 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_feature_branch_runs_checks_without_staging_deployment():
     workflow = yaml.load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    assert "f" in workflow["on"]["push"]["branches"]
+    assert "sprint-3" in workflow["on"]["push"]["branches"]
     checks = workflow["jobs"]["test"]
     assert not checks.get("if")
     assert not checks.get("continue-on-error")
-    assert all(not step.get("continue-on-error") for step in checks["steps"])
+    assert checks["uses"] == "./.github/workflows/ci.yml"
+    ci = yaml.load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    assert "workflow_call" in ci["on"]
+    steps = ci["jobs"]["build-lint-test"]["steps"]
+    assert all(not step.get("continue-on-error") for step in steps)
+    commands = "\n".join(step.get("run", "") for step in steps)
+    for required in (
+        "python -m ruff check",
+        "python -m mypy app",
+        "python -m pip_audit",
+        "python -m pytest tests ../tests",
+        "node --test tests/frontend_behavior.cjs",
+        "python -m pytest tests/sprint2_docker_acceptance.py",
+    ):
+        assert required in commands
+    build = next(step for step in steps if step.get("uses", "").startswith("docker/build-push-action@"))
+    assert build["with"]["load"] == "true"
+    smoke = next(step for step in steps if "tests/sprint2_docker_acceptance.py" in step.get("run", ""))
+    assert not smoke.get("if")
+    assert "export CSMS_IMAGE=csms-app:ci" in smoke["run"]
+    assert "up -d --no-build --wait" in smoke["run"]
+    unit = next(step for step in steps if step.get("name") == "Run Unit Tests (Pytest)")
+    assert "--ignore=../tests/test_scrum182_20charger_scenario.py" in unit["run"]
+    scenario = next(step for step in steps if step.get("id") == "sprint3-acceptance")
+    assert "python scripts/run_sprint3_ci.py" in scenario["run"]
+    assert "--no-build" in scenario["run"] and "--repeat 3" in scenario["run"]
+    assert scenario["timeout-minutes"] == "5"
+    assert not scenario.get("if") and not scenario.get("continue-on-error")
+    assert steps.index(unit) < steps.index(scenario)
+    evidence = next(step for step in steps if step.get("name") == "Save Sprint 3 acceptance evidence")
+    assert "always()" in evidence["if"]
+    assert evidence["with"]["if-no-files-found"] == "error"
+    assert ci["jobs"]["build-lint-test"]["name"] == "Sprint 3 CI"
     deployment = workflow["jobs"]["deploy-staging"]
     assert deployment["needs"] == "test"
     assert deployment["if"] == "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'"
+
+
+def test_cd_validation_does_not_block_other_branches_or_cancel_deployment():
+    workflow = yaml.load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    deployment = workflow["jobs"]["deploy-staging"]
+    assert "github.ref" in workflow["concurrency"]["group"]
+    assert deployment["concurrency"] == {"group": "deploy-staging", "cancel-in-progress": "false"}
+    assert workflow["concurrency"]["group"] != deployment["concurrency"]["group"]
+    assert workflow["permissions"] == {"contents": "read"}
+    assert deployment["permissions"]["packages"] == "write"
 
 
 def deploy_script():

@@ -37,7 +37,6 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
@@ -56,6 +55,8 @@ class MockUser:
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
+    previous_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.create_all(bind=engine_test)
     db = SessionLocalTest()
     user = User(id=1, email="operator@test.com", password_hash="123", full_name="Operator Test")
@@ -96,6 +97,8 @@ def setup_db():
 
     Base.metadata.drop_all(bind=engine_test)
     manager.active_connections.clear()
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(previous_overrides)
 
 
 def test_remote_stop_accepted(monkeypatch):

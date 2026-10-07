@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% set active_page = "kwh-reconciliation" %}
+
+{% block title %}Bảng đối chiếu kWh{% endblock %}
+{% block meta_description %}So sánh điện năng ghi nhận giữa hệ thống CSMS và trụ mô phỏng; lọc và xuất kết quả đối chiếu.{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/sessions">Phiên sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Đối chiếu kWh</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/kwh_reconciliation.css') }}" />
+{% endblock %}
+
+{% block content %}
+
+<section class="recon-page" aria-labelledby="recon-page-title">
+<!-- ═══════════════════ Page Header ═══════════════════ -->
+<div class="page-header" id="kwh-reconciliation-page">
+  <div class="page-header__info">
+    <h1 class="page-header__title" id="recon-page-title">Bảng đối chiếu kWh</h1>
+    <p class="page-header__subtitle">
+      So sánh điện năng hệ thống CSMS ghi nhận với dữ liệu từ trụ mô phỏng.
+    </p>
+  </div>
+  <a href="/sessions" class="btn btn--secondary" id="btn-back-to-sessions">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="m12 19-7-7 7-7M5 12h14"/>
+    </svg>
+    Về phiên sạc
+  </a>
+
+  <!-- Meta info -->
+  <dl class="recon-meta">
+    <div>
+      <dt>Dữ liệu:</dt>
+      <dd id="recon-meta-title">—</dd>
+    </div>
+    <div>
+      <dt>Tạo lúc:</dt>
+      <dd id="recon-meta-generated">—</dd>
+    </div>
+    <div>
+      <dt>Sai số tối đa:</dt>
+      <dd id="recon-meta-tolerance">—</dd>
+    </div>
+  </dl>
+</div>
+
+<!-- Mock data notice (ẩn mặc định, hiện khi dùng dữ liệu mẫu) -->
+<div id="recon-mock-notice" class="recon-notice" style="display:none;" role="note">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <span>
+    Đang hiển thị <strong>dữ liệu mẫu</strong> để kiểm tra giao diện.
+    Các số liệu này chưa phản ánh kết quả sạc thực tế.
+  </span>
+</div>
+
+<!-- ═══════════════════ Verdict Banner ═══════════════════ -->
+<div id="recon-verdict" class="recon-verdict recon-verdict--passed" aria-live="polite">
+  <div class="recon-verdict__icon">⏳</div>
+  <span>Đang tải kết quả đối chiếu…</span>
+</div>
+
+<!-- ═══════════════════ Summary Cards ═══════════════════ -->
+<div class="recon-summary" aria-label="Tổng kết đối chiếu">
+
+  <div class="recon-card recon-card--info">
+    <span class="recon-card__label">Tổng phiên</span>
+    <span class="recon-card__value" id="stat-total-sessions">—</span>
+    <span class="recon-card__sub">20 trụ ảo</span>
+  </div>
+
+  <div class="recon-card recon-card--pass">
+    <span class="recon-card__label">Khớp</span>
+    <span class="recon-card__value" id="stat-matched">—</span>
+    <span class="recon-card__sub" id="stat-match-pct">—</span>
+  </div>
+
+  <div class="recon-card recon-card--fail">
+    <span class="recon-card__label">Không khớp</span>
+    <span class="recon-card__value" id="stat-mismatch">—</span>
+    <span class="recon-card__sub">vượt ngưỡng ≤ 0.001 kWh</span>
+  </div>
+
+  <div class="recon-card recon-card--kwh">
+    <span class="recon-card__label">System (CSMS)</span>
+    <span class="recon-card__value" id="stat-system-kwh">—</span>
+    <span class="recon-card__sub">Tổng điện năng ghi nhận</span>
+  </div>
+
+  <div class="recon-card recon-card--kwh">
+    <span class="recon-card__label">Simulator</span>
+    <span class="recon-card__value" id="stat-sim-kwh">—</span>
+    <span class="recon-card__sub">Tổng điện năng báo cáo</span>
+  </div>
+
+  <div class="recon-card recon-card--info">
+    <span class="recon-card__label">Chênh lệch tổng</span>
+    <span class="recon-card__value" id="stat-diff-kwh">—</span>
+    <span class="recon-card__sub">abs(System − Sim)</span>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ Toolbar ═══════════════════ -->
+<div class="recon-toolbar">
+  <div class="recon-toolbar__left">
+    <span class="recon-toolbar__label">Lọc:</span>
+
+    <button class="recon-filter-btn is-active" id="filter-all"
+            data-filter="all" type="button"
+            aria-pressed="true">Tất cả</button>
+
+    <button class="recon-filter-btn" id="filter-match"
+            data-filter="MATCH" type="button"
+            aria-pressed="false">✓ Khớp</button>
+
+    <button class="recon-filter-btn" id="filter-mismatch"
+            data-filter="MISMATCH" type="button"
+            aria-pressed="false">✗ Lệch</button>
+
+    <button class="recon-filter-btn" id="filter-missing-system"
+            data-filter="MISSING_IN_SYSTEM" type="button"
+            aria-pressed="false">Thiếu CSMS</button>
+
+    <input class="recon-search" id="recon-search"
+           type="search" placeholder="Tìm theo mã trụ, phiên…"
+           aria-label="Tìm kiếm phiên sạc" />
+  </div>
+
+  <div class="recon-export-group">
+    <span id="recon-row-count" class="recon-row-count">—</span>
+
+    <button class="btn btn--secondary" id="recon-export-csv"
+            type="button" title="Xuất CSV">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      CSV
+    </button>
+
+    <button class="btn btn--secondary" id="recon-export-md"
+            type="button" title="Xuất Markdown">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      Markdown
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════ Table ═══════════════════ -->
+<div class="recon-table-wrapper" role="region" aria-label="Bảng đối chiếu kWh" tabindex="0">
+  <table class="recon-table" id="recon-table">
+    <thead>
+      <tr>
+        <th data-sort="" style="width:44px;">#
+          <i class="sort-icon" aria-hidden="true"></i>
+        </th>
+        <th data-sort="charge_point_code">Mã trụ
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="connector_id">Đầu nối
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="meter_start_wh">Đo đầu (Wh)
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="meter_stop_wh">Đo cuối (Wh)
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="disconnect_count">Ngắt nối
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="system_kwh">System kWh
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="simulator_kwh">Sim kWh
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="difference_kwh">Δ kWh
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th data-sort="status">Trạng thái
+          <i class="sort-icon" aria-hidden="true">↕</i>
+        </th>
+        <th>Ghi chú</th>
+      </tr>
+    </thead>
+    <tbody id="recon-tbody">
+      <!-- Populated by kwh_reconciliation.js -->
+    </tbody>
+  </table>
+</div>
+
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/kwh_reconciliation.js') }}"></script>
+{% endblock %}

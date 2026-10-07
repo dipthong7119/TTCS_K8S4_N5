@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 outputs/sprint2-2026-09-27/*.png
 outputs/sprint2-2026-09-27/*.inspect.ndjson
+/outputs/sprint3-ci/
 .venv/
 .env
 .env.*
@@ -24,6 +25,9 @@ htmlcov/
 /frontend/skillfrontend/
 /prompts/ke_hoach_sprint2_extracted/
 /baseline_test_results.txt
+
+# Prevent accidentally adding a nested copy of this repository
+/TTCS_K8S4_N5/
 
 # Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
 nhat_ky_lam_tung.md

@@ -93,6 +93,7 @@ def reconcile_single_session(
         )
 
     # Cả hai bên đều có bản ghi
+    assert system_record is not None and sim_record is not None
     session_id = system_record.get("session_id", sim_record.get("session_id", "N/A"))
     code = str(system_record.get("charge_point_code") or sim_record.get("charge_point_code") or "UNKNOWN")
     raw_conn = system_record.get("connector_id")
@@ -215,6 +216,6 @@ def export_markdown_table(reconciliation_data: dict[str, Any]) -> str:
     lines.append("")
     lines.append(
         f"**Tổng kết**: Hệ thống={summary['total_system_kwh']} kWh | Giả lập={summary['total_simulator_kwh']} kWh | "
-        f"Tỷ lệ khớp đạt 100% tiêu chí nghiệm thu S-21 / E-04."
+        f"Tỷ lệ khớp={summary['match_percentage']}% | Kết quả đối chiếu={summary['verdict']}."
     )
     return "\n".join(lines)

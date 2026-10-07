@@ -106,9 +106,14 @@ async def monitoring_page(request: Request, current_user: CurrentUser):
     )
 
 
-@router.get("/stations", dependencies=[Depends(require_role("admin", "station_owner", "operator"))])
+@router.get("/stations", dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))])
 async def stations_page(request: Request, current_user: CurrentUser):
-    roles = _require_any_role(current_user, "admin", "station_owner", "operator")
+    roles = _require_any_role(current_user, "admin", "station_owner", "operator", "driver")
+    driver_directory = "driver" in roles and not {
+        "admin", "station_owner", "operator"
+    }.intersection(roles)
+    if driver_directory:
+        roles = ["driver"]
     return templates.TemplateResponse(
         request,
         "stations/list.html",
@@ -117,6 +122,7 @@ async def stations_page(request: Request, current_user: CurrentUser):
             current_user,
             can_manage_stations=bool({"admin", "station_owner"}.intersection(roles)),
             can_lock_stations="admin" in roles,
+            is_driver_view=driver_directory,
         ),
     )
 
@@ -206,6 +212,15 @@ async def anomalies_page(request: Request, current_user: CurrentUser):
     _require_any_role(current_user, "admin", "operator")
     return templates.TemplateResponse(
         request, "sessions/anomaly_list.html", _page_context(request, current_user)
+    )
+
+
+# SCRUM-184 — Xuất bảng đối chiếu kWh (Phạm Văn Tuấn)
+@router.get("/sessions/kwh-reconciliation", dependencies=[Depends(require_role("admin", "operator"))])
+async def kwh_reconciliation_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "sessions/kwh_reconciliation.html", _page_context(request, current_user)
     )
 
 
