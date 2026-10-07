@@ -191,7 +191,7 @@ async def test_handle_meter_values_ac4_perf(db, dummy_charge_point):
         "connectorId": 1,
         "meterValue": [
             {
-                "timestamp": f"2023-01-01T10:00:{i:02d}Z",
+                "timestamp": "2023-01-01T10:00:00Z",
                 "sampledValue": [{"value": "123", "measurand": "Power.Active.Import"}]
             }
         ]
@@ -199,6 +199,7 @@ async def test_handle_meter_values_ac4_perf(db, dummy_charge_point):
 
     start_time = time.time()
     for i in range(20):
+        payload["meterValue"][0]["timestamp"] = f"2023-01-01T10:00:{i:02d}Z"
         handle_meter_values(db, dummy_charge_point, f"msg-perf-{i}", payload)
         db.commit()
 
@@ -248,7 +249,7 @@ def test_decide_sample_without_latest():
     sample = {
         "measured_at": datetime.datetime.now(datetime.timezone.utc),
         "measurand": "Energy.Active.Import.Register",
-        "value": Decimal("1"),
+        "value": Decimal(1),
         "unit": None,
     }
     assert decide_sample(sample, None) is Decision.STORE
@@ -331,7 +332,7 @@ def test_unsorted_values_skip_sample_older_than_saved_latest(db, dummy_charge_po
     db.commit()
     db.add(MeterValue(
         session_id=session.id,
-        measured_at=datetime.datetime(2026, 10, 7, 10, 1),
+        measured_at=datetime.datetime(2026, 10, 7, 10, 1, tzinfo=datetime.timezone.utc).replace(tzinfo=None),
         measurand="Energy.Active.Import.Register",
         value=90,
         unit="Wh",
@@ -348,5 +349,5 @@ def test_unsorted_values_skip_sample_older_than_saved_latest(db, dummy_charge_po
     db.commit()
     records = db.query(MeterValue).filter_by(session_id=session.id).order_by(MeterValue.measured_at).all()
     assert response.startswith("[3")
-    assert [record.value for record in records] == [Decimal("90"), Decimal("80")]
+    assert [record.value for record in records] == [Decimal(90), Decimal(80)]
     assert session.needs_review is True

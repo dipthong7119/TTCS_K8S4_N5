@@ -52,7 +52,7 @@ def parse_meter_values(payload: dict[str, Any]) -> list[MeterSample]:
     # Fallback cho trường hợp không có timestamp trong sampledValue
     # Tuy nhiên spec OCPP 1.6 yêu cầu timestamp nằm ở meterValue, không ở sampledValue.
 
-    normalized = []
+    normalized: list[MeterSample] = []
     for reading in readings:
         if not isinstance(reading, dict):
             continue
@@ -113,7 +113,7 @@ def _unit_in_wh(value: Decimal, unit: str | None) -> Decimal | None:
     if normalized == "Wh":
         return value
     if normalized == "kWh":
-        return value * Decimal("1000")
+        return value * Decimal(1000)
     return None
 
 
@@ -138,7 +138,7 @@ def decide_sample(new: MeterSample, latest: MeterSample | MeterValue | None) -> 
     if latest is None:
         return Decision.STORE
     new_at: datetime = new["measured_at"]
-    latest_at: datetime = latest["measured_at"]
+    latest_at: datetime = latest["measured_at"] if isinstance(latest, dict) else latest.measured_at
     if new_at < latest_at:
         return Decision.SKIP_WARN
     comparable = _comparable_values(new, latest)
@@ -162,6 +162,7 @@ def begin_meter_values_transaction(db: Session) -> None:
         return
     connection = db.connection()
     raw_connection = connection.connection.driver_connection
+    assert raw_connection is not None
     if not raw_connection.in_transaction:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
 
@@ -171,7 +172,7 @@ def filter_new_samples(
     session_id: int,
     samples: list[MeterSample],
     charge_point_code: str,
-) -> list[dict]:
+) -> list[MeterSample]:
     """Lọc theo từng đại lượng, gồm cả số đo đã nhận trong cùng tin nhắn."""
     latest_by_measurand: dict[str, MeterSample | MeterValue | None] = {}
     accepted: list[MeterSample] = []
@@ -213,6 +214,7 @@ def filter_new_samples(
                 )
         decision = decide_sample(sample, latest)
         if decision is Decision.SKIP_WARN:
+            assert latest is not None
             persisted = existing_by_key.get((measurand, sample["measured_at"]))
             if persisted is not None:
                 prior_values = _comparable_values(sample, persisted)
