@@ -110,7 +110,7 @@ def test_stop_transaction_valid(db_session):
     [
         (18_340, 30_685, Decimal("12.345"), "completed"),
         (27_110, 26_000, None, "needs_review"),
-        (40_520, 40_520, Decimal("0"), "completed"),
+        (40_520, 40_520, Decimal(0), "completed"),
     ],
     ids=["ordinary-session", "regressing-meter", "unchanged-meter"],
 )
