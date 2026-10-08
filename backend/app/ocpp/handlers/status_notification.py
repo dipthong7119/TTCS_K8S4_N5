@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
@@ -9,6 +10,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
 from app.models.connector_error import ConnectorError
+from app.ocpp.session_reconciliation import (
+    ReconciliationContext,
+    reconcile_status_notification,
+)
 from app.ocpp.status_mapping import map_ocpp_status
 from app.ocpp.warning_throttler import unknown_connector_throttler
 from app.services.ocpp_parser import pack_call_error, pack_call_result
@@ -16,7 +21,13 @@ from app.services.ocpp_parser import pack_call_error, pack_call_result
 logger = logging.getLogger(__name__)
 
 
-def handle_status_notification(db: Session, charge_point_code: str, msg_id: str, payload: dict) -> str:
+def handle_status_notification(
+    db: Session,
+    charge_point_code: str,
+    msg_id: str,
+    payload: dict[str, Any],
+    connection_ctx: ReconciliationContext | None = None,
+) -> str:
     """Update connector state and append an error record when needed."""
     connector_id = payload.get("connectorId")
     status_raw = payload.get("status")
@@ -121,5 +132,20 @@ def handle_status_notification(db: Session, charge_point_code: str, msg_id: str,
             error_code,
             vendor_error_code,
         )
+
+    if connection_ctx is not None:
+        try:
+            reconcile_status_notification(
+                db, charge_point_code, connector_id, status_raw, connection_ctx
+            )
+        except Exception:
+            # Savepoint cô lập lỗi đối chiếu khỏi trạng thái connector và OCPP conf.
+            transaction_id = connection_ctx.waiting.get(connector_id)
+            logger.warning(
+                "Session reconciliation failed: cp=%s connector=%s transaction=%s",
+                charge_point_code,
+                connector_id,
+                transaction_id,
+            )
 
     return pack_call_result(msg_id, {})

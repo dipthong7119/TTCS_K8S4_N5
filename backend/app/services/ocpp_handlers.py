@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -16,6 +17,10 @@ from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
+from app.ocpp.session_reconciliation import (
+    ReconciliationContext,
+    begin_reconciliation,
+)
 from app.services.ocpp_parser import (
     OCPPError,
     pack_call_error,
@@ -47,7 +52,12 @@ IMPLEMENTED_ACTIONS = {
 _missing_connector_logged_at: dict[tuple[str, int], datetime] = {}
 
 
-def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> str:
+def handle_ocpp_message(
+    db: Session,
+    charge_point_code: str,
+    raw_msg: str,
+    connection_ctx: ReconciliationContext | None = None,
+) -> str:
     """Validate, dispatch, and persist one OCPP CALL with database idempotency."""
     try:
         msg_type, msg_id, action, payload, _, _ = _parse_for_handler(raw_msg)
@@ -56,6 +66,9 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
 
     if msg_type in (3, 4):
         return ""
+    has_connection_context = connection_ctx is not None
+    if connection_ctx is None:
+        connection_ctx = ReconciliationContext()
     if action == "MeterValues":
         # Khóa SQLite phải có trước tra cứu trụ, phiên và số đo mới nhất.
         from app.ocpp.handlers.meter_values import begin_meter_values_transaction
@@ -67,9 +80,24 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
 
     # A returning device must report fresh connector states even if the offline
     # sweep has not run since the heartbeat deadline expired.
-    if point.status == "offline" or is_charge_point_stale(point.last_seen_at):
+    was_offline = point.status == "offline" or is_charge_point_stale(point.last_seen_at)
+    if was_offline:
         for connector in point.connectors:
             connector.status = "unknown"
+    if (has_connection_context and not connection_ctx.initialized) or (
+        was_offline and not connection_ctx.offline_reconciled
+    ):
+        try:
+            with db.begin_nested():
+                begin_reconciliation(db, point, connection_ctx)
+            connection_ctx.offline_reconciled = was_offline
+        except Exception:
+            logger.warning(
+                "Session reconciliation failed on returning message: cp=%s",
+                point.code,
+            )
+    elif not was_offline:
+        connection_ctx.offline_reconciled = False
 
     canonical_request = json.dumps(
         {"action": action, "payload": payload},
@@ -110,7 +138,7 @@ def handle_ocpp_message(db: Session, charge_point_code: str, raw_msg: str) -> st
                 msg_id, "NotImplemented", f"Action {action} is not implemented"
             )
         else:
-            response = _dispatch(db, point, msg_id, action, payload)
+            response = _dispatch(db, point, msg_id, action, payload, connection_ctx)
         record = OcppMessage(
             charge_point_code=charge_point_code,
             msg_id=msg_id,
@@ -169,7 +197,14 @@ def touch_last_seen(db: Session, charge_point_code: str) -> None:
 def mark_charge_point_seen(db: Session, charge_point_code: str) -> None:
     touch_last_seen(db, charge_point_code)
 
-def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload: dict) -> str:
+def _dispatch(
+    db: Session,
+    point: ChargePoint,
+    msg_id: str,
+    action: str,
+    payload: dict[str, Any],
+    connection_ctx: ReconciliationContext | None = None,
+) -> str:
     if action == "BootNotification":
         from app.ocpp.handlers.boot_notification import (
             handle_boot_notification as new_handle_boot_notification,
@@ -185,7 +220,9 @@ def _dispatch(db: Session, point: ChargePoint, msg_id: str, action: str, payload
             handle_status_notification as new_handle_status_notification,
         )
 
-        return new_handle_status_notification(db, point.code, msg_id, payload)
+        return new_handle_status_notification(
+            db, point.code, msg_id, payload, connection_ctx
+        )
     if action == "Authorize":
         from app.ocpp.handlers.authorize import handle_authorize as new_handle_authorize
         return new_handle_authorize(db, point, msg_id, payload)
