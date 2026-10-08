@@ -1,15 +1,18 @@
 """Kiểm thử đối chiếu phiên sạc khi trụ kết nối trở lại."""
 
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
 from app.database import Base
+from app.main import app as main_app
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
@@ -88,7 +91,7 @@ def _add_session(
         station_name="Reconcile station",
         connector_number=connector_id,
         meter_start_wh=1000,
-        started_at=datetime(2026, 10, 7, 10, 0),
+        started_at=datetime(2026, 10, 7, 10, 0, tzinfo=UTC).replace(tzinfo=None),
         ended_at=ended_at,
         status=status,
     )
@@ -154,7 +157,7 @@ def test_begin_reconciliation_rebuilds_open_sessions_without_writes(db_session):
         point,
         3,
         status="completed",
-        ended_at=datetime(2026, 10, 7, 11, 0),
+        ended_at=datetime(2026, 10, 7, 11, 0, tzinfo=UTC).replace(tzinfo=None),
     )
     context = ReconciliationContext()
     statements: list[str] = []
@@ -273,6 +276,7 @@ def test_none_keeps_pending_and_unknown_connector_does_not_touch_it(db_session):
 
 
 def test_multiple_connectors_and_charging_without_open_session(db_session, caplog):
+    caplog.set_level(logging.INFO, logger="app.ocpp.session_reconciliation")
     db, point = db_session
     session1 = _add_session(db_session, point, 1)
     session2 = _add_session(db_session, point, 2)
@@ -304,6 +308,63 @@ def test_new_connection_rebuilds_map_from_database(db_session):
     assert begin_reconciliation(db, point, new_context) == {1: session.id}
     assert new_context.waiting == {1: session.id}
     assert old_context.waiting is not new_context.waiting
+
+
+@pytest.mark.parametrize(
+    ("reported_status", "expected_status", "expected_reason"),
+    [
+        ("Charging", "active", None),
+        ("Available", "needs_review", "connector_available_after_reconnect"),
+    ],
+)
+def test_websocket_reconnect_reconciles_the_persisted_session(
+    db_session, monkeypatch, reported_status, expected_status, expected_reason
+):
+    db, point = db_session
+    session = _add_session(db_session, point, 1)
+    session_id = session.id
+    point_code = point.code
+    session_factory = sessionmaker(bind=db.bind)
+    db.close()
+    monkeypatch.setattr(ocpp_router, "SessionLocal", session_factory)
+    monkeypatch.setattr(ocpp_router, "manager", ConnectionManager())
+    monkeypatch.setattr(
+        "app.services.ocpp_handlers.publish_charge_point_status", lambda *_args: None
+    )
+    client = TestClient(main_app)
+
+    def boot(websocket, message_id):
+        websocket.send_text(pack_call(message_id, "BootNotification", {
+            "chargePointVendor": "ReconnectTest",
+            "chargePointModel": "ReconnectTestModel",
+        }))
+        assert websocket.receive_json()[2]["status"] == "Accepted"
+
+    try:
+        with client.websocket_connect(f"/ocpp/{point_code}", subprotocols=["ocpp1.6"]) as websocket:
+            boot(websocket, "before-disconnect")
+        with session_factory() as check_db:
+            persisted = check_db.get(ChargingSession, session_id)
+            assert persisted.status == "active"
+            assert persisted.ended_at is None
+            assert check_db.query(ChargePoint).filter_by(code=point_code).one().status == "offline"
+
+        with client.websocket_connect(f"/ocpp/{point_code}", subprotocols=["ocpp1.6"]) as websocket:
+            boot(websocket, "after-reconnect")
+            for message_id in ("first-status", "repeated-status"):
+                websocket.send_text(pack_call(message_id, "StatusNotification", {
+                    "connectorId": 1, "status": reported_status, "errorCode": "NoError",
+                }))
+                assert websocket.receive_json() == [3, message_id, {}]
+            with session_factory() as check_db:
+                persisted = check_db.get(ChargingSession, session_id)
+                assert persisted.status == expected_status
+                assert persisted.review_reason == expected_reason
+                assert persisted.ended_at is None
+                assert persisted.energy_kwh is None
+                assert check_db.query(ChargingSession).count() == 1
+    finally:
+        client.close()
 
 
 def test_offline_message_rebuilds_and_late_meter_stop_use_same_transaction(db_session, monkeypatch):
@@ -377,7 +438,7 @@ def test_reconciliation_failure_keeps_connector_response_and_context(db_session,
     assert parse_message(response)[0:4:3] == (3, {})
     connector = db.query(Connector).filter_by(charge_point_id=point.id, connector_id=1).one()
     assert connector.ocpp_status == "Charging"
-    assert connector.status == "busy"
+    assert connector.status == "bận"
     assert context.waiting == {1: session.id}
 
 
@@ -405,10 +466,10 @@ def test_offline_charge_point_job_and_websocket_close_leave_session_open(
     )
 
     class FakeWebSocket:
-        headers = {"sec-websocket-protocol": "ocpp1.6"}
         client = type("Client", (), {"host": "127.0.0.1"})()
 
         def __init__(self):
+            self.headers = {"sec-websocket-protocol": "ocpp1.6"}
             self.frames = [pack_call("boot-close", "BootNotification", {
                 "chargePointVendor": "Test",
                 "chargePointModel": "TestModel",

@@ -13,10 +13,10 @@ from app.ocpp.session_reconciliation import (
     begin_reconciliation,
     reconcile_if_offline,
 )
-from app.services.ocpp_status import is_charge_point_stale
 from app.services.connection_manager import manager
 from app.services.ocpp_handlers import handle_ocpp_message, touch_last_seen
 from app.services.ocpp_parser import OCPPError, pack_call_error, parse_message
+from app.services.ocpp_status import is_charge_point_stale
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

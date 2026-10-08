@@ -70,8 +70,8 @@ def begin_reconciliation(
     connection_ctx.waiting.clear()
     connection_ctx.decided.clear()
     connection_ctx.missing_session_logged.clear()
-    rows = db.execute(_open_sessions_statement(charge_point.id)).all()
-    pending = {connector_id: transaction_id for connector_id, transaction_id in rows}
+    rows = db.execute(_open_sessions_statement(charge_point.id)).mappings().all()
+    pending = {int(row["connector_id"]): int(row["id"]) for row in rows}
     connection_ctx.waiting = pending
     connection_ctx.initialized = True
     return dict(pending)
