@@ -1,0 +1,422 @@
+/* ═══════════════════════════════════════════════════════════
+   SCRUM-184 — Bảng đối chiếu kWh (kwh_reconciliation.css)
+   Người thực hiện: Phạm Văn Tuấn
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Summary Cards ─────────────────────────────────────── */
+.recon-page {
+  color: var(--color-text);
+}
+
+.recon-page .btn {
+  min-height: 40px;
+}
+
+.recon-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.5rem;
+  width: 100%;
+  padding: .85rem 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: .9rem;
+}
+
+.recon-meta > div:first-child { flex: 1 1 320px; }
+.recon-meta dt { display: inline; font-weight: 600; color: var(--color-text); }
+.recon-meta dd { display: inline; margin-left: .3rem; }
+
+.recon-notice {
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: 1.25rem;
+  padding: .85rem 1rem;
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-md);
+  font-size: .95rem;
+  line-height: 1.6;
+}
+
+.recon-notice svg { flex: 0 0 18px; width: 18px; height: 18px; }
+
+.recon-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.recon-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  min-width: 0;
+  box-shadow: var(--shadow-xs);
+}
+
+.recon-card__label {
+  font-size: .85rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.recon-card__value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.recon-card__sub {
+  font-size: .85rem;
+  color: var(--color-text-secondary);
+}
+
+.recon-card--pass  { border-color: rgba(34, 197, 94, .35); }
+.recon-card--pass .recon-card__value  { color: #166534; }
+.recon-card--fail  { border-color: rgba(239, 68, 68, .35); }
+.recon-card--fail .recon-card__value  { color: #b91c1c; }
+.recon-card--info  { border-color: rgba(99, 179, 237, .25); }
+.recon-card--info .recon-card__value  { color: #1d4ed8; }
+.recon-card--kwh   { border-color: rgba(251, 191, 36, .25); }
+.recon-card--kwh .recon-card__value   { color: #92400e; }
+
+/* ── Verdict Banner ─────────────────────────────────────── */
+.recon-verdict {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  margin-bottom: 1.75rem;
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.recon-verdict--passed {
+  background: rgba(34, 197, 94, .1);
+  border: 1px solid rgba(34, 197, 94, .3);
+  color: #166534;
+}
+
+.recon-verdict--failed {
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(239, 68, 68, .3);
+  color: #b91c1c;
+}
+
+.recon-verdict__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.recon-verdict--passed .recon-verdict__icon { background: rgba(34, 197, 94, .2); }
+.recon-verdict--failed .recon-verdict__icon { background: rgba(239, 68, 68, .2); }
+
+.recon-verdict__meta {
+  margin-left: auto;
+  font-size: .85rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Toolbar ────────────────────────────────────────────── */
+.recon-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+
+.recon-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.recon-toolbar__label,
+.recon-row-count {
+  color: var(--color-text-secondary);
+  font-size: .9rem;
+}
+
+.recon-toolbar__label { font-weight: 600; }
+.recon-row-count { align-self: center; font-variant-numeric: tabular-nums; }
+
+.recon-filter-btn {
+  min-height: 40px;
+  padding: .38rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: .9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.recon-filter-btn:hover,
+.recon-filter-btn.is-active {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+  color: #fff;
+}
+
+.recon-search,
+.recon-station-filter {
+  min-height: 40px;
+  padding: .38rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: .95rem;
+  min-width: 180px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+
+.recon-search::placeholder { color: var(--color-text-secondary); }
+
+.recon-search:focus,
+.recon-station-filter:focus {
+  border-color: var(--color-primary-dark);
+}
+
+.recon-station-filter { max-width: 300px; }
+
+/* ── Export Buttons ─────────────────────────────────────── */
+.recon-export-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+/* ── Table ──────────────────────────────────────────────── */
+.recon-table-wrapper {
+  background: var(--color-surface);
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+}
+
+.recon-table {
+  width: 100%;
+  min-width: 1320px;
+  border-collapse: collapse;
+  font-size: .95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.recon-table thead th {
+  background: var(--color-surface-alt);
+  padding: .75rem 1rem;
+  text-align: left;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.recon-table thead th:hover { color: var(--color-text); }
+
+.recon-table thead th .sort-icon {
+  display: inline-block;
+  margin-left: .3em;
+  opacity: .75;
+  font-style: normal;
+}
+
+.recon-table thead th.sorted-asc .sort-icon,
+.recon-table thead th.sorted-desc .sort-icon {
+  opacity: 1;
+  color: var(--color-primary-dark);
+}
+
+.recon-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: background .12s ease;
+}
+
+.recon-table tbody tr:last-child { border-bottom: none; }
+
+.recon-table tbody tr:hover {
+  background: var(--color-surface-alt);
+}
+
+.recon-table td {
+  padding: .7rem 1rem;
+  color: var(--color-text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.recon-table td.notes-cell {
+  white-space: normal;
+  min-width: 200px;
+  color: var(--color-text-secondary);
+  font-size: .9rem;
+  line-height: 1.6;
+}
+
+/* ── Status Badge ───────────────────────────────────────── */
+.recon-table td.station-cell {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 250px;
+  line-height: 1.5;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .22rem .65rem;
+  border-radius: 20px;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.status-badge--match {
+  background: rgba(34, 197, 94, .12);
+  color: #166534;
+  border: 1px solid rgba(34, 197, 94, .25);
+}
+
+.status-badge--mismatch {
+  background: rgba(239, 68, 68, .12);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, .25);
+}
+
+.status-badge--missing-system {
+  background: rgba(251, 191, 36, .12);
+  color: #92400e;
+  border: 1px solid rgba(251, 191, 36, .25);
+}
+
+.status-badge--missing-simulator {
+  background: rgba(167, 139, 250, .12);
+  color: #6d28d9;
+  border: 1px solid rgba(167, 139, 250, .25);
+}
+
+.status-badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Diff value ─────────────────────────────────────────── */
+.recon-table td.diff-zero  { color: #166534; }
+.recon-table td.diff-warn  { color: #92400e; }
+.recon-table td.diff-error { color: #b91c1c; }
+
+/* ── Disconnect badge ───────────────────────────────────── */
+.disconnect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .85rem;
+  color: var(--color-text-secondary);
+}
+
+.disconnect-badge--hot { color: #9a3412; }
+
+/* ── Empty state ────────────────────────────────────────── */
+.recon-empty {
+  text-align: center;
+  padding: 3.5rem 1rem;
+  color: var(--color-text-secondary);
+}
+
+.recon-empty__icon { font-size: 2.5rem; margin-bottom: .5rem; }
+.recon-empty__title { font-weight: 600; font-size: 1rem; margin-bottom: .3rem; color: var(--color-text); }
+.recon-empty__sub { font-size: .85rem; }
+
+/* ── Loading skeleton ───────────────────────────────────── */
+.recon-skeleton {
+  height: 44px;
+  background: linear-gradient(90deg,
+    var(--color-surface) 25%,
+    var(--color-border) 50%,
+    var(--color-surface) 75%);
+  background-size: 200% 100%;
+  animation: recon-shimmer 1.4s infinite;
+  border-radius: 6px;
+  margin-bottom: .5rem;
+}
+
+@keyframes recon-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .recon-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recon-card { padding: 1rem; }
+  .recon-verdict { flex-wrap: wrap; }
+  .recon-verdict__meta { margin-left: 0; }
+  .recon-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .recon-toolbar__left {
+    flex-wrap: wrap;
+  }
+  .recon-export-group {
+    justify-content: flex-end;
+  }
+  .recon-search { width: 100%; min-width: 0; }
+}
+
+@media (max-width: 400px) {
+  .recon-summary { grid-template-columns: 1fr; }
+}
+
+.recon-page .btn:focus-visible,
+.recon-filter-btn:focus-visible,
+.recon-search:focus-visible,
+.recon-table-wrapper:focus-visible {
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recon-skeleton { animation: none; }
+  .recon-filter-btn, .recon-search, .recon-table tbody tr { transition: none; }
+}

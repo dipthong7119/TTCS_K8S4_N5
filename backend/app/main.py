@@ -4,6 +4,7 @@ Tham chiếu: SPRINT_1.md S-01 T-01, 01_CODEBASE_MAP.md
 """
 
 import asyncio
+import logging
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -26,6 +27,28 @@ from app.routers.remote import router as remote_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
 from app.routers.wallet import router as wallet_router
+
+logger = logging.getLogger(__name__)
+
+
+async def _run_local_simulator_fleet() -> None:
+    """Keep the local development fleet connected across Uvicorn reloads."""
+    from app.dev_tools.ocpp_simulator.simulator import run_fleet, simulator_codes
+
+    codes = simulator_codes(
+        settings.CSMS_LOCAL_SIMULATOR_COUNT,
+        include_demo_stations=settings.CSMS_LOCAL_SIMULATOR_INCLUDE_DEMO_STATIONS,
+    )
+    while True:
+        try:
+            logger.info("Starting local OCPP simulator fleet (%s charge points)", len(codes))
+            await run_fleet(codes, settings.CSMS_LOCAL_SIMULATOR_URL)
+            logger.warning("Local OCPP simulator fleet stopped; reconnecting in 3 seconds")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Local OCPP simulator fleet failed; retrying in 3 seconds")
+        await asyncio.sleep(3)
 
 
 @asynccontextmanager
@@ -53,12 +76,19 @@ async def lifespan(app: FastAPI):
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
+    local_simulator_task: asyncio.Task[None] | None = None
+    if settings.APP_ENV == "development" and settings.CSMS_LOCAL_SIMULATOR_ENABLED:
+        local_simulator_task = asyncio.create_task(_run_local_simulator_fleet())
 
     yield
 
     bg_task.cancel()
     cleanup_task.cancel()
-    await asyncio.gather(bg_task, cleanup_task, return_exceptions=True)
+    tasks = [bg_task, cleanup_task]
+    if local_simulator_task is not None:
+        local_simulator_task.cancel()
+        tasks.append(local_simulator_task)
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(

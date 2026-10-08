@@ -57,45 +57,63 @@ def reconcile_single_session(
 ) -> SessionReconciliationItem:
     """Đối chiếu một phiên sạc giữa CSMS và Simulator."""
     if system_record is None and sim_record is None:
-        raise ValueError("At least one session record is required")
-    if system_record is None and sim_record is not None:
+        raise ValueError("Cần ít nhất một bản ghi từ hệ thống hoặc simulator.")
+
+    if system_record is None:
+        assert sim_record is not None
+        sim_kwh = float(sim_record.get("simulator_kwh", 0.0))
         return SessionReconciliationItem(
             session_id=sim_record.get("session_id", "N/A"),
-            charge_point_code=sim_record.get("charge_point_code", "UNKNOWN"),
-            connector_id=sim_record.get("connector_id", 1),
-            meter_start_wh=sim_record.get("meter_start_wh", 0),
-            meter_stop_wh=sim_record.get("meter_stop_wh", 0),
+            charge_point_code=str(sim_record.get("charge_point_code", "UNKNOWN")),
+            connector_id=int(sim_record.get("connector_id", 1)),
+            meter_start_wh=float(sim_record.get("meter_start_wh", 0)),
+            meter_stop_wh=float(sim_record.get("meter_stop_wh", 0)),
             system_kwh=0.0,
-            simulator_kwh=float(sim_record.get("simulator_kwh", 0.0)),
-            difference_kwh=float(sim_record.get("simulator_kwh", 0.0)),
-            disconnect_count=sim_record.get("disconnect_count", 0),
+            simulator_kwh=sim_kwh,
+            difference_kwh=sim_kwh,
+            disconnect_count=int(sim_record.get("disconnect_count", 0)),
             status="MISSING_IN_SYSTEM",
-            notes="Phiên có trên simulator nhưng thiếu trong hệ thống CSMS",
+            notes=str(sim_record.get("notes") or "Phiên có trên simulator nhưng thiếu trong hệ thống CSMS"),
         )
 
-    if sim_record is None and system_record is not None:
+    if sim_record is None:
+        sys_kwh = float(system_record.get("system_kwh", 0.0))
         return SessionReconciliationItem(
             session_id=system_record.get("session_id", "N/A"),
-            charge_point_code=system_record.get("charge_point_code", "UNKNOWN"),
-            connector_id=system_record.get("connector_id", 1),
-            meter_start_wh=system_record.get("meter_start_wh", 0),
-            meter_stop_wh=system_record.get("meter_stop_wh", 0),
-            system_kwh=float(system_record.get("system_kwh", 0.0)),
+            charge_point_code=str(system_record.get("charge_point_code", "UNKNOWN")),
+            connector_id=int(system_record.get("connector_id", 1)),
+            meter_start_wh=float(system_record.get("meter_start_wh", 0)),
+            meter_stop_wh=float(system_record.get("meter_stop_wh", 0)),
+            system_kwh=sys_kwh,
             simulator_kwh=0.0,
-            difference_kwh=float(system_record.get("system_kwh", 0.0)),
-            disconnect_count=system_record.get("disconnect_count", 0),
+            difference_kwh=sys_kwh,
+            disconnect_count=int(system_record.get("disconnect_count", 0)),
             status="MISSING_IN_SIMULATOR",
-            notes="Phiên có trên hệ thống CSMS nhưng thiếu trong bản ghi simulator",
+            notes=str(system_record.get("notes") or "Phiên có trên hệ thống CSMS nhưng thiếu trong bản ghi simulator"),
         )
 
-    # Các nhánh thiếu một bên đã trả về ở trên.
+    # Cả hai bên đều có bản ghi
     assert system_record is not None and sim_record is not None
-    session_id = system_record["session_id"]
-    code = system_record.get("charge_point_code", sim_record.get("charge_point_code", "UNKNOWN"))
-    connector_id = system_record.get("connector_id", sim_record.get("connector_id", 1))
-    start_wh = system_record.get("meter_start_wh", sim_record.get("meter_start_wh", 0))
-    stop_wh = system_record.get("meter_stop_wh", sim_record.get("meter_stop_wh", 0))
-    disconnect_count = sim_record.get("disconnect_count", system_record.get("disconnect_count", 0))
+    session_id = system_record.get("session_id", sim_record.get("session_id", "N/A"))
+    code = str(system_record.get("charge_point_code") or sim_record.get("charge_point_code") or "UNKNOWN")
+    raw_conn = system_record.get("connector_id")
+    if raw_conn is None:
+        raw_conn = sim_record.get("connector_id")
+    connector_id = int(raw_conn) if raw_conn is not None else 1
+    raw_start = system_record.get("meter_start_wh")
+    if raw_start is None:
+        raw_start = sim_record.get("meter_start_wh")
+    start_wh = float(raw_start) if raw_start is not None else 0.0
+
+    raw_stop = system_record.get("meter_stop_wh")
+    if raw_stop is None:
+        raw_stop = sim_record.get("meter_stop_wh")
+    stop_wh = float(raw_stop) if raw_stop is not None else 0.0
+
+    raw_disc = sim_record.get("disconnect_count")
+    if raw_disc is None:
+        raw_disc = system_record.get("disconnect_count")
+    disconnect_count = int(raw_disc) if raw_disc is not None else 0
 
     sys_kwh = float(system_record.get("system_kwh", 0.0))
     sim_kwh = float(sim_record.get("simulator_kwh", 0.0))
@@ -103,7 +121,7 @@ def reconcile_single_session(
 
     is_matched = diff <= tolerance
     status = "MATCH" if is_matched else "MISMATCH"
-    notes = sim_record.get("notes", system_record.get("notes", ""))
+    notes = str(sim_record.get("notes") or system_record.get("notes") or "")
     if not is_matched and not notes:
         notes = f"Lệch kWh vượt ngưỡng cho phép (delta={diff} kWh > {tolerance})"
 

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_feature_branch_runs_checks_without_staging_deployment():
     workflow = yaml.load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    assert "f" in workflow["on"]["push"]["branches"]
+    assert "sprint-3" in workflow["on"]["push"]["branches"]
     checks = workflow["jobs"]["test"]
     assert not checks.get("if")
     assert not checks.get("continue-on-error")
@@ -39,6 +39,18 @@ def test_feature_branch_runs_checks_without_staging_deployment():
     assert not smoke.get("if")
     assert "export CSMS_IMAGE=csms-app:ci" in smoke["run"]
     assert "up -d --no-build --wait" in smoke["run"]
+    unit = next(step for step in steps if step.get("name") == "Run Unit Tests (Pytest)")
+    assert "--ignore=../tests/test_scrum182_20charger_scenario.py" in unit["run"]
+    scenario = next(step for step in steps if step.get("id") == "sprint3-acceptance")
+    assert "python scripts/run_sprint3_ci.py" in scenario["run"]
+    assert "--no-build" in scenario["run"] and "--repeat 3" in scenario["run"]
+    assert scenario["timeout-minutes"] == "5"
+    assert not scenario.get("if") and not scenario.get("continue-on-error")
+    assert steps.index(unit) < steps.index(scenario)
+    evidence = next(step for step in steps if step.get("name") == "Save Sprint 3 acceptance evidence")
+    assert "always()" in evidence["if"]
+    assert evidence["with"]["if-no-files-found"] == "error"
+    assert ci["jobs"]["build-lint-test"]["name"] == "Sprint 3 CI"
     deployment = workflow["jobs"]["deploy-staging"]
     assert deployment["needs"] == "test"
     assert deployment["if"] == "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'"

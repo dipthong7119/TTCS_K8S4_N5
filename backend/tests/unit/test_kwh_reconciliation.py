@@ -188,5 +188,5 @@ def test_failed_reconciliation_report_does_not_claim_full_match():
 
 
 def test_reconciliation_requires_at_least_one_record():
-    with pytest.raises(ValueError, match="At least one session record"):
+    with pytest.raises(ValueError, match="ít nhất một bản ghi"):
         reconcile_single_session(None, None)

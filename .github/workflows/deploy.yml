@@ -2,7 +2,7 @@ name: CD Pipeline - Deploy to Staging
 
 on:
   push:
-    branches: [ "main", "master", "f" ]
+    branches: [ "main", "master", "sprint-3" ]
 
 permissions:
   contents: read
