@@ -36,6 +36,8 @@ def network_server(tmp_path_factory, unused_tcp_port_factory):
         "OCPP_HEARTBEAT_INTERVAL_SECONDS": "5",
         "OCPP_JOB_POLL_SECONDS": "1",
         "OCPP_REMOTE_CALL_TIMEOUT_SECONDS": "1",
+        "SESSION_OFFLINE_GRACE_SECONDS": "60",
+        "PYTHONUTF8": "1",
     })
     log = (directory / "server.log").open("w", encoding="utf-8")
     process = None
@@ -104,6 +106,111 @@ async def connect(server, code):
     assert result[2]["status"] == "Accepted"
     assert result[2]["interval"] == 5
     return socket
+
+
+async def start_network_session(server, socket, meter_start=18340):
+    with sqlite_connection(server["database"]) as db:
+        tag = db.execute(
+            "SELECT id_tags.id_tag FROM id_tags JOIN users ON users.id=id_tags.user_id "
+            "WHERE users.email='driver@csms.local' AND id_tags.is_blocked=0 LIMIT 1"
+        ).fetchone()[0]
+    response = await call(socket, "start-network-session", "StartTransaction", {
+        "connectorId": 1, "idTag": tag, "meterStart": meter_start, "timestamp": "2026-10-01T08:00:00Z",
+    })
+    assert response[2]["idTagInfo"]["status"] == "Accepted"
+    return response[2]["transactionId"]
+
+
+@pytest.mark.asyncio
+async def test_t43_new_old_duplicate_samples_over_real_websocket(network_server):
+    """T-43: mới → cũ → trùng, chỉ giữ số đo mới và đúng một cảnh báo."""
+    socket = await connect(network_server, "NET-07")
+    async with socket:
+        transaction_id = await start_network_session(network_server, socket)
+        for message_id, timestamp, value in [
+            ("meter-new", "2026-10-01T08:03:00Z", "30685"),
+            ("meter-old", "2026-10-01T08:02:00Z", "26340"),
+            ("meter-duplicate", "2026-10-01T08:03:00Z", "30685"),
+        ]:
+            response = await call(socket, message_id, "MeterValues", {
+                "connectorId": 1, "transactionId": transaction_id,
+                "meterValue": [{"timestamp": timestamp, "sampledValue": [{"value": value, "unit": "Wh"}]}],
+            })
+            assert response == [3, message_id, {}]
+        with sqlite_connection(network_server["database"]) as db:
+            rows = db.execute("SELECT measured_at, value FROM meter_values WHERE session_id=?", (transaction_id,)).fetchall()
+            assert rows == [("2026-10-01 08:03:00.000000", 30685)]
+        warnings = [line for line in network_server["log"].read_text(encoding="utf-8").splitlines()
+                    if "Meter value rejected: cp=NET-07 " in line]
+        assert len(warnings) == 1
+        assert "old_at=2026-10-01T08:03:00" in warnings[0]
+        assert "new_at=2026-10-01T08:02:00" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_t45_t53_offline_job_and_late_stop_over_real_websocket(network_server):
+    """T-45/T-53: job thật → API bất thường → nối lại → Stop muộn → rời danh sách."""
+    socket = await connect(network_server, "NET-08")
+    async with socket:
+        transaction_id = await start_network_session(network_server, socket)
+        await call(socket, "meter-before-offline", "MeterValues", {
+            "connectorId": 1, "transactionId": transaction_id,
+            "meterValue": [{"timestamp": "2026-10-01T08:01:00Z",
+                            "sampledValue": [{"value": "19340", "unit": "Wh"}]}],
+        })
+    # Advance only this isolated device's last-contact age, instead of sleeping a minute.
+    async with asyncio.timeout(5):
+        while True:
+            with sqlite_connection(network_server["database"]) as db:
+                offline = db.execute("SELECT status FROM charge_points WHERE code='NET-08'").fetchone()[0] == "offline"
+            if offline:
+                break
+            await asyncio.sleep(0.05)
+    with sqlite_connection(network_server["database"]) as db:
+        db.execute("UPDATE charge_points SET last_seen_at=datetime('now','-61 seconds') WHERE code='NET-08'")
+    async with asyncio.timeout(5):
+        while True:
+            with sqlite_connection(network_server["database"]) as db:
+                state = db.execute("SELECT status, ended_at, meter_stop_wh FROM charging_sessions WHERE id=?", (transaction_id,)).fetchone()
+            if state[0] == "anomaly":
+                assert state[1:] == (None, None)
+                break
+            await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=network_server["http"]) as client:
+        assert (await client.post("/api/auth/login", json={"email": "operator@csms.local", "password": "Operator@2024!"})).status_code == 200
+        anomalies = (await client.get("/api/sessions/anomalies", params={"days": "all", "reason": "offline"})).json()
+        assert transaction_id in [row["id"] for row in anomalies["items"]]
+        socket = await connect(network_server, "NET-08")
+        async with socket:
+            await call(socket, "available-after-reconnect", "StatusNotification", {"connectorId": 1, "status": "Available", "errorCode": "NoError"})
+            payload = {"transactionId": transaction_id, "meterStop": 30685,
+                       "timestamp": "2026-10-01T15:03:00+07:00", "reason": "PowerLoss",
+                       "transactionData": [
+                           {"timestamp": timestamp, "sampledValue": [{"value": value, "unit": "Wh"}]}
+                           for timestamp, value in [
+                               ("2026-10-01T08:03:00Z", "30685"),
+                               ("2026-10-01T08:01:00Z", "19340"),
+                               ("2026-10-01T08:02:00Z", "26340"),
+                               ("2026-10-01T08:02:00Z", "26340"),
+                           ]
+                       ]}
+            first = await call(socket, "late-stop-network", "StopTransaction", payload)
+            assert first[2]["idTagInfo"]["status"] == "Accepted"
+            assert await call(socket, "late-stop-network", "StopTransaction", payload) == first
+            await call(socket, "late-stop-different-id", "StopTransaction", {**payload, "meterStop": 99999})
+        detail = (await client.get(f"/api/sessions/{transaction_id}")).json()
+        assert detail["status"] == "completed"
+        assert detail["meter_stop_wh"] == 30685
+        assert detail["kwh"] == 12.345
+        assert detail["ended_at"] == "2026-10-01T08:03:00Z"
+        assert detail["anomaly_reason"] is None
+        anomalies = (await client.get("/api/sessions/anomalies", params={"days": "all"})).json()
+        assert transaction_id not in [row["id"] for row in anomalies["items"]]
+        with sqlite_connection(network_server["database"]) as db:
+            assert db.execute("SELECT COUNT(*) FROM charging_sessions WHERE charge_point_code='NET-08'").fetchone()[0] == 1
+            rows = db.execute("SELECT value FROM meter_values WHERE session_id=? ORDER BY measured_at", (transaction_id,)).fetchall()
+            assert rows == [(19340,), (26340,), (30685,)]
 
 
 @pytest.mark.asyncio
@@ -260,6 +367,16 @@ async def test_real_reset_correlation_nonblocking_timeout_and_audit(network_serv
         await socket.send(json.dumps([3, frame[1], {"status": "Accepted"}]))
         response = await asyncio.wait_for(task, timeout=1)
         assert response.status_code == 200, response.text
+        audit_response = await client.get("/api/audit", params={"charge_point_code": "NET-05"})
+        assert audit_response.status_code == 200, audit_response.text
+        audit = audit_response.json()
+        assert audit["total"] == 1
+        entry = audit["items"][0]
+        assert entry["action"] == "charge_point.reset.accepted"
+        assert entry["charge_point_code"] == "NET-05"
+        assert entry["actor_email"] == "operator@csms.local"
+        assert entry["details"] == {"reset_type": "Soft", "outcome": "Accepted"}
+        assert entry["created_at"]
         with sqlite_connection(network_server["database"]) as db:
             assert db.execute("SELECT status FROM charge_points WHERE code='NET-05'").fetchone()[0] == "offline"
         assert (await client.post("/api/charge_points/NET-05/reset", json={"type": "Soft"})).status_code == 409
@@ -271,6 +388,12 @@ async def test_real_reset_correlation_nonblocking_timeout_and_audit(network_serv
         assert frame[2] == "Reset"
         response = await task
         assert response.status_code == 504 and 0.8 <= time.monotonic() - started < 3
+        audit = (await client.get("/api/audit", params={"charge_point_code": "NET-05"})).json()
+        assert audit["total"] == 2
+        assert [entry["action"] for entry in audit["items"]] == [
+            "charge_point.reset.failed", "charge_point.reset.accepted",
+        ]
+        assert audit["items"][0]["details"] == {"reset_type": "Soft", "outcome": "timeout"}
         await call(socket, "after-reset-timeout", "Heartbeat", {})
         with sqlite_connection(network_server["database"]) as db:
             actions = db.execute("SELECT action FROM audit_logs WHERE charge_point_code='NET-05' ORDER BY id").fetchall()

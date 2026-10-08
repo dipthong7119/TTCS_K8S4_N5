@@ -74,35 +74,10 @@ const ApiClient = (() => {
     listAllSessions:  (params = {}, opts) => _request('GET', '/sessions?' + new URLSearchParams(params), null, opts),
     getSession:       (id)          => _request('GET', `/sessions/${id}`),
     remoteStop:       (id)          => _request('POST', `/sessions/${id}/remote-stop`),
-    listAnomalies:    async (params = {}) => {
-      // T-54: Mock API for Anomaly List
-      console.warn("Using Mock API for listAnomalies");
-      return {
-        total: 3,
-        offline_count: 1,
-        negative_kwh_count: 1,
-        items: [
-          { id: 101, station_name: 'Trạm Vincom', charge_point_code: 'CP_VIN_01', driver_name: 'Nguyễn Văn A', started_at: '2026-10-04T10:00:00Z', anomaly_reason: 'offline', kwh: 12.5, status: 'active', charge_point_status: 'offline' },
-          { id: 102, station_name: 'Trạm Lotte', charge_point_code: 'CP_LOT_02', driver_name: 'Trần Thị B', started_at: '2026-10-04T11:00:00Z', anomaly_reason: 'no_stop', kwh: 45.2, status: 'active', charge_point_status: 'online' },
-          { id: 103, station_name: 'Trạm Lotte', charge_point_code: 'CP_LOT_03', driver_name: 'Lê Văn C', started_at: '2026-10-05T07:15:00Z', anomaly_reason: 'negative_kwh', kwh: -5.0, status: 'finished', charge_point_status: 'online' }
-        ]
-      };
-      // return _request('GET', '/sessions/anomalies?' + new URLSearchParams(params));
-    },
+    listAnomalies:    (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 
     // --- Audit trail ---
-    listAuditLogs:    async (params = {}) => {
-      // T-58: Mock API for Audit Logs
-      console.warn("Using Mock API for listAuditLogs");
-      return {
-        total: 2,
-        items: [
-          { id: 1, created_at: '2026-10-05T08:00:00Z', actor_name: 'Admin', actor_email: 'admin@admin.com', action: 'charge_point.reset.accepted', object_type: 'ChargePoint', object_id: 'CP_VIN_01', charge_point_code: 'CP_VIN_01', details: { type: 'Soft' } },
-          { id: 2, created_at: '2026-10-05T09:30:00Z', actor_name: 'Vận hành viên', actor_email: 'op@admin.com', action: 'remote_stop.accepted', object_type: 'Session', object_id: 102, charge_point_code: 'CP_LOT_02', details: { reason: 'Anomaly' } }
-        ]
-      };
-      // return _request('GET', '/audit?' + new URLSearchParams(params));
-    },
+    listAuditLogs:    (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
 
     // --- Wallet ---
     getWallet:        ()            => _request('GET', '/wallet'),

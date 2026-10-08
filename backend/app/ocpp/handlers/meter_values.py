@@ -249,6 +249,24 @@ def filter_new_samples(
     return accepted
 
 
+def store_meter_samples(
+    db: Session, session_id: int, samples: list[MeterSample], charge_point_code: str
+) -> list[MeterSample]:
+    """Dùng chung quy tắc thời gian/chống trùng cho MeterValues và StopTransaction."""
+    filtered = filter_new_samples(db, session_id, samples, charge_point_code)
+    db.add_all([
+        MeterValue(
+            session_id=session_id,
+            measured_at=sample["measured_at"],
+            measurand=sample["measurand"],
+            value=sample["value"],
+            unit=sample["unit"],
+        )
+        for sample in filtered
+    ])
+    return filtered
+
+
 def handle_meter_values(
     db: Session, point: ChargePoint, msg_id: str, payload: dict[str, Any]
 ) -> str:
@@ -277,7 +295,7 @@ def handle_meter_values(
             ChargingSession.ended_at.is_(None)
         )
 
-    session = query.order_by(ChargingSession.id.desc()).first()
+    session = query.order_by(ChargingSession.id.desc()).with_for_update().first()
 
     # Không có phiên: trả conf trước (ở framework trả luôn sau hàm này),
     # nhưng yêu cầu "ghi orphan_messages, không ghi meter_values, ghi cảnh báo ngắn".
@@ -297,19 +315,9 @@ def handle_meter_values(
         )
         return pack_call_result(msg_id, {})
 
-    filtered_samples = filter_new_samples(db, session.id, raw_samples, point.code)
+    filtered_samples = store_meter_samples(db, session.id, raw_samples, point.code)
 
     if filtered_samples:
-        db.add_all([
-            MeterValue(
-                session_id=session.id,
-                measured_at=sample["measured_at"],
-                measurand=sample["measurand"],
-                value=sample["value"],
-                unit=sample["unit"],
-            )
-            for sample in filtered_samples
-        ])
         logger.debug("Saved %d meter values for cp=%s conn=%s", len(filtered_samples), point.code, connector_number)
 
     return pack_call_result(msg_id, {})
