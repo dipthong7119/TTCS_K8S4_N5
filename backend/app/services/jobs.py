@@ -1,10 +1,10 @@
-"""Idempotent OCPP background maintenance jobs (T-26, T-31)."""
+"""Idempotent OCPP background maintenance jobs (T-26, T-31, T-53)."""
 
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -66,37 +66,27 @@ def review_stale_sessions_once(db) -> int:
     remote_cutoff = now - timedelta(seconds=settings.REMOTE_STOP_REVIEW_SECONDS)
     offline_cutoff = now - timedelta(seconds=settings.SESSION_OFFLINE_GRACE_SECONDS)
 
-    timed_out_remote = (
-        db.query(ChargingSession)
-        .filter(
-            ChargingSession.status == "active",
-            ChargingSession.ended_at.is_(None),
-            ChargingSession.remote_stop_requested_at.is_not(None),
-            ChargingSession.remote_stop_requested_at <= remote_cutoff,
-        )
-        .all()
+    offline_point_ids = select(ChargePoint.id).where(
+        ChargePoint.status == "offline",
+        func.coalesce(ChargePoint.last_seen_at, ChargePoint.created_at) <= offline_cutoff,
     )
+    # Conditional UPDATE also protects a StopTransaction committed while the job
+    # waits for a row lock. Remote-stop timeout wins when both criteria match.
     changed = []
-    for session in timed_out_remote:
-        session.status = "needs_review"
-        session.anomaly_reason = "remote_stop_timeout"
-        changed.append(session)
-
-    offline_sessions = (
-        db.query(ChargingSession)
-        .join(ChargePoint, ChargingSession.charge_point_id == ChargePoint.id)
-        .filter(
-            ChargingSession.status == "active",
-            ChargingSession.ended_at.is_(None),
-            ChargePoint.status == "offline",
-            func.coalesce(ChargePoint.last_seen_at, ChargePoint.created_at) <= offline_cutoff,
-        )
-        .all()
-    )
-    for session in offline_sessions:
-        session.status = "anomaly"
-        session.anomaly_reason = "offline"
-        changed.append(session)
+    for conditions, status, reason in (
+        ((ChargingSession.remote_stop_requested_at.is_not(None),
+          ChargingSession.remote_stop_requested_at <= remote_cutoff),
+         "needs_review", "remote_stop_timeout"),
+        ((ChargingSession.charge_point_id.in_(offline_point_ids),), "anomaly", "offline"),
+    ):
+        rows = db.execute(
+            update(ChargingSession)
+            .where(ChargingSession.status == "active", ChargingSession.ended_at.is_(None), *conditions)
+            .values(status=status, anomaly_reason=reason)
+            .returning(ChargingSession.id, ChargingSession.user_id, ChargingSession.station_id,
+                       ChargingSession.charge_point_code, ChargingSession.anomaly_reason)
+        ).mappings().all()
+        changed.extend(rows)
 
     if not changed:
         return 0
@@ -107,14 +97,18 @@ def review_stale_sessions_once(db) -> int:
     station_owner_ids = {
         station_id: owner_id
         for station_id, owner_id in db.query(Station.id, Station.owner_id).filter(
-            Station.id.in_({session.station_id for session in changed if session.station_id is not None})
+            Station.id.in_({session["station_id"] for session in changed if session["station_id"] is not None})
         )
     }
     for session in changed:
         notify_session_change(
-            session.user_id,
-            station_owner_ids.get(session.station_id),
-            session.id,
+            session["user_id"],
+            station_owner_ids.get(session["station_id"]),
+            session["id"],
+        )
+        logger.warning(
+            "Charging session marked for review: session=%s cp=%s reason=%s",
+            session["id"], session["charge_point_code"], session["anomaly_reason"],
         )
     logger.warning("Marked %s charging session(s) for review", len(changed))
     return len(changed)

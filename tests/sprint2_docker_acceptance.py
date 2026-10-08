@@ -31,7 +31,8 @@ def docker_stack(request):
                "-p", project, "-f", str(ROOT / "docker-compose.acceptance.yml")]
 
     def compose(*arguments, timeout=60, environment=None):
-        result = subprocess.run(command + list(arguments), capture_output=True, text=True, timeout=timeout, check=False,
+        result = subprocess.run(command + list(arguments), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=timeout, check=False,
                                 env=None if environment is None else {**os.environ, **environment})
         assert result.returncode == 0, result.stdout + result.stderr
         return result.stdout.strip()
@@ -54,6 +55,108 @@ async def call(socket, action, payload=None):
     response = json.loads(await asyncio.wait_for(socket.recv(), timeout=5))
     assert response[:2] == [3, message_id], response
     return response[2]
+
+
+@pytest.mark.asyncio
+async def test_t43_t45_t53_postgres_offline_session_recovers_with_late_stop(docker_stack):
+    """Real PostgreSQL + WebSocket + background job; manual oracle = 12.345 kWh."""
+    code = f"SPRINT3-{uuid4().hex[:10]}"
+    with docker_stack["db"].begin() as db:
+        tag = db.execute(text(
+            "SELECT id_tags.id_tag FROM id_tags JOIN users ON users.id=id_tags.user_id "
+            "WHERE users.email='driver@csms.local' AND id_tags.is_blocked=FALSE LIMIT 1"
+        )).scalar_one()
+        station_id = db.execute(text("SELECT station_id FROM charge_points WHERE code='SIM-19'")).scalar_one()
+        point_id = db.execute(text(
+            "INSERT INTO charge_points (code, station_id, status) VALUES (:code, :station, 'offline') RETURNING id"
+        ), {"code": code, "station": station_id}).scalar_one()
+        db.execute(text(
+            "INSERT INTO connectors (charge_point_id, connector_id, status, error_code) VALUES (:id, 1, 'unknown', 'NoError')"
+        ), {"id": point_id})
+
+    async def boot():
+        socket = await websockets.connect(f"{docker_stack['ws']}/{code}", subprotocols=["ocpp1.6"])
+        assert (await call(socket, "BootNotification", {"chargePointVendor": "Acceptance", "chargePointModel": "Sprint3"}))["status"] == "Accepted"
+        return socket
+
+    socket = await boot()
+    async with socket:
+        start = await call(socket, "StartTransaction", {
+            "connectorId": 1, "idTag": tag, "meterStart": 18340, "timestamp": "2026-10-01T08:00:00Z",
+        })
+        assert start["idTagInfo"]["status"] == "Accepted"
+        transaction_id = start["transactionId"]
+        for timestamp, value in [
+            ("2026-10-01T08:01:00Z", "19340"),
+            ("2026-10-01T08:00:30Z", "18380"),
+            ("2026-10-01T08:01:00Z", "19340"),
+        ]:
+            assert await call(socket, "MeterValues", {
+                "connectorId": 1, "transactionId": transaction_id,
+                "meterValue": [{"timestamp": timestamp, "sampledValue": [{"value": value, "unit": "Wh"}]}],
+            }) == {}
+        with docker_stack["db"].connect() as db:
+            assert db.execute(text("SELECT value FROM meter_values WHERE session_id=:id"), {"id": transaction_id}).scalars().all() == [19340]
+        warnings = [line for line in docker_stack["compose"]("logs", "--no-color", "app").splitlines()
+                    if f"Meter value rejected: cp={code} session={transaction_id} " in line]
+        assert len(warnings) == 1
+
+    async with asyncio.timeout(5):
+        while True:
+            with docker_stack["db"].connect() as db:
+                status = db.execute(text("SELECT status FROM charge_points WHERE code=:code"), {"code": code}).scalar_one()
+            if status == "offline":
+                break
+            await asyncio.sleep(0.05)
+    with docker_stack["db"].begin() as db:
+        db.execute(text("UPDATE charge_points SET last_seen_at=CURRENT_TIMESTAMP-INTERVAL '61 seconds' WHERE code=:code"), {"code": code})
+    async with asyncio.timeout(5):
+        while True:
+            with docker_stack["db"].connect() as db:
+                row = db.execute(text("SELECT status, ended_at FROM charging_sessions WHERE id=:id"), {"id": transaction_id}).one()
+            if row.status == "anomaly":
+                assert row.ended_at is None
+                break
+            await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=docker_stack["http"]) as client:
+        assert (await client.post("/api/auth/login", json={"email": "operator@csms.local", "password": "Operator@2024!"})).status_code == 200
+        anomalies = (await client.get("/api/sessions/anomalies", params={"days": "all", "reason": "offline"})).json()
+        assert transaction_id in [item["id"] for item in anomalies["items"]]
+        socket = await boot()
+        async with socket:
+            await call(socket, "StatusNotification", {"connectorId": 1, "status": "Available", "errorCode": "NoError"})
+            payload = {"transactionId": transaction_id, "meterStop": 30685,
+                       "timestamp": "2026-10-01T15:03:00+07:00", "reason": "PowerLoss",
+                       "transactionData": [
+                           {"timestamp": timestamp, "sampledValue": [{"value": value, "unit": "Wh"}]}
+                           for timestamp, value in [
+                               ("2026-10-01T08:03:00Z", "30685"),
+                               ("2026-10-01T08:01:00Z", "19340"),
+                               ("2026-10-01T08:02:00Z", "26340"),
+                               ("2026-10-01T08:02:00Z", "26340"),
+                           ]
+                       ]}
+            message_id = uuid4().hex
+            raw = json.dumps([2, message_id, "StopTransaction", payload])
+            await socket.send(raw)
+            first = json.loads(await asyncio.wait_for(socket.recv(), timeout=5))
+            assert first == [3, message_id, {"idTagInfo": {"status": "Accepted"}}]
+            await socket.send(raw)
+            assert json.loads(await asyncio.wait_for(socket.recv(), timeout=5)) == first
+            assert (await call(socket, "StopTransaction", {**payload, "meterStop": 99999}))["idTagInfo"]["status"] == "Accepted"
+        detail = (await client.get(f"/api/sessions/{transaction_id}")).json()
+        assert detail["status"] == "completed"
+        assert detail["meter_stop_wh"] == 30685
+        assert detail["kwh"] == 12.345
+        assert detail["ended_at"] == "2026-10-01T08:03:00Z"
+        anomalies = (await client.get("/api/sessions/anomalies", params={"days": "all"})).json()
+        assert transaction_id not in [item["id"] for item in anomalies["items"]]
+        with docker_stack["db"].connect() as db:
+            values = db.execute(text("SELECT value FROM meter_values WHERE session_id=:id ORDER BY measured_at"), {"id": transaction_id}).scalars().all()
+            assert values == [19340, 26340, 30685]
+            count = db.execute(text("SELECT COUNT(*) FROM charging_sessions WHERE charge_point_code=:code"), {"code": code}).scalar_one()
+            assert count == 1
 
 
 def test_postgres_migration_roundtrip(docker_stack):

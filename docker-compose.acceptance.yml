@@ -34,6 +34,7 @@ services:
       OCPP_HEARTBEAT_INTERVAL_SECONDS: "5"
       OCPP_JOB_POLL_SECONDS: "1"
       OCPP_REMOTE_CALL_TIMEOUT_SECONDS: "2"
+      SESSION_OFFLINE_GRACE_SECONDS: "60"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 2s

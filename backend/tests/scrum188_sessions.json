@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "ordinary",
+    "description": "Phiên thường, giữ đủ ba chữ số kWh",
+    "meter_start_wh": 18340,
+    "meter_stop_wh": 30685,
+    "manual_calculation": "(30685 - 18340) / 1000 = 12.345 kWh",
+    "expected_kwh": "12.345",
+    "expected_status": "completed",
+    "expected_anomaly_reason": null
+  },
+  {
+    "case_id": "regressing",
+    "description": "Số đo cuối nhỏ hơn đầu, không ghi kWh âm",
+    "meter_start_wh": 27110,
+    "meter_stop_wh": 26000,
+    "manual_calculation": "26000 - 27110 = -1110 Wh; không chốt kWh, cần xem xét",
+    "expected_kwh": null,
+    "expected_status": "needs_review",
+    "expected_anomaly_reason": "negative_kwh"
+  },
+  {
+    "case_id": "unchanged",
+    "description": "Hai số đo bằng nhau, phiên hợp lệ có điện năng bằng 0",
+    "meter_start_wh": 40520,
+    "meter_stop_wh": 40520,
+    "manual_calculation": "(40520 - 40520) / 1000 = 0.000 kWh",
+    "expected_kwh": "0.000",
+    "expected_status": "completed",
+    "expected_anomaly_reason": null
+  }
+]
