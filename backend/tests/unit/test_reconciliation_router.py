@@ -1,4 +1,4 @@
-﻿"""
+"""
 test_reconciliation_router.py — Unit tests cho API GET /api/reconciliation/kwh (SCRUM-183 / SCRUM-184).
 
 Phụ trách: Hoàng Văn Đức
@@ -11,7 +11,6 @@ Kiểm tra:
 
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,6 +25,7 @@ from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.station import Station
 from app.models.user import User
+from app.routers import reconciliation
 
 engine_test = create_engine(
     "sqlite:///:memory:",
@@ -173,7 +173,6 @@ def test_reconciliation_with_scrum182_file(tmp_path, monkeypatch):
     scrum182_path = ketqua_dir / "scrum182_kwh_result.json"
     scrum182_path.write_text(json.dumps(fake_scrum182_data, ensure_ascii=False), encoding="utf-8")
 
-    from app.routers import reconciliation
     monkeypatch.setattr(reconciliation, "_get_project_paths", lambda: (ketqua_dir, tmp_path / "static"))
 
     resp = client.get("/api/reconciliation/kwh")
