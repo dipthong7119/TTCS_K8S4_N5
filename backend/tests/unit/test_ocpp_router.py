@@ -222,7 +222,7 @@ def test_replaced_websocket_does_not_send_inflight_response(monkeypatch):
 
     websocket = FakeWebSocket()
 
-    def finish_after_reconnect(db, charge_point_code, raw_message):
+    def finish_after_reconnect(db, charge_point_code, raw_message, connection_ctx=None):
         manager.active_connections[charge_point_code] = replacement
         return pack_call_result("race-boot", {"status": "Accepted"})
 

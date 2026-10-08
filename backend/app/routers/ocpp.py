@@ -4,12 +4,19 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
+from app.ocpp.session_reconciliation import (
+    ReconciliationContext,
+    begin_reconciliation,
+    reconcile_if_offline,
+)
 from app.services.connection_manager import manager
 from app.services.ocpp_handlers import handle_ocpp_message, touch_last_seen
 from app.services.ocpp_parser import OCPPError, pack_call_error, parse_message
+from app.services.ocpp_status import is_charge_point_stale
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -46,6 +53,17 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
 
     await websocket.accept(subprotocol="ocpp1.6")
     await manager.connect(charge_point_code, websocket)
+    connection_ctx = ReconciliationContext()
+    try:
+        with SessionLocal() as db:
+            point = db.query(ChargePoint).filter_by(code=charge_point_code).first()
+            if point is not None:
+                begin_reconciliation(db, point, connection_ctx)
+                connection_ctx.offline_reconciled = (
+                    point.status == "offline" or is_charge_point_stale(point.last_seen_at)
+                )
+    except Exception:
+        logger.warning("Session reconciliation failed on new connection: cp=%s", charge_point_code)
     logger.info("Charge point connected: %s", charge_point_code)
     boot_accepted = False
 
@@ -56,6 +74,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 message = parse_message(raw_msg)
             except OCPPError as exc:
                 with SessionLocal() as db:
+                    _reconcile_returning_non_call(db, charge_point_code, connection_ctx)
                     touch_last_seen(db, charge_point_code)
                     db.commit()
                 await websocket.send_text(
@@ -69,6 +88,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
 
             if msg_type == 3:
                 with SessionLocal() as db:
+                    _reconcile_returning_non_call(db, charge_point_code, connection_ctx)
                     touch_last_seen(db, charge_point_code)
                     db.commit()
                 matched = await manager.resolve_call_result(
@@ -79,6 +99,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 continue
             if msg_type == 4:
                 with SessionLocal() as db:
+                    _reconcile_returning_non_call(db, charge_point_code, connection_ctx)
                     touch_last_seen(db, charge_point_code)
                     db.commit()
                 matched = await manager.resolve_call_error(
@@ -95,6 +116,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
 
             if not boot_accepted and action != "BootNotification":
                 with SessionLocal() as db:
+                    _reconcile_returning_non_call(db, charge_point_code, connection_ctx)
                     touch_last_seen(db, charge_point_code)
                     db.commit()
                 await websocket.send_text(
@@ -103,7 +125,9 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 continue
 
             with SessionLocal() as db:
-                response = handle_ocpp_message(db, charge_point_code, raw_msg)
+                response = handle_ocpp_message(
+                    db, charge_point_code, raw_msg, connection_ctx
+                )
 
             try:
                 response_frame = parse_message(response) if response else None
@@ -145,3 +169,18 @@ def _normalize_parsed_message(message) -> tuple[int, str, Any, Any, Any, Any, An
     if msg_type == 4:
         payload = None
     return msg_type, msg_id, action, payload, error_code, error_description, error_details
+
+
+def _reconcile_returning_non_call(
+    db: Session,
+    charge_point_code: str,
+    connection_ctx: ReconciliationContext,
+) -> None:
+    """Cô lập lỗi đối chiếu để vẫn xử lý CALLRESULT/CALLERROR bình thường."""
+    try:
+        reconcile_if_offline(db, charge_point_code, connection_ctx)
+    except Exception:
+        logger.warning(
+            "Session reconciliation failed on returning message: cp=%s",
+            charge_point_code,
+        )
