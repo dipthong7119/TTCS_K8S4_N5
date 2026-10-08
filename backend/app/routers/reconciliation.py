@@ -1,4 +1,4 @@
-﻿"""
+"""
 reconciliation.py — REST API đối chiếu kWh hệ thống CSMS vs Simulator (SCRUM-183 / SCRUM-184).
 
 Phụ trách: Hoàng Văn Đức (Backend)
@@ -214,8 +214,8 @@ def get_kwh_reconciliation(
                     "summary": reconciliation["summary"],
                     "sessions": reconciliation["sessions"],
                 }
-        except Exception as e:
-            logger.exception("Lỗi khi xử lý dữ liệu SCRUM-182: %s", e)
+        except Exception:
+            logger.exception("Lỗi khi xử lý dữ liệu SCRUM-182")
 
     # Trường hợp 2: Fallback sang dữ liệu mẫu
     return _load_sample_data(static_data_dir, ketqua_dir, tolerance)
