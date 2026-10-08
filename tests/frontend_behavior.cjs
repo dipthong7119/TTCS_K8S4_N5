@@ -710,6 +710,7 @@ async function startPage(options = {}) {
   select.value = '1'; select.handlers.change(); tag.value = 'CARD-01'; tag.handlers.input();
   return { ...page, select, button, tag, message, calls, timers, redirects,
     click: () => button.handlers.click(),
+    elapseWithoutTimers(ms) { now += ms; },
     async advance(ms) {
       now += ms;
       for (const [id, timer] of [...timers]) if (timer.time <= now && timers.delete(id)) await timer.fn();
@@ -767,6 +768,51 @@ test('SCRUM-194: only a new session on the chosen point and connector navigates 
   session.started_at = new Date(Date.now() + 10000).toISOString();
   await page.advance(2000); assert.deepEqual(page.redirects, ['/sessions/mine']);
   assert.match(page.message.textContent, /đã bắt đầu/); assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-191: delayed deadline timer cannot accept a response after 60 seconds', async () => {
+  let resolve;
+  let polls = 0;
+  const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }),
+    currentSession: async () => { polls++; return null; } });
+  const pending = page.click();
+  page.elapseWithoutTimers(60000);
+  resolve({ status: 'Accepted' }); await pending;
+  assert.match(page.message.textContent, /Hết thời gian/);
+  assert.equal(page.button.disabled, false);
+  assert.equal(polls, 0);
+  assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-191: delayed session response after deadline cannot report success', async () => {
+  let resolve;
+  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }),
+    currentSession: () => new Promise(done => { resolve = done; }) });
+  const pending = page.click(); await flush();
+  page.elapseWithoutTimers(60000);
+  resolve({ charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() });
+  await pending;
+  assert.match(page.message.textContent, /Hết thời gian/);
+  assert.deepEqual(page.redirects, []);
+  assert.equal(page.timers.size, 0);
+});
+
+test('SCRUM-191: returning after pagehide allows retry and ignores the previous command', async () => {
+  const resolves = [];
+  const page = await startPage({ remoteStart: () => new Promise(done => resolves.push(done)) });
+  const first = page.click();
+  page.windowHandlers.pagehide();
+  assert.equal(page.button.disabled, false);
+  assert.match(page.message.textContent, /Kiểm tra trạng thái/);
+  page.openDetail();
+  const second = page.click();
+  assert.equal(page.calls.length, 2);
+  resolves[0]({ status: 'Rejected' }); await first;
+  assert.equal(page.button.disabled, true);
+  assert.match(page.message.textContent, /Đang gửi/);
+  resolves[1]({ status: 'Rejected' }); await second;
+  assert.equal(page.button.disabled, false);
+  assert.equal(page.timers.size, 0);
 });
 
 test('SCRUM-191: an old response after timeout cannot finish or replace a retry', async () => {

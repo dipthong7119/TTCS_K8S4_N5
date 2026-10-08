@@ -318,10 +318,16 @@
         clearTimeout(state.deadline); clearTimeout(state.poll);
         controller.abort(); state.update();
       };
-      state.deadline = setTimeout(() => finish('Hết thời gian chờ 60 giây, chưa xác nhận được phiên sạc. Kiểm tra trạng thái trước khi thử lại.'), 60000);
+      const expire = () => finish('Hết thời gian chờ 60 giây, chưa xác nhận được phiên sạc. Kiểm tra trạng thái trước khi thử lại.');
+      const withinDeadline = () => {
+        if (!active()) return false;
+        if (Date.now() - started >= 60000) { expire(); return false; }
+        return true;
+      };
+      state.deadline = setTimeout(expire, 60000);
       update();
       const poll = async () => {
-        if (!active()) return;
+        if (!withinDeadline()) return;
         try {
           let user = {};
           try { user = JSON.parse(document.getElementById('auth-context')?.textContent || '{}'); } catch (_) {}
@@ -329,7 +335,7 @@
           const response = driver
             ? await ApiClient.getCurrentSession({ signal: controller.signal })
             : await ApiClient.listAllSessions({ status: 'active', page_size: 100 }, { signal: controller.signal });
-          if (!active()) return;
+          if (!withinDeadline()) return;
           const sessions = driver ? [response] : (response?.items || []);
           const session = sessions.find(item => item && item.charge_point_code === button.dataset.cpCode &&
             Number(item.connector_number) === Number(state.selected) && !item.ended_at &&
@@ -341,20 +347,20 @@
             return;
           }
         } catch (error) {
-          if (!active()) return;
+          if (!withinDeadline()) return;
           if ([401, 403].includes(error.status)) { finish(error.message || 'Không có quyền kiểm tra phiên sạc.'); return; }
         }
         if (active()) state.poll = setTimeout(poll, 2000);
       };
       try {
         const result = await ApiClient.remoteStartChargePoint(button.dataset.cpCode, Number(state.selected), tag.value.trim(), { signal: controller.signal });
-        if (!active()) return;
+        if (!withinDeadline()) return;
         if (result?.status !== 'Accepted') { finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.'); return; }
         state.message = 'Trụ đã nhận lệnh. Đang chờ phiên sạc bắt đầu (tối đa 60 giây)…';
         state.update();
         await poll();
       } catch (error) {
-        if (!active()) return;
+        if (!withinDeadline()) return;
         if (error.status === 409) finish(/ngoại tuyến|ngắt kết nối/i.test(error.message || '') ? error.message : 'Trụ hoặc đầu nối đang bận. Vui lòng chọn đầu nối khác.');
         else if (error.status === 504 || error.name === 'AbortError') finish('Hết thời gian chờ, trụ chưa phản hồi. Kiểm tra trạng thái trước khi thử lại.');
         else if (error.status === 502) finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.');
@@ -444,6 +450,11 @@
       startRequests.forEach(state => {
         clearTimeout(state.deadline);
         clearTimeout(state.poll);
+        if (state.pending) {
+          state.pending = false;
+          state.message = 'Đã dừng theo dõi yêu cầu khi rời trang. Kiểm tra trạng thái trước khi thử lại.';
+          state.update?.();
+        }
         state.controller?.abort();
       });
     });
