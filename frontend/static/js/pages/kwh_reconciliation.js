@@ -12,9 +12,7 @@
 'use strict';
 
 /* ── Constants ──────────────────────────────────────────── */
-const API_ENDPOINT = '/api/reconciliation/kwh';
 const MOCK_ENDPOINT = '/static/data/kwh_reconciliation_sample.json';
-const INVENTORY_ENDPOINT = '/api/monitoring/tree';
 
 /* ── State ──────────────────────────────────────────────── */
 let allSessions = [];
@@ -58,22 +56,10 @@ async function loadData() {
     let data;
     let isSample = false;
     try {
-      if (window.ApiClient && typeof window.ApiClient.getKwhReconciliation === 'function') {
-        data = await ApiClient.getKwhReconciliation();
-        isSample = data?.metadata?.is_sample === true;
-      } else {
-        const res = await fetch(API_ENDPOINT, { credentials: 'include' });
-        if (res.ok) {
-          data = await res.json();
-          isSample = data.metadata?.is_sample === true;
-        } else if (res.status === 404) {
-          throw { status: 404 };
-        } else {
-          throw new Error('Không thể tải dữ liệu đối chiếu.');
-        }
-      }
+      data = await ApiClient.getKwhReconciliation();
+      isSample = data?.metadata?.is_sample === true;
     } catch (apiErr) {
-      if (apiErr.status === 404 || apiErr.status === 0) {
+      if (apiErr.status === 404) {
         const sample = await fetch(MOCK_ENDPOINT, { cache: 'no-store' });
         if (!sample.ok) throw new Error('Không thể tải dữ liệu đối chiếu mẫu.');
         data = await sample.json();
@@ -83,20 +69,15 @@ async function loadData() {
       }
     }
 
-    let stations = [];
+    let stations;
     try {
-      if (window.ApiClient && typeof window.ApiClient.getMonitoringTree === 'function') {
-        stations = await ApiClient.getMonitoringTree();
-      } else {
-        const inventory = await fetch(INVENTORY_ENDPOINT, { credentials: 'include', cache: 'no-store' });
-        if (inventory.ok) stations = await inventory.json();
-      }
+      stations = await ApiClient.getMonitoringTree();
     } catch (invErr) {
-      console.warn('Không thể đồng bộ danh sách trạm qua tree API, sử dụng dữ liệu trực tiếp từ báo cáo:', invErr);
+      throw new Error('Không thể đồng bộ danh sách trạm và mã trụ. Vui lòng thử lại sau.');
     }
 
     reportIsSample = isSample;
-    const synced = stations && stations.length ? syncReportInventory(data, stations, isSample) : data;
+    const synced = syncReportInventory(data, stations, isSample);
     if (isSample) showMockNotice();
     initPage(synced);
   } catch (err) {
