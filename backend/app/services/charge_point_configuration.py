@@ -2,10 +2,11 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncIterator, Any
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
@@ -258,7 +259,7 @@ async def change_configuration(
                 ),
             }
             http_status, code, message = outcomes.get(
-                status_value if isinstance(status_value, str) else None,
+                status_value if isinstance(status_value, str) else "",
                 (502, "invalid_charge_point_response", "Trụ trả phản hồi cấu hình không hợp lệ."),
             )
             _log_change(
