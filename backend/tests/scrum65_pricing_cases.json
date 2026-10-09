@@ -1,0 +1,329 @@
+{
+  "ticket": "SCRUM-65",
+  "story": "S-32",
+  "calculated_by": "Trịnh Thanh Tùng (cùng Codex)",
+  "calculated_on": "2026-10-09",
+  "reviewer": "Tạ Như Vinh — chưa review",
+  "timezone_name": "Asia/Ho_Chi_Minh",
+  "rounding_rule": "ROUND_HALF_UP tới đồng ở từng đoạn khung giá của từng ngày, sau đó cộng; không làm tròn ở từng số đo.",
+  "tariffs": {
+    "daily": [
+      {"label": "Thấp điểm", "start_minute": 0, "end_minute": 360, "price_vnd_per_kwh": 3000},
+      {"label": "Tiêu chuẩn", "start_minute": 360, "end_minute": 1020, "price_vnd_per_kwh": 4000},
+      {"label": "Cao điểm", "start_minute": 1020, "end_minute": 1320, "price_vnd_per_kwh": 5000},
+      {"label": "Thấp điểm", "start_minute": 1320, "end_minute": 1440, "price_vnd_per_kwh": 3000}
+    ],
+    "flat_500": [{"label": "Cả ngày", "start_minute": 0, "end_minute": 1440, "price_vnd_per_kwh": 500}],
+    "flat_499": [{"label": "Cả ngày", "start_minute": 0, "end_minute": 1440, "price_vnd_per_kwh": 499}],
+    "flat_3333": [{"label": "Cả ngày", "start_minute": 0, "end_minute": 1440, "price_vnd_per_kwh": 3333}],
+    "next_day": [{"label": "Ngày mới", "start_minute": 0, "end_minute": 1440, "price_vnd_per_kwh": 6000}]
+  },
+  "cases": [
+    {
+      "case_id": "SCRUM65-01",
+      "description": "Một khung thấp điểm",
+      "category": "single_band",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T01:00:00+07:00", "ended_at": "2026-10-09T02:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "manual_calculation": "(12000 - 10000) / 1000 = 2 kWh; 2 × 3000 = 6000 đồng.",
+      "expected": {"total_vnd": 6000, "segments": [
+        {"from": "2026-10-09T01:00:00+07:00", "to": "2026-10-09T02:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 6000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-02",
+      "description": "Một khung tiêu chuẩn, kWh có phần lẻ",
+      "category": "single_band",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T09:00:00+07:00", "ended_at": "2026-10-09T10:00:00+07:00", "meter_start_wh": 5000, "meter_stop_wh": 8750, "meter_readings": []},
+      "manual_calculation": "(8750 - 5000) / 1000 = 3.75 kWh; 3.75 × 4000 = 15000 đồng.",
+      "expected": {"total_vnd": 15000, "segments": [
+        {"from": "2026-10-09T09:00:00+07:00", "to": "2026-10-09T10:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "3.750000", "price_vnd_per_kwh": 4000, "amount_vnd": 15000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-03",
+      "description": "Một khung cao điểm",
+      "category": "single_band",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T18:00:00+07:00", "ended_at": "2026-10-09T19:00:00+07:00", "meter_start_wh": 12000, "meter_stop_wh": 14000, "meter_readings": []},
+      "manual_calculation": "(14000 - 12000) / 1000 = 2 kWh; 2 × 5000 = 10000 đồng.",
+      "expected": {"total_vnd": 10000, "segments": [
+        {"from": "2026-10-09T18:00:00+07:00", "to": "2026-10-09T19:00:00+07:00", "band": "Cao điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 10000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-04",
+      "description": "Cắt 22:00, có số đo đúng mốc, công suất không đều",
+      "category": "boundary",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T21:30:00+07:00", "ended_at": "2026-10-09T23:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": [
+        {"measured_at": "2026-10-09T22:00:00+07:00", "value": "13000", "unit": "Wh"}
+      ]},
+      "manual_calculation": "Trước 22:00: (13000 - 10000) / 1000 = 3 kWh × 5000 = 15000. Sau mốc: 5 kWh × 3000 = 15000. Tổng 30000 đồng; không chia điện năng đều theo toàn phiên.",
+      "expected": {"total_vnd": 30000, "segments": [
+        {"from": "2026-10-09T21:30:00+07:00", "to": "2026-10-09T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "3.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 15000},
+        {"from": "2026-10-09T22:00:00+07:00", "to": "2026-10-09T23:30:00+07:00", "band": "Thấp điểm", "energy_kwh": "5.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 15000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-05",
+      "description": "Số đo thưa, nội suy tại 22:00 từ đầu và cuối",
+      "category": "sparse_readings",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T21:30:00+07:00", "ended_at": "2026-10-09T23:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": []},
+      "manual_calculation": "8 kWh trong 120 phút. Trước 22:00: 8 × 30 / 120 = 2 kWh × 5000 = 10000. Sau mốc: 6 kWh × 3000 = 18000. Tổng 28000 đồng.",
+      "expected": {"total_vnd": 28000, "segments": [
+        {"from": "2026-10-09T21:30:00+07:00", "to": "2026-10-09T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 10000},
+        {"from": "2026-10-09T22:00:00+07:00", "to": "2026-10-09T23:30:00+07:00", "band": "Thấp điểm", "energy_kwh": "6.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 18000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-06",
+      "description": "Kết thúc đúng 22:00, không có đoạn rỗng sau mốc",
+      "category": "boundary",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T21:00:00+07:00", "ended_at": "2026-10-09T22:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "manual_calculation": "Toàn bộ 2 kWh trước 22:00 × 5000 = 10000 đồng, một đoạn.",
+      "expected": {"total_vnd": 10000, "segments": [
+        {"from": "2026-10-09T21:00:00+07:00", "to": "2026-10-09T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 10000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-07",
+      "description": "Bắt đầu đúng 22:00, áp ngay giá thấp điểm",
+      "category": "boundary",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T22:00:00+07:00", "ended_at": "2026-10-09T23:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "manual_calculation": "Toàn bộ 2 kWh từ 22:00 × 3000 = 6000 đồng, một đoạn.",
+      "expected": {"total_vnd": 6000, "segments": [
+        {"from": "2026-10-09T22:00:00+07:00", "to": "2026-10-09T23:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 6000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-08",
+      "description": "Cắt 06:00, ưu tiên số đo đúng mốc",
+      "category": "boundary",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T05:30:00+07:00", "ended_at": "2026-10-09T06:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 14000, "meter_readings": [
+        {"measured_at": "2026-10-09T06:00:00+07:00", "value": "11000", "unit": "Wh"}
+      ]},
+      "manual_calculation": "Trước 06:00: 1 kWh × 3000 = 3000. Sau mốc: 3 kWh × 4000 = 12000. Tổng 15000 đồng.",
+      "expected": {"total_vnd": 15000, "segments": [
+        {"from": "2026-10-09T05:30:00+07:00", "to": "2026-10-09T06:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "1.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 3000},
+        {"from": "2026-10-09T06:00:00+07:00", "to": "2026-10-09T06:30:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "3.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 12000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-09",
+      "description": "Cắt 17:00, nội suy chuyển sang cao điểm",
+      "category": "boundary",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T16:30:00+07:00", "ended_at": "2026-10-09T17:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 14000, "meter_readings": []},
+      "manual_calculation": "4 kWh trong 60 phút, mỗi phía 30 phút = 2 kWh. 2 × 4000 + 2 × 5000 = 18000 đồng.",
+      "expected": {"total_vnd": 18000, "segments": [
+        {"from": "2026-10-09T16:30:00+07:00", "to": "2026-10-09T17:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "2.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 8000},
+        {"from": "2026-10-09T17:00:00+07:00", "to": "2026-10-09T17:30:00+07:00", "band": "Cao điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 10000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-10",
+      "description": "Qua nửa đêm, hai ngày có cùng biểu giá",
+      "category": "midnight",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T23:00:00+07:00", "ended_at": "2026-10-10T01:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": []},
+      "manual_calculation": "8 kWh trong 2 giờ, mỗi ngày 4 kWh. 4 × 3000 + 4 × 3000 = 24000 đồng; hai đoạn tách theo ngày.",
+      "expected": {"total_vnd": 24000, "segments": [
+        {"from": "2026-10-09T23:00:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "4.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 12000},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T01:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "4.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 12000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-11",
+      "description": "Dữ liệu UTC, chia ngày theo múi giờ trạm UTC+7",
+      "category": "timezone",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T16:00:00Z", "ended_at": "2026-10-09T18:00:00Z", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": []},
+      "manual_calculation": "16:00Z = 23:00 ngày 09/10, 18:00Z = 01:00 ngày 10/10 tại trạm. Mỗi ngày 4 kWh × 3000 = 12000; tổng 24000 đồng.",
+      "expected": {"total_vnd": 24000, "segments": [
+        {"from": "2026-10-09T23:00:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "4.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 12000},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T01:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "4.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 12000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-12",
+      "description": "Phiên 26 giờ, ba ngày, đi qua tất cả các khung",
+      "category": "multiple_days",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T23:00:00+07:00", "ended_at": "2026-10-11T01:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 36000, "meter_readings": []},
+      "manual_calculation": "26 kWh / 26 giờ = 1 kWh/giờ. Các đoạn: 1×3000=3000; 6×3000=18000; 11×4000=44000; 5×5000=25000; 2×3000=6000; 1×3000=3000. Tổng 99000 đồng.",
+      "expected": {"total_vnd": 99000, "segments": [
+        {"from": "2026-10-09T23:00:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "1.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 3000},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T06:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "6.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 18000},
+        {"from": "2026-10-10T06:00:00+07:00", "to": "2026-10-10T17:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "11.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 44000},
+        {"from": "2026-10-10T17:00:00+07:00", "to": "2026-10-10T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "5.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 25000},
+        {"from": "2026-10-10T22:00:00+07:00", "to": "2026-10-11T00:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 6000},
+        {"from": "2026-10-11T00:00:00+07:00", "to": "2026-10-11T01:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "1.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 3000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-13",
+      "description": "Nhiều số đo trong một khung, chỉ làm tròn sau khi gộp",
+      "category": "rounding",
+      "tariff": "flat_500",
+      "input": {"started_at": "2026-10-09T08:00:00+07:00", "ended_at": "2026-10-09T09:00:00+07:00", "meter_start_wh": 1000, "meter_stop_wh": 1003, "meter_readings": [
+        {"measured_at": "2026-10-09T08:20:00+07:00", "value": "1001", "unit": "Wh"},
+        {"measured_at": "2026-10-09T08:40:00+07:00", "value": "1002", "unit": "Wh"}
+      ]},
+      "manual_calculation": "Cùng một khung: 3 Wh = 0.003 kWh × 500 = 1.5 đồng → 2 đồng. Làm tròn mỗi số đo sẽ sai thành 3 đồng.",
+      "expected": {"total_vnd": 2, "segments": [
+        {"from": "2026-10-09T08:00:00+07:00", "to": "2026-10-09T09:00:00+07:00", "band": "Cả ngày", "energy_kwh": "0.003000", "price_vnd_per_kwh": 500, "amount_vnd": 2}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-14",
+      "description": "Hai đoạn mỗi đoạn đúng 0.5 đồng, cộng sau làm tròn",
+      "category": "rounding",
+      "tariff": "flat_500",
+      "input": {"started_at": "2026-10-09T23:30:00+07:00", "ended_at": "2026-10-10T00:30:00+07:00", "meter_start_wh": 1000, "meter_stop_wh": 1002, "meter_readings": []},
+      "manual_calculation": "2 Wh chia đều hai ngày: mỗi đoạn 0.001 kWh × 500 = 0.5 → 1 đồng. Tổng 2 đồng; làm tròn tổng cả phiên sẽ sai thành 1 đồng.",
+      "expected": {"total_vnd": 2, "segments": [
+        {"from": "2026-10-09T23:30:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Cả ngày", "energy_kwh": "0.001000", "price_vnd_per_kwh": 500, "amount_vnd": 1},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T00:30:00+07:00", "band": "Cả ngày", "energy_kwh": "0.001000", "price_vnd_per_kwh": 500, "amount_vnd": 1}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-15",
+      "description": "Thành tiền dưới 0.5 đồng làm tròn xuống",
+      "category": "rounding",
+      "tariff": "flat_499",
+      "input": {"started_at": "2026-10-09T08:00:00+07:00", "ended_at": "2026-10-09T09:00:00+07:00", "meter_start_wh": 1000, "meter_stop_wh": 1001, "meter_readings": []},
+      "manual_calculation": "1 Wh = 0.001 kWh × 499 = 0.499 đồng → 0 đồng.",
+      "expected": {"total_vnd": 0, "segments": [
+        {"from": "2026-10-09T08:00:00+07:00", "to": "2026-10-09T09:00:00+07:00", "band": "Cả ngày", "energy_kwh": "0.001000", "price_vnd_per_kwh": 499, "amount_vnd": 0}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-16",
+      "description": "Số đo giữa phiên dùng kWh, đầu và cuối dùng Wh",
+      "category": "meter_units",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T21:30:00+07:00", "ended_at": "2026-10-09T23:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": [
+        {"measured_at": "2026-10-09T22:00:00+07:00", "value": "13", "unit": "kWh"}
+      ]},
+      "manual_calculation": "13 kWh = 13000 Wh tại 22:00. 3 kWh × 5000 + 5 kWh × 3000 = 30000 đồng.",
+      "expected": {"total_vnd": 30000, "segments": [
+        {"from": "2026-10-09T21:30:00+07:00", "to": "2026-10-09T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "3.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 15000},
+        {"from": "2026-10-09T22:00:00+07:00", "to": "2026-10-09T23:30:00+07:00", "band": "Thấp điểm", "energy_kwh": "5.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 15000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-17",
+      "description": "Không tiêu thụ điện dù cắt ranh giới",
+      "category": "zero_energy",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T21:30:00+07:00", "ended_at": "2026-10-09T23:30:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 10000, "meter_readings": []},
+      "manual_calculation": "(10000 - 10000) / 1000 = 0 kWh. Cả hai đoạn bằng 0 đồng, tổng 0 đồng.",
+      "expected": {"total_vnd": 0, "segments": [
+        {"from": "2026-10-09T21:30:00+07:00", "to": "2026-10-09T22:00:00+07:00", "band": "Cao điểm", "energy_kwh": "0.000000", "price_vnd_per_kwh": 5000, "amount_vnd": 0},
+        {"from": "2026-10-09T22:00:00+07:00", "to": "2026-10-09T23:30:00+07:00", "band": "Thấp điểm", "energy_kwh": "0.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 0}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-18",
+      "description": "Nội suy từ hai số đo gần ranh giới, không từ toàn phiên",
+      "category": "sparse_readings",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T05:00:00+07:00", "ended_at": "2026-10-09T07:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 16000, "meter_readings": [
+        {"measured_at": "2026-10-09T05:30:00+07:00", "value": "11000", "unit": "Wh"},
+        {"measured_at": "2026-10-09T06:30:00+07:00", "value": "13000", "unit": "Wh"}
+      ]},
+      "manual_calculation": "06:00 nằm giữa 05:30 (11000 Wh) và 06:30 (13000 Wh): 11000 + 2000 × 30/60 = 12000 Wh. Trước mốc: 2 kWh × 3000 = 6000; sau mốc: 4 kWh × 4000 = 16000; tổng 22000 đồng.",
+      "expected": {"total_vnd": 22000, "segments": [
+        {"from": "2026-10-09T05:00:00+07:00", "to": "2026-10-09T06:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "2.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 6000},
+        {"from": "2026-10-09T06:00:00+07:00", "to": "2026-10-09T07:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "4.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 16000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-19",
+      "description": "Nội suy ra nửa Wh, giữ độ chính xác tới lúc làm tròn tiền",
+      "category": "rounding",
+      "tariff": "flat_3333",
+      "input": {"started_at": "2026-10-09T23:30:00+07:00", "ended_at": "2026-10-10T00:30:00+07:00", "meter_start_wh": 1000, "meter_stop_wh": 1001, "meter_readings": []},
+      "manual_calculation": "1 Wh chia đều hai ngày: mỗi đoạn 0.5 Wh = 0.0005 kWh × 3333 = 1.6665 → 2 đồng. Tổng 4 đồng; làm tròn toàn phiên sẽ sai thành 3 đồng.",
+      "expected": {"total_vnd": 4, "segments": [
+        {"from": "2026-10-09T23:30:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Cả ngày", "energy_kwh": "0.000500", "price_vnd_per_kwh": 3333, "amount_vnd": 2},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T00:30:00+07:00", "band": "Cả ngày", "energy_kwh": "0.000500", "price_vnd_per_kwh": 3333, "amount_vnd": 2}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-20",
+      "description": "Qua nửa đêm, ngày hôm sau có phiên bản biểu giá mới",
+      "category": "tariff_version",
+      "blocked_by": "SCRUM-64/SCRUM-206: pricing hiện chỉ nhận một bộ bands; billing chọn giá tại lúc bắt đầu cho cả phiên. Chờ hàm nhận nhiều phiên bản giá theo thời điểm áp dụng.",
+      "tariff": "daily",
+      "tariff_versions": [
+        {"effective_from": "2026-10-09T00:00:00+07:00", "tariff": "daily"},
+        {"effective_from": "2026-10-10T00:00:00+07:00", "tariff": "next_day"}
+      ],
+      "input": {"started_at": "2026-10-09T23:00:00+07:00", "ended_at": "2026-10-10T01:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 18000, "meter_readings": []},
+      "manual_calculation": "Trước nửa đêm 4 kWh × 3000 = 12000; sau nửa đêm 4 kWh × 6000 = 24000. Tổng 36000 đồng.",
+      "expected": {"total_vnd": 36000, "segments": [
+        {"from": "2026-10-09T23:00:00+07:00", "to": "2026-10-10T00:00:00+07:00", "band": "Thấp điểm", "energy_kwh": "4.000000", "price_vnd_per_kwh": 3000, "amount_vnd": 12000},
+        {"from": "2026-10-10T00:00:00+07:00", "to": "2026-10-10T01:00:00+07:00", "band": "Ngày mới", "energy_kwh": "4.000000", "price_vnd_per_kwh": 6000, "amount_vnd": 24000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-21",
+      "description": "Finishing vượt ân hạn, có phí chiếm trụ",
+      "category": "idle_fee",
+      "blocked_by": "SCRUM-61/SCRUM-204: chưa có đầu vào/hàm tính phí chiếm trụ, thời gian ân hạn và mốc rút súng.",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T09:00:00+07:00", "ended_at": "2026-10-09T10:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "idle_input": {"status": "Finishing", "started_at": "2026-10-09T10:00:00+07:00", "unplugged_at": "2026-10-09T10:30:00+07:00", "grace_minutes": 10, "price_vnd_per_minute": 100},
+      "manual_calculation": "Điện: 2 kWh × 4000 = 8000. Chiếm trụ 30 phút, trừ 10 phút ân hạn: 20 × 100 = 2000. Tổng 10000 đồng.",
+      "expected": {"total_vnd": 10000, "idle_fee_vnd": 2000, "billable_idle_minutes": 20, "segments": [
+        {"from": "2026-10-09T09:00:00+07:00", "to": "2026-10-09T10:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "2.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 8000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-22",
+      "description": "SuspendedEV sau khi sạc xong vượt ân hạn",
+      "category": "idle_fee",
+      "blocked_by": "SCRUM-61/SCRUM-204: chưa có đầu vào/hàm tính phí chiếm trụ, thời gian ân hạn và mốc rút súng.",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T09:00:00+07:00", "ended_at": "2026-10-09T10:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "idle_input": {"status": "SuspendedEV", "started_at": "2026-10-09T10:00:00+07:00", "unplugged_at": "2026-10-09T10:30:00+07:00", "grace_minutes": 10, "price_vnd_per_minute": 100},
+      "manual_calculation": "Giả thiết đã sạc xong tại 10:00. Điện 8000; chiếm trụ sau ân hạn 20 phút × 100 = 2000. Tổng 10000 đồng.",
+      "expected": {"total_vnd": 10000, "idle_fee_vnd": 2000, "billable_idle_minutes": 20, "segments": [
+        {"from": "2026-10-09T09:00:00+07:00", "to": "2026-10-09T10:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "2.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 8000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-23",
+      "description": "Rút súng đúng lúc hết ân hạn",
+      "category": "idle_fee",
+      "blocked_by": "SCRUM-61/SCRUM-204: chưa có đầu vào/hàm tính phí chiếm trụ, thời gian ân hạn và mốc rút súng.",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T09:00:00+07:00", "ended_at": "2026-10-09T10:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "idle_input": {"status": "Finishing", "started_at": "2026-10-09T10:00:00+07:00", "unplugged_at": "2026-10-09T10:10:00+07:00", "grace_minutes": 10, "price_vnd_per_minute": 100},
+      "manual_calculation": "Chiếm trụ đúng 10 phút ân hạn → 0 phút tính phí, 0 đồng. Tổng chỉ tiền điện 2 × 4000 = 8000 đồng.",
+      "expected": {"total_vnd": 8000, "idle_fee_vnd": 0, "billable_idle_minutes": 0, "segments": [
+        {"from": "2026-10-09T09:00:00+07:00", "to": "2026-10-09T10:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "2.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 8000}
+      ]}
+    },
+    {
+      "case_id": "SCRUM65-24",
+      "description": "Rút súng trước khi hết ân hạn",
+      "category": "idle_fee",
+      "blocked_by": "SCRUM-61/SCRUM-204: chưa có đầu vào/hàm tính phí chiếm trụ, thời gian ân hạn và mốc rút súng.",
+      "tariff": "daily",
+      "input": {"started_at": "2026-10-09T09:00:00+07:00", "ended_at": "2026-10-09T10:00:00+07:00", "meter_start_wh": 10000, "meter_stop_wh": 12000, "meter_readings": []},
+      "idle_input": {"status": "Finishing", "started_at": "2026-10-09T10:00:00+07:00", "unplugged_at": "2026-10-09T10:05:00+07:00", "grace_minutes": 10, "price_vnd_per_minute": 100},
+      "manual_calculation": "Chiếm trụ 5 phút, còn trong 10 phút ân hạn → 0 phút tính phí, 0 đồng. Tổng chỉ tiền điện 8000 đồng.",
+      "expected": {"total_vnd": 8000, "idle_fee_vnd": 0, "billable_idle_minutes": 0, "segments": [
+        {"from": "2026-10-09T09:00:00+07:00", "to": "2026-10-09T10:00:00+07:00", "band": "Tiêu chuẩn", "energy_kwh": "2.000000", "price_vnd_per_kwh": 4000, "amount_vnd": 8000}
+      ]}
+    }
+  ]
+}
