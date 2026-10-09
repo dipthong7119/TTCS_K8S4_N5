@@ -71,6 +71,8 @@ def calculate_session_price(
     end_utc = _as_utc(ended_at)
     if end_utc < start_utc:
         raise ValueError("Thời điểm kết thúc trước thời điểm bắt đầu")
+    if end_utc == start_utc and meter_stop_wh != meter_start_wh:
+        raise ValueError("Số đo công-tơ thay đổi trong phiên có thời lượng bằng 0")
     points = [(start_utc, Decimal(meter_start_wh))]
     for reading in meter_readings:
         if reading.get("measurand", "Energy.Active.Import.Register") != "Energy.Active.Import.Register":
@@ -108,7 +110,7 @@ def calculate_session_price(
     grouped_segments: dict[tuple[datetime, datetime, str, int], _EnergySegment] = {}
     for (interval_start, wh_start), (interval_end, wh_end) in pairwise(monotonic_points):
         duration_seconds = Decimal(str((interval_end - interval_start).total_seconds()))
-        if duration_seconds <= 0 or wh_end < wh_start:
+        if duration_seconds <= 0 or wh_end <= wh_start:
             continue
         cuts = [interval_start, *_tariff_boundaries(interval_start, interval_end, station_zone, boundary_minutes), interval_end]
         for segment_start, segment_end in pairwise(cuts):
