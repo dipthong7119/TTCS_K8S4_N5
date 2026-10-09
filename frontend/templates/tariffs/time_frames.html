@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Cấu hình khung giờ biểu giá{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Cấu hình khung giờ biểu giá</h1>
+    <p class="text-muted">Thiết lập các khung giờ trong ngày (đảm bảo phủ kín 24h và không chồng lấn).</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div id="validation-alert" class="alert alert-danger" style="display: none;"></div>
+        
+        <form id="timeframe-form" onsubmit="event.preventDefault(); saveTimeFrames();">
+            <div id="timeframes-container">
+                <!-- Các khung giờ sẽ được render ở đây -->
+            </div>
+            
+            <button type="button" class="btn btn-outline-primary mb-4" onclick="addTimeFrame()">+ Thêm khung giờ</button>
+            
+            <div class="border-top pt-3">
+                <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
+                <a href="/tariffs" class="btn btn-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    let timeFrames = [
+        { startTime: '00:00', endTime: '23:59', priceMultiplier: 1.0 }
+    ];
+
+    function renderTimeFrames() {
+        const container = document.getElementById('timeframes-container');
+        container.innerHTML = '';
+        
+        timeFrames.forEach((tf, index) => {
+            const row = document.createElement('div');
+            row.className = 'row mb-3 align-items-end time-frame-row';
+            row.innerHTML = `
+                <div class="col-md-3">
+                    <label class="form-label">Giờ bắt đầu</label>
+                    <input type="time" class="form-control" value="${tf.startTime}" onchange="updateTF(${index}, 'startTime', this.value)" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Giờ kết thúc</label>
+                    <input type="time" class="form-control" value="${tf.endTime}" onchange="updateTF(${index}, 'endTime', this.value)" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Hệ số giá (x)</label>
+                    <input type="number" class="form-control" step="0.1" value="${tf.priceMultiplier}" onchange="updateTF(${index}, 'priceMultiplier', parseFloat(this.value))" required>
+                </div>
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-danger" onclick="removeTimeFrame(${index})">Xóa</button>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+        validateTimeFrames();
+    }
+
+    function addTimeFrame() {
+        timeFrames.push({ startTime: '00:00', endTime: '00:00', priceMultiplier: 1.0 });
+        renderTimeFrames();
+    }
+
+    function removeTimeFrame(index) {
+        if (timeFrames.length > 1) {
+            timeFrames.splice(index, 1);
+            renderTimeFrames();
+        } else {
+            alert('Phải có ít nhất 1 khung giờ!');
+        }
+    }
+
+    function updateTF(index, field, value) {
+        timeFrames[index][field] = value;
+        validateTimeFrames();
+    }
+
+    function validateTimeFrames() {
+        const alertBox = document.getElementById('validation-alert');
+        alertBox.style.display = 'none';
+        
+        // Sắp xếp theo giờ bắt đầu để dễ check
+        let sorted = [...timeFrames].sort((a, b) => a.startTime.localeCompare(b.startTime));
+        
+        let errors = [];
+        
+        if (sorted.length > 0) {
+            if (sorted[0].startTime !== '00:00') {
+                errors.push("Khung giờ đầu tiên phải bắt đầu từ 00:00");
+            }
+            
+            for (let i = 0; i < sorted.length - 1; i++) {
+                if (sorted[i].endTime > sorted[i+1].startTime) {
+                    errors.push(`Bị chồng lấn thời gian giữa ${sorted[i].endTime} và ${sorted[i+1].startTime}`);
+                } else if (sorted[i].endTime < sorted[i+1].startTime) {
+                    errors.push(`Có khoảng trống thời gian từ ${sorted[i].endTime} đến ${sorted[i+1].startTime}`);
+                }
+            }
+            
+            if (sorted[sorted.length - 1].endTime !== '23:59') {
+                errors.push("Khung giờ cuối cùng phải kết thúc lúc 23:59");
+            }
+        }
+        
+        if (errors.length > 0) {
+            alertBox.innerHTML = errors.join('<br>');
+            alertBox.style.display = 'block';
+            return false;
+        }
+        return true;
+    }
+
+    function saveTimeFrames() {
+        if (!validateTimeFrames()) {
+            alert("Vui lòng sửa các lỗi cảnh báo trước khi lưu!");
+            return;
+        }
+        console.log("Mock Submit Time Frames:", timeFrames);
+        alert("Đã lưu cấu hình khung giờ hợp lệ! (Mock) \n" + JSON.stringify(timeFrames));
+        // TODO: Chờ API thực tế từ Backend
+    }
+
+    document.addEventListener("DOMContentLoaded", renderTimeFrames);
+</script>
+{% endblock %}
+{% endblock %}
