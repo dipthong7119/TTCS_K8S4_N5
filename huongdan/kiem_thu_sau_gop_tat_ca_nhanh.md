@@ -20,6 +20,22 @@ git branch --show-current
 Nhánh phải đúng tên ở đầu tài liệu. Script chạy migration, web tại
 <http://localhost:8000/login>, 20 trụ SIM và 5 trụ demo. Giữ terminal này mở.
 Nếu server đã chạy sẵn thì mở URL, không chạy thêm một server trên cùng cổng.
+Nếu đang dùng Docker Compose thay vì `run.ps1`, giữ cách chạy hiện tại. Để bật
+simulator cùng trụ Vincom khi chúng chưa online, chạy trong PowerShell tại repo
+(thao tác này có thể khởi động lại simulator, nên làm trước các phiên kiểm thử):
+
+```powershell
+$qaPreviousDemo = $env:CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS
+try {
+    $env:CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS = 'true'
+    docker compose --profile ocpp-simulator up -d --no-deps --build simulator
+} finally {
+    $env:CSMS_SIMULATOR_INCLUDE_DEMO_STATIONS = $qaPreviousDemo
+}
+```
+
+Compose local gắn thư mục `frontend` trực tiếp; sau khi cập nhật menu, tải lại
+trang bằng Ctrl+F5. Không cần chạy thêm `run.ps1` khi Docker đang chiếm cổng 8000.
 Database local đã được nâng cấp và có bản sao lưu trước nâng cấp ở
 `outputs/sprint3-ci/integration-20261009/csms-before-sync.db`. Với lần nâng cấp
 khác sau này, khi server đã dừng, có thể sao lưu DB:
@@ -102,17 +118,27 @@ Form đang nối API thật chỉ cấu hình một giá điện cho toàn ngày
 trong `frontend/templates/tariffs/` từ VY-TU còn là mock và chưa có route `/tariffs`;
 không dùng chúng làm bằng chứng lưu biểu giá nhiều khung thành công.
 
-## 6. Bắt đầu sạc thật qua OCPP — T-51/T-52/SCRUM-194
+## 6. Bắt đầu phiên qua OCPP với trụ giả lập — T-51/T-52/SCRUM-194
 
-1. Đăng nhập driver, mở `/monitoring`, tìm `CP_VINCOM_01`.
-2. Chọn đầu nối Available và mã RFID của driver demo, thường là
+Ở đây kiểm thử tin nhắn OCPP và phiên trong database bằng simulator, không có
+thiết bị sạc hoặc điện năng vật lý. `/stations` là danh sách trạm; chữ **Chỉ xem**
+trong bảng nói về quyền quản lý trạm, không phải nút bắt đầu phiên.
+
+1. Đăng nhập driver. Bấm **Bắt đầu sạc** ở menu trái, hoặc **Chọn trụ để sạc**
+   trên trang **Trạm sạc**. Cả hai mở <http://localhost:8000/monitoring>.
+2. Tìm `CP_VINCOM_01`, bấm vào **tên Trạm sạc Vincom Center** ở đầu thẻ trạm để mở bảng bên phải.
+   Tìm phần trụ `CP_VINCOM_01` trong bảng này. Nếu dùng Docker chưa bật trụ demo,
+   có thể dùng `SIM-01` online để thử mục 6–8; muốn thử giá Vincom ở mục 9 thì cần
+   bật trụ demo như mục 0. Trụ phải online và đầu nối phải Available.
+3. Trong phần trụ đó, chọn đầu nối Available và nhập mã RFID của driver demo, thường là
    `DEMO-DRIVER-0005` trên DB seed chuẩn. Nếu DB khác, dùng mã đã cấp trong `id_tags`.
-3. Bấm **Bắt đầu sạc** một lần. Nút khóa trong lúc chờ, tối đa 60 giây.
-4. Simulator nhận lệnh và gửi StartTransaction. Chỉ khi backend có phiên thực,
+4. Bấm **Bắt đầu sạc** một lần. Nút khóa trong lúc chờ, tối đa 60 giây.
+5. Simulator nhận lệnh và gửi StartTransaction. Chỉ khi backend có phiên thực,
    giao diện mới báo bắt đầu thành công và đưa driver về `/sessions/mine`.
-5. Mở chi tiết, đóng rồi mở lại trong lúc chờ: không phát sinh lệnh trùng.
-6. Đầu nối bận/lỗi/bảo trì/offline không chọn để bắt đầu.
-7. Ca Rejected/timeout/disconnect có test tự động; fleet mặc định thường trả
+6. Ghi lại mã phiên `#...` và mã trụ để dừng đúng phiên ở mục 8.
+7. Mở chi tiết, đóng rồi mở lại trong lúc chờ: không phát sinh lệnh trùng.
+8. Đầu nối bận/lỗi/bảo trì/offline không chọn để bắt đầu.
+9. Ca Rejected/timeout/disconnect có test tự động; fleet mặc định thường trả
    Accepted nên không đủ để tự tạo mọi ca lỗi này bằng thao tác bấm trên web.
 
 Mã thẻ sai có thể khiến lệnh remote được nhận nhưng StartTransaction bị từ chối;
@@ -130,13 +156,27 @@ có thể giữ 0; đây chưa phải bằng chứng chức năng cập nhật s
 
 ## 8. Dừng từ xa và tính kWh — T-49/T-50/T-39
 
-1. Đổi sang admin/operator, vào `/sessions`, tìm phiên vừa tạo trên Vincom.
-2. Mở chi tiết rồi bấm **Dừng từ xa**; simulator gửi StopTransaction.
-3. Phiên có giờ kết thúc, trạng thái completed, lý do Remote; đầu nối về Available.
-4. Simulator hiện dùng meterStart=1000 Wh và meterStop=2500 Wh,
+**Tài khoản tài xế không có nút Dừng từ xa.** Theo S-23/T-50, nút này chỉ hiện
+cho admin/operator trên trang **Phiên sạc**, khi phiên còn đang sạc. Nó nằm ở
+cột **Thao tác** của bảng (hoặc thẻ phiên đang sạc phía trên), không nằm trong
+hộp **Chi tiết phiên sạc**.
+
+1. Đăng xuất driver rồi đăng nhập `operator@csms.local` / `Operator@2024!`, hoặc
+   dùng cửa sổ riêng tư để giữ phiên đăng nhập driver ở cửa sổ cũ. Hai tab thường
+   cùng trình duyệt dùng chung cookie nên không giữ hai vai trò độc lập.
+2. Bấm menu **Phiên sạc**, mở <http://localhost:8000/sessions>. Tìm đúng mã phiên
+   và mã trụ đã ghi ở mục 6, trạng thái **Đang sạc**.
+3. Bấm **Dừng từ xa** ngay trên dòng đó, rồi **Xác nhận dừng sạc** trong hộp xác nhận.
+   Simulator nhận RemoteStopTransaction và gửi StopTransaction.
+4. Phiên có giờ kết thúc, trạng thái **Hoàn thành** (`completed`), lý do `Remote`;
+   đầu nối về Available. Bấm vào mã phiên `#...` để xem điện năng và lý do kết thúc.
+5. Simulator hiện dùng meterStart=1000 Wh và meterStop=2500 Wh,
    nên phiên thử này phải có **1,5 kWh**.
-5. Thử dừng lại phiên đã đóng: không tạo thêm hóa đơn hoặc trừ ví lần nữa.
-6. Làm mới lịch sử driver: phiên đã kết thúc xuất hiện đúng người.
+   Công thức: `(2500 − 1000) / 1000 = 1,5 kWh`; đây là số đo giả lập, không tăng
+   theo thời gian chờ. Trong lúc sạc, kWh có thể vẫn bằng 0 như giới hạn ở mục 7.
+6. Phiên đã đóng không còn nút dừng. API gửi lại lệnh dừng phải bị chặn, không tạo
+   thêm hóa đơn hoặc trừ ví lần nữa.
+7. Làm mới lịch sử driver: phiên đã kết thúc xuất hiện đúng người.
 
 Ca StopTransaction đến muộn, số đo lùi, gửi trùng và khớp phiên sau nối lại nằm
 trong các test OCPP/phiên; kiểm tra riêng bằng lệnh ở mục 14.
@@ -145,6 +185,8 @@ trong các test OCPP/phiên; kiểm tra riêng bằng lệnh ở mục 14.
 
 1. Mở hóa đơn phiên Vincom ở mục 8. Nếu đã tạo biểu giá 4000, phí 0 ở mục 5 trước
    lúc bắt đầu, tổng điện phải là **1,5 × 4000 = 6000 đồng**.
+   Nếu chưa đổi giá, dùng đơn giá trong chi tiết hóa đơn để tính: ví dụ biểu giá
+   thấp điểm hiện có 3000 đồng/kWh cho ra **4500 đồng**, không phải 6000 đồng.
 2. Hóa đơn có khoảng thời gian, kWh, đơn giá, thành tiền và quy tắc làm tròn.
 3. Ví driver có đúng một dòng trừ 6000 cho phiên đó; tải lại không trừ thêm.
 4. Đổi giá mới rồi mở lại hóa đơn cũ: hóa đơn cũ giữ số tiền và snapshot cũ.

@@ -106,6 +106,27 @@ tự động không thay thế review, kiểm thử thủ công và CI trên PR.
   nghiệm thu qua mạng.
 - Hướng dẫn thủ công được chuẩn bị; người dùng chưa xác nhận kết quả từng ca web.
 
+## Kiểm tra lại giao diện bắt đầu/dừng phiên — 09/10/2026
+
+- Phát hiện tài xế được truy cập `/monitoring` nhưng menu không có liên kết.
+  Đã thêm menu **Bắt đầu sạc** và nút **Chọn trụ để sạc** trên `/stations`.
+- Sửa hướng dẫn mục 6–8: bấm tên trạm để mở bảng chọn trụ; nút dừng nằm trên
+  dòng phiên/thẻ đang sạc của admin/operator, không nằm trong hộp chi tiết.
+  Nêu rõ đây là OCPP với simulator, không phải thiết bị điện vật lý.
+- Kiểm thử trên web Docker local đang chạy tại `localhost:8000` bằng trình duyệt:
+  driver bắt đầu phiên **#8**, `CP_VINCOM_01`, đầu nối 1 lúc **23:33:49**;
+  tự chuyển tới lịch sử có phiên đang sạc. Driver không có nút dừng.
+  Operator vào **Phiên sạc**, bấm dừng đúng dòng #8 và xác nhận; trang tự cập nhật
+  **Hoàn thành** lúc **23:34:43**, lý do **Remote**, **1,500 kWh**.
+- Hóa đơn phiên #8 ghi **1,5 × 3000 = 4500 đồng** theo khung thấp điểm đang có;
+  không thay đổi biểu giá. Phiên thử này được giữ trong database local để tra cứu.
+- Kiểm tra render giao diện: `python -m pytest tests/test_frontend_assets.py -q`
+  đạt **21 passed**. Không chạy lại toàn bộ CI vì thay đổi chỉ ở template,
+  hướng dẫn và kiểm tra render; logic OCPP/tính tiền không đổi trong lần sửa này.
+- Ảnh bằng chứng tại `outputs/sprint3-ci/integration-20261009/`:
+  `driver-start-controls.jpg`, `driver-session-8-active.jpg`,
+  `operator-remote-stop.jpg`, `session-8-completed.jpg`.
+
 ## Bàn giao và PR
 
 Làm lần lượt theo [hướng dẫn kiểm thử](../huongdan/kiem_thu_sau_gop_tat_ca_nhanh.md).
