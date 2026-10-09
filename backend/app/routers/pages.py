@@ -92,9 +92,9 @@ async def logout_post(request: Request):
     return RedirectResponse(url="/login", status_code=302)
 
 
-@router.get("/monitoring", dependencies=[Depends(require_role("admin", "operator", "station_owner"))])
+@router.get("/monitoring", dependencies=[Depends(require_role("admin", "operator", "station_owner", "driver"))])
 async def monitoring_page(request: Request, current_user: CurrentUser):
-    roles = _require_any_role(current_user, "admin", "operator", "station_owner")
+    roles = _require_any_role(current_user, "admin", "operator", "station_owner", "driver")
     return templates.TemplateResponse(
         request,
         "monitoring/grid.html",

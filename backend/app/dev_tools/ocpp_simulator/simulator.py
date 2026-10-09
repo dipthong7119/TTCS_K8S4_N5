@@ -175,12 +175,21 @@ class SimpleSimulator:
                     if future and not future.done():
                         future.set_exception(RuntimeError(f"OCPP {data[2]}: {data[3]}"))
                 elif data[0] == 2:
-                    _, message_id, action, _payload = data
+                    _, message_id, action, payload = data
                     if action == "Reset":
                         await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
                         self._reboot_requested = True
                         self._disconnect_event.set()
                         return
+                    elif action == "RemoteStartTransaction":
+                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
+                        connector_id = int(payload.get("connectorId", 1))
+                        id_tag = str(payload.get("idTag", "DEMO-DRIVER-0005"))
+                        asyncio.create_task(self._trigger_remote_start(connector_id, id_tag))
+                    elif action == "RemoteStopTransaction":
+                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
+                        transaction_id = int(payload.get("transactionId", 1))
+                        asyncio.create_task(self._trigger_remote_stop(transaction_id))
         except websockets.ConnectionClosed:
             self.connected = False
             self._disconnect_event.set()
@@ -191,6 +200,54 @@ class SimpleSimulator:
                 if not future.done():
                     future.set_exception(exc)
             raise
+
+    async def _trigger_remote_start(self, connector_id: int, id_tag: str) -> None:
+        """Kích hoạt phiên sạc sau khi chấp nhận RemoteStartTransaction."""
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            await self._call("StatusNotification", {
+                "connectorId": connector_id,
+                "errorCode": "NoError",
+                "status": "Preparing",
+                "timestamp": now_iso,
+            })
+            res = await self._call("StartTransaction", {
+                "connectorId": connector_id,
+                "idTag": id_tag,
+                "meterStart": 1000,
+                "timestamp": now_iso,
+            })
+            if isinstance(res, dict) and res.get("idTagInfo", {}).get("status") == "Accepted":
+                charging_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                await self._call("StatusNotification", {
+                    "connectorId": connector_id,
+                    "errorCode": "NoError",
+                    "status": "Charging",
+                    "timestamp": charging_iso,
+                })
+        except Exception:  # noqa: S110
+            pass
+
+    async def _trigger_remote_stop(self, transaction_id: int) -> None:
+        """Dừng phiên sạc sau khi nhận RemoteStopTransaction."""
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            await self._call("StopTransaction", {
+                "transactionId": transaction_id,
+                "meterStop": 2500,
+                "timestamp": now_iso,
+                "reason": "Remote",
+            })
+            for cid in range(1, self.profile.connector_count + 1):
+                await self._call("StatusNotification", {
+                    "connectorId": cid,
+                    "errorCode": "NoError",
+                    "status": "Available",
+                    "timestamp": now_iso,
+                })
+        except Exception:  # noqa: S110
+            pass
+
 
     async def _run_loop(self):
         """Vòng lặp chính: gửi BootNotification, rồi Heartbeat định kỳ."""
