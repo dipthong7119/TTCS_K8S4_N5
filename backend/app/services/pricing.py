@@ -1,6 +1,6 @@
 """Time-band charging prices using integer VND and cumulative meter readings."""
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from itertools import pairwise
 from typing import TypedDict
@@ -14,6 +14,7 @@ DEMO_TARIFF_BANDS = (
 )
 DEMO_TARIFF_TIMEZONE = "Asia/Ho_Chi_Minh"
 CALCULATION_VERSION = "time-band-v1"
+ROUNDING_RULE = "Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu sau ân hạn."
 
 
 class _EnergySegment(TypedDict):
@@ -50,11 +51,16 @@ def calculate_session_price(
     meter_readings: list[dict],
     bands,
     timezone_name: str,
+    occupancy_started_at: datetime | None = None,
+    occupancy_fee_vnd_per_minute: int = 0,
+    grace_period_minutes: int = 0,
 ) -> dict:
     """Split meter energy by local price bands; round each invoice segment once."""
     validate_daily_bands(bands)
     if meter_stop_wh < meter_start_wh:
         raise ValueError("Số đo cuối nhỏ hơn số đo đầu")
+    if occupancy_fee_vnd_per_minute < 0 or grace_period_minutes < 0:
+        raise ValueError("Phí chiếm trụ và thời gian ân hạn không được âm")
 
     try:
         station_zone = ZoneInfo(timezone_name)
@@ -65,9 +71,8 @@ def calculate_session_price(
     end_utc = _as_utc(ended_at)
     if end_utc < start_utc:
         raise ValueError("Thời điểm kết thúc trước thời điểm bắt đầu")
-    if end_utc == start_utc:
-        return {"total_vnd": 0, "segments": []}
-
+    if end_utc == start_utc and meter_stop_wh != meter_start_wh:
+        raise ValueError("Số đo công-tơ thay đổi trong phiên có thời lượng bằng 0")
     points = [(start_utc, Decimal(meter_start_wh))]
     for reading in meter_readings:
         if reading.get("measurand", "Energy.Active.Import.Register") != "Energy.Active.Import.Register":
@@ -144,7 +149,30 @@ def calculate_session_price(
             }
         )
 
-    return {"total_vnd": sum(segment["amount_vnd"] for segment in segments), "segments": segments}
+    if occupancy_started_at is not None and occupancy_fee_vnd_per_minute > 0:
+        grace_ends = _as_utc(occupancy_started_at) + timedelta(minutes=grace_period_minutes)
+        charge_from = max(grace_ends, _as_utc(occupancy_started_at))
+        if end_utc > charge_from:
+            elapsed = end_utc - charge_from
+            elapsed_seconds = elapsed.days * 86400 + elapsed.seconds + bool(elapsed.microseconds)
+            billable_minutes = (elapsed_seconds + 59) // 60
+            segments.append(
+                {
+                    "kind": "occupancy_fee",
+                    "from": charge_from.astimezone(station_zone).isoformat(),
+                    "to": end_utc.astimezone(station_zone).isoformat(),
+                    "band": "Phí chiếm trụ",
+                    "duration_minutes": billable_minutes,
+                    "price_vnd_per_minute": occupancy_fee_vnd_per_minute,
+                    "amount_vnd": billable_minutes * occupancy_fee_vnd_per_minute,
+                }
+            )
+
+    return {
+        "total_vnd": sum(segment["amount_vnd"] for segment in segments),
+        "segments": segments,
+        "rounding_rule": ROUNDING_RULE,
+    }
 
 
 def _band_value(band, key):
