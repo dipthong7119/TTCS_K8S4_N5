@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Khai báo biểu giá{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Khai báo biểu giá</h1>
+    <p class="text-muted">Khai báo đơn giá điện (kWh) và phí chiếm trụ (theo phút) cho trạm sạc.</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form id="tariff-form" onsubmit="event.preventDefault(); submitTariff();">
+            <div class="form-group mb-3">
+                <label for="tariffName" class="form-label">Tên biểu giá</label>
+                <input type="text" class="form-control" id="tariffName" placeholder="VD: Biểu giá tiêu chuẩn" required>
+            </div>
+            <div class="form-group mb-3">
+                <label for="kwhPrice" class="form-label">Đơn giá điện (VNĐ/kWh)</label>
+                <input type="number" class="form-control" id="kwhPrice" placeholder="VD: 3200" required min="0">
+            </div>
+            <div class="form-group mb-4">
+                <label for="occupancyFee" class="form-label">Phí chiếm trụ (VNĐ/phút)</label>
+                <input type="number" class="form-control" id="occupancyFee" placeholder="VD: 500" required min="0">
+                <small class="form-text text-muted">Phí này áp dụng khi xe đã sạc đầy nhưng chưa rút súng sạc.</small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Lưu biểu giá</button>
+            <a href="/tariffs" class="btn btn-secondary">Hủy</a>
+        </form>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    async function submitTariff() {
+        const payload = {
+            name: document.getElementById('tariffName').value,
+            kwhPrice: parseFloat(document.getElementById('kwhPrice').value),
+            occupancyFee: parseFloat(document.getElementById('occupancyFee').value)
+        };
+        
+        console.log("Mock Submit Tariff Data:", payload);
+        alert("Đã gửi dữ liệu biểu giá (Mock): " + JSON.stringify(payload));
+        // TODO: Chờ API thực tế từ Backend để fetch() vào
+    }
+</script>
+{% endblock %}
+{% endblock %}
