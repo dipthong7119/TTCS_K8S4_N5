@@ -111,7 +111,7 @@ async def get_monitoring_tree(
         "admin", "station_owner", "operator"
     }.intersection(roles)
     if is_driver_only:
-        # Driver chỉ thấy trạm đang hoạt động (không sở hữu trạm nên không filter theo owner)
+        # Driver: show all active stations (no owner filter — drivers own no stations)
         stations = query.filter(Station.status == "active").all()
     else:
         stations = filter_by_owner(query, current_user.id, roles).all()
