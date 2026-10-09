@@ -9,6 +9,91 @@
   const isEdit     = !!document.querySelector('[name="station_id"]');
   const stationId  = document.querySelector('[name="station_id"]')?.value || null;
 
+  const tariffCard = document.getElementById('station-tariff-card');
+  if (tariffCard) {
+    const tariffForm = document.getElementById('station-tariff-form');
+    const history = document.getElementById('station-tariff-history');
+    const message = document.getElementById('station-tariff-message');
+    const submit = document.getElementById('tariff-submit');
+    const path = `/stations/${tariffCard.dataset.stationId}/tariffs`;
+    const money = amount => new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
+
+    async function loadTariffs() {
+      try {
+        const tariffs = await ApiClient.get(path);
+        history.replaceChildren();
+        if (!tariffs.length) {
+          history.textContent = 'Trạm chưa có biểu giá tùy chỉnh.';
+          return;
+        }
+        const heading = document.createElement('h3');
+        heading.className = 'card__title';
+        heading.textContent = 'Lịch sử biểu giá';
+        history.append(heading);
+        const list = document.createElement('ul');
+        list.style.paddingLeft = 'var(--space-5)';
+        tariffs.forEach(tariff => {
+          const item = document.createElement('li');
+          const rate = tariff.price_vnd_per_kwh == null
+            ? 'biểu giá nhiều khung giờ' : `${money(tariff.price_vnd_per_kwh)}/kWh`;
+          item.textContent = `${tariff.name}: ${rate} · ${money(tariff.occupancy_fee_vnd_per_minute)}/phút · ân hạn ${tariff.grace_period_minutes} phút · hiệu lực ${new Date(tariff.effective_from).toLocaleString('vi-VN')}${tariff.is_demo ? ' (demo)' : ''}`;
+          list.append(item);
+        });
+        history.append(list);
+      } catch (error) {
+        message.textContent = error.message || 'Không tải được biểu giá.';
+        message.className = 'form-error';
+      }
+    }
+
+    loadTariffs();
+    tariffForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      message.textContent = '';
+      const data = new FormData(tariffForm);
+      const name = String(data.get('name') || '').trim();
+      const values = ['price_vnd_per_kwh', 'occupancy_fee_vnd_per_minute', 'grace_period_minutes'];
+      if (!name || values.some(field => String(data.get(field) ?? '') === '')) {
+        message.textContent = 'Vui lòng nhập tên biểu giá và đầy đủ các mức giá, thời gian.';
+        message.className = 'form-error';
+        return;
+      }
+      const [price, fee, grace] = values.map(field => Number(data.get(field)));
+      if (![price, fee, grace].every(Number.isSafeInteger) || [price, fee, grace].some(value => value < 0)) {
+        message.textContent = 'Đơn giá, phí chiếm trụ và thời gian ân hạn phải là số nguyên không âm.';
+        message.className = 'form-error';
+        return;
+      }
+      const payload = {
+        name,
+        price_vnd_per_kwh: price,
+        occupancy_fee_vnd_per_minute: fee,
+        grace_period_minutes: grace,
+        timezone_name: 'Asia/Ho_Chi_Minh',
+      };
+      const effective = data.get('effective_from');
+      if (effective) payload.effective_from = new Date(effective).toISOString();
+      submit.disabled = true;
+      submit.textContent = 'Đang lưu...';
+      try {
+        await ApiClient.post(path, payload);
+        message.textContent = 'Đã lưu biểu giá mới cho trạm.';
+        message.className = 'form-hint';
+        tariffForm.reset();
+        document.getElementById('tariff-name').value = 'Biểu giá trạm';
+        document.getElementById('tariff-occupancy').value = '0';
+        document.getElementById('tariff-grace').value = '0';
+        await loadTariffs();
+      } catch (error) {
+        message.textContent = error.message || 'Không lưu được biểu giá.';
+        message.className = 'form-error';
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Lưu biểu giá';
+      }
+    });
+  }
+
   // ── Helpers hiện lỗi tại ô nhập (không dùng alert chung chung) ──
   function showFieldError(fieldName, message) {
     const el = document.querySelector(`[data-error="${fieldName}"]`);

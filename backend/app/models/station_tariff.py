@@ -28,6 +28,8 @@ class StationTariff(Base):
     name = Column(String(120), nullable=False)
     timezone_name = Column(String(80), nullable=False, default="Asia/Ho_Chi_Minh")
     effective_from = Column(DateTime, nullable=False)
+    occupancy_fee_vnd_per_minute = Column(Integer, nullable=False, default=0, server_default="0")
+    grace_period_minutes = Column(Integer, nullable=False, default=0, server_default="0")
     is_demo = Column(Boolean, nullable=False, default=False, server_default=false())
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
@@ -40,6 +42,10 @@ class StationTariff(Base):
 
     __table_args__ = (
         UniqueConstraint("station_id", "effective_from", name="uq_station_tariff_effective"),
+        CheckConstraint(
+            "occupancy_fee_vnd_per_minute >= 0", name="ck_station_tariff_occupancy_fee_nonnegative"
+        ),
+        CheckConstraint("grace_period_minutes >= 0", name="ck_station_tariff_grace_nonnegative"),
         Index("ix_station_tariffs_station_effective", "station_id", "effective_from"),
     )
 

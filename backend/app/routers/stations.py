@@ -4,22 +4,125 @@ Tham chieu: SPRINT_1.md T-08, T-09, SSD-1, 02_CODING_STANDARDS.md
 """
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.station import Station
+from app.models.station_tariff import StationTariff, TariffBand
 from app.schemas.station import (
     StationCreate,
     StationDirectoryResponse,
     StationResponse,
     StationUpdate,
 )
+from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
 from app.services.ownership import filter_by_owner, get_station_for_user
 
 router = APIRouter(prefix="/stations", tags=["stations"], dependencies=[Depends(deny_unannotated_route)])
+
+
+def _tariff_payload(tariff: StationTariff) -> dict:
+    flat_rate = next(
+        (band.price_vnd_per_kwh for band in tariff.bands
+         if band.start_minute == 0 and band.end_minute == 1440),
+        None,
+    )
+    return {
+        "id": tariff.id,
+        "station_id": tariff.station_id,
+        "name": tariff.name,
+        "timezone_name": tariff.timezone_name,
+        "effective_from": tariff.effective_from,
+        "occupancy_fee_vnd_per_minute": tariff.occupancy_fee_vnd_per_minute,
+        "grace_period_minutes": tariff.grace_period_minutes,
+        "is_demo": tariff.is_demo,
+        "price_vnd_per_kwh": flat_rate,
+    }
+
+
+@router.get(
+    "/{station_id}/tariffs",
+    response_model=list[StationTariffResponse],
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
+async def list_station_tariffs(
+    station_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    roles = [role.name for role in current_user.roles]
+    get_station_for_user(db, station_id, current_user.id, roles, "view_tariffs")
+    tariffs = (
+        db.query(StationTariff)
+        .filter(StationTariff.station_id == station_id)
+        .options(joinedload(StationTariff.bands))
+        .order_by(StationTariff.effective_from.desc(), StationTariff.id.desc())
+        .all()
+    )
+    return [_tariff_payload(tariff) for tariff in tariffs]
+
+
+@router.post(
+    "/{station_id}/tariffs",
+    response_model=StationTariffResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
+async def create_station_tariff(
+    station_id: int,
+    body: StationTariffCreate,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    roles = [role.name for role in current_user.roles]
+    station = get_station_for_user(db, station_id, current_user.id, roles, "create_tariff")
+    if "admin" not in roles and station.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Không có quyền sửa biểu giá trạm này")
+    tariff_name = body.name.strip()
+    if not tariff_name:
+        raise HTTPException(status_code=422, detail="Tên biểu giá không được để trống")
+    try:
+        ZoneInfo(body.timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=422, detail="Múi giờ trạm không hợp lệ") from None
+
+    effective_from = body.effective_from or datetime.now(UTC)
+    if effective_from.tzinfo is not None:
+        effective_from = effective_from.astimezone(UTC).replace(tzinfo=None)
+    tariff = StationTariff(
+        station_id=station.id,
+        name=tariff_name,
+        timezone_name=body.timezone_name,
+        effective_from=effective_from,
+        occupancy_fee_vnd_per_minute=body.occupancy_fee_vnd_per_minute,
+        grace_period_minutes=body.grace_period_minutes,
+        is_demo=False,
+    )
+    db.add(tariff)
+    db.add(
+        TariffBand(
+            tariff=tariff,
+            label="Cả ngày",
+            start_minute=0,
+            end_minute=1440,
+            price_vnd_per_kwh=body.price_vnd_per_kwh,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Đã có biểu giá của trạm vào thời điểm hiệu lực này",
+        ) from None
+    db.refresh(tariff)
+    return _tariff_payload(tariff)
 
 
 def _paginate(query, page: int, size: int):
