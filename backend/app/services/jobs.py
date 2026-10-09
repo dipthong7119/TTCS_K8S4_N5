@@ -13,28 +13,31 @@ from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.station import Station
+from app.services.charge_point_configuration import get_effective_heartbeat_interval
 from app.services.ocpp_status import station_status_payload
 
 logger = logging.getLogger(__name__)
 
 
-def _stale_cutoff(db):
-    timeout = settings.OCPP_HEARTBEAT_INTERVAL_SECONDS * settings.OCPP_HEARTBEAT_MULTIPLIER
-    if db.get_bind().dialect.name == "sqlite":
-        return func.datetime(func.current_timestamp(), f"-{timeout} seconds")
-    return func.current_timestamp() - text(f"INTERVAL '{timeout} seconds'")
-
-
 def expire_stale_charge_points_once(db) -> int:
     """Persist stale state and clear connector status; repeated runs are no-ops."""
-    stale_points = (
-        db.query(ChargePoint)
-        .filter(
-            ChargePoint.status == "online",
-            (ChargePoint.last_seen_at.is_(None)) | (ChargePoint.last_seen_at < _stale_cutoff(db)),
+    now = datetime.now(UTC).replace(tzinfo=None)
+    online_points = db.query(ChargePoint).filter(ChargePoint.status == "online").all()
+    stale_points = []
+    for point in online_points:
+        timeout = (
+            get_effective_heartbeat_interval(db, point)
+            * settings.OCPP_HEARTBEAT_MULTIPLIER
         )
-        .all()
-    )
+        cutoff = now - timedelta(seconds=timeout)
+        last_seen_at = point.last_seen_at
+        if last_seen_at is None:
+            stale_points.append(point)
+            continue
+        if last_seen_at.tzinfo is not None:
+            last_seen_at = last_seen_at.astimezone(UTC).replace(tzinfo=None)
+        if last_seen_at < cutoff:
+            stale_points.append(point)
     if not stale_points:
         return 0
 

@@ -3,6 +3,7 @@
 
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.charge_point import ChargePoint, Connector  # noqa: F401
+from app.models.charge_point_configuration import ChargePointConfiguration  # noqa: F401
 from app.models.charging_invoice import ChargingInvoice  # noqa: F401
 from app.models.charging_session import ChargingSession  # noqa: F401
 from app.models.connector_error import ConnectorError  # noqa: F401

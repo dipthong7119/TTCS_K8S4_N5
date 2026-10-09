@@ -249,7 +249,7 @@ class TestTask2AcceptReject:
     @pytest.mark.parametrize("interval", [60, 300, 900], ids=["60s", "300s", "900s"])
     def test_interval_follows_config(self, db_session, interval: int) -> None:
         """Đổi HEARTBEAT_INTERVAL → interval trong conf đổi theo (T-17 AC)."""
-        with patch("app.ocpp.handlers.boot_notification.settings.OCPP_HEARTBEAT_INTERVAL_SECONDS", interval):
+        with patch("app.config.settings.OCPP_HEARTBEAT_INTERVAL_SECONDS", interval):
             result = _boot(db_session, msg_id=f"msg-iv-{interval}")
         assert result["interval"] == interval
 
