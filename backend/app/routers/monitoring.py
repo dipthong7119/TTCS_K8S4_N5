@@ -100,14 +100,21 @@ async def monitoring_sse(
 
 @router.get("/tree")
 async def get_monitoring_tree(
-    current_user: User = Depends(require_role("admin", "station_owner", "operator")),
+    current_user: User = Depends(require_role("admin", "station_owner", "operator", "driver")),
     db: Session = Depends(get_db),
 ):
     query = db.query(Station).options(
         joinedload(Station.charge_points).joinedload(ChargePoint.connectors)
     )
     roles = [role.name for role in current_user.roles]
-    stations = filter_by_owner(query, current_user.id, roles).all()
+    is_driver_only = "driver" in roles and not {
+        "admin", "station_owner", "operator"
+    }.intersection(roles)
+    if is_driver_only:
+        # Driver chỉ thấy trạm đang hoạt động (không sở hữu trạm nên không filter theo owner)
+        stations = query.filter(Station.status == "active").all()
+    else:
+        stations = filter_by_owner(query, current_user.id, roles).all()
     return [
         station_status_payload(station)
         for station in sorted(stations, key=lambda item: item.id)
