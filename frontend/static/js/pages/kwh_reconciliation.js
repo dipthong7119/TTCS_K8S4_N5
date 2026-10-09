@@ -24,6 +24,12 @@ let activeFilter = 'all';
 let searchQuery = '';
 let reportIsSample = false;
 
+function getApiClient() {
+  if (typeof ApiClient !== 'undefined') return ApiClient;
+  if (typeof globalThis !== 'undefined' && globalThis.ApiClient) return globalThis.ApiClient;
+  return null;
+}
+
 /* ── DOM refs ───────────────────────────────────────────── */
 const tbody        = document.getElementById('recon-tbody');
 const searchInput  = document.getElementById('recon-search');
@@ -55,11 +61,12 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ── Data loading ───────────────────────────────────────── */
 async function loadData() {
   try {
+    const apiClient = getApiClient();
     let data;
     let isSample = false;
     try {
-      if (window.ApiClient && typeof window.ApiClient.getKwhReconciliation === 'function') {
-        data = await ApiClient.getKwhReconciliation();
+      if (apiClient && typeof apiClient.getKwhReconciliation === 'function') {
+        data = await apiClient.getKwhReconciliation();
         isSample = data?.metadata?.is_sample === true;
       } else {
         const res = await fetch(API_ENDPOINT, { credentials: 'include' });
@@ -68,8 +75,10 @@ async function loadData() {
           isSample = data.metadata?.is_sample === true;
         } else if (res.status === 404) {
           throw { status: 404 };
+        } else if (res.status === 401 || res.status === 403) {
+          throw { status: res.status, message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.' };
         } else {
-          throw new Error('Không thể tải dữ liệu đối chiếu.');
+          throw { status: res.status, message: 'Không thể tải dữ liệu đối chiếu.' };
         }
       }
     } catch (apiErr) {
@@ -85,18 +94,22 @@ async function loadData() {
 
     let stations = [];
     try {
-      if (window.ApiClient && typeof window.ApiClient.getMonitoringTree === 'function') {
-        stations = await ApiClient.getMonitoringTree();
+      if (apiClient && typeof apiClient.getMonitoringTree === 'function') {
+        stations = await apiClient.getMonitoringTree();
       } else {
         const inventory = await fetch(INVENTORY_ENDPOINT, { credentials: 'include', cache: 'no-store' });
-        if (inventory.ok) stations = await inventory.json();
+        if (!inventory.ok) throw new Error('inventory unavailable');
+        stations = await inventory.json();
       }
     } catch (invErr) {
+      if (isSample) throw new Error('Không thể đồng bộ danh sách trạm và mã trụ.');
       console.warn('Không thể đồng bộ danh sách trạm qua tree API, sử dụng dữ liệu trực tiếp từ báo cáo:', invErr);
     }
 
     reportIsSample = isSample;
-    const synced = stations && stations.length ? syncReportInventory(data, stations, isSample) : data;
+    const synced = isSample
+      ? syncReportInventory(data, stations || [], true)
+      : (stations && stations.length ? syncReportInventory(data, stations, false) : data);
     if (isSample) showMockNotice();
     initPage(synced);
   } catch (err) {
