@@ -20,6 +20,7 @@ from app.core.deps import deny_unannotated_route, public_route
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.charge_points import router as charge_points_router
+from app.routers.charge_point_configuration import router as charge_point_configuration_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
@@ -130,6 +131,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 app.include_router(auth_router, prefix="/api")
 app.include_router(stations_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
+app.include_router(charge_point_configuration_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api/monitoring")
 app.include_router(ocpp_router)
 app.include_router(remote_router, prefix="/api")
