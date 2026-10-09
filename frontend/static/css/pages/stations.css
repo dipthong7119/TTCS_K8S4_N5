@@ -12,6 +12,8 @@
   align-items: start;
 }
 
+.station-tariff-card { grid-column: 1 / -1; }
+
 @media (max-width: 900px) {
   .station-form-layout { grid-template-columns: 1fr; }
 }

@@ -246,6 +246,48 @@
     </div>
   </div>
   {% endif %}
+  {% if is_edit %}
+  <section class="card station-tariff-card" id="station-tariff-card" data-station-id="{{ station.id }}" aria-labelledby="station-tariff-title">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="station-tariff-title">Biểu giá trạm</h2>
+        <p class="card__subtitle">Giá điện theo kWh, phí chiếm trụ theo phút và thời gian ân hạn</p>
+      </div>
+    </div>
+    <div class="card__body">
+      <form id="station-tariff-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="tariff-name">Tên biểu giá</label>
+          <input class="form-input" id="tariff-name" name="name" value="Biểu giá trạm" maxlength="120" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tariff-price">Đơn giá điện (đồng/kWh) <span class="required">*</span></label>
+            <input class="form-input" id="tariff-price" name="price_vnd_per_kwh" type="number" min="0" max="1000000000" step="1" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tariff-occupancy">Phí chiếm trụ (đồng/phút)</label>
+            <input class="form-input" id="tariff-occupancy" name="occupancy_fee_vnd_per_minute" type="number" min="0" max="1000000000" step="1" value="0" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tariff-grace">Thời gian ân hạn (phút)</label>
+            <input class="form-input" id="tariff-grace" name="grace_period_minutes" type="number" min="0" max="100000" step="1" value="0" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tariff-effective">Có hiệu lực từ</label>
+            <input class="form-input" id="tariff-effective" name="effective_from" type="datetime-local" />
+          </div>
+        </div>
+        <p class="form-hint">Để trống thời điểm hiệu lực để áp dụng ngay. Biểu giá mới áp dụng cho phiên bắt đầu từ thời điểm này.</p>
+        <button class="btn btn--primary" type="submit" id="tariff-submit">Lưu biểu giá</button>
+      </form>
+      <div id="station-tariff-message" role="status" aria-live="polite" style="margin-top:var(--space-4);"></div>
+      <div id="station-tariff-history" style="margin-top:var(--space-4);"></div>
+    </div>
+  </section>
+  {% endif %}
 </div>
 
 <!-- Modal thêm trụ sạc -->

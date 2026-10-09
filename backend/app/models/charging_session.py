@@ -37,6 +37,7 @@ class ChargingSession(Base):
     meter_stop_wh = Column(Integer, nullable=True)
     energy_kwh = Column(Numeric(12, 3), nullable=True)
     started_at = Column(DateTime, nullable=False)
+    occupancy_started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
     remote_stop_requested_at = Column(DateTime, nullable=True)
     status = Column(String(20), nullable=False, default="active", server_default="active")
