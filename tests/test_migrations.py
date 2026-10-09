@@ -79,6 +79,27 @@ def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
         downgraded_engine.dispose()
 
 
+def test_configuration_and_payment_migrations_share_one_head(migrated_database) -> None:
+    config, engine = migrated_database
+    assert len(ScriptDirectory.from_config(config).get_heads()) == 1
+    assert {"charge_point_configuration", "payment_transactions"}.issubset(
+        set(inspect(engine).get_table_names())
+    )
+
+
+def test_tariff_migrations_extend_existing_schema(migrated_database) -> None:
+    _, engine = migrated_database
+    schema = inspect(engine)
+    tariff_columns = {column["name"] for column in schema.get_columns("station_tariffs")}
+    assert {"occupancy_fee_vnd_per_minute", "grace_period_minutes"} <= tariff_columns
+    assert "occupancy_started_at" in {
+        column["name"] for column in schema.get_columns("charging_sessions")
+    }
+    assert "rounding_rule" in {
+        column["name"] for column in schema.get_columns("charging_invoices")
+    }
+
+
 def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
     _, engine = migrated_database
     with engine.connect() as connection:
