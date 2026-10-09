@@ -1,11 +1,13 @@
 """Wallet reads and append-only manual credits."""
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
+from app.models.payment_transaction import PaymentTransaction
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 
@@ -168,3 +170,192 @@ def list_driver_wallet_summaries(
             }
         )
     return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+def create_sandbox_topup_request(
+    db: Session,
+    user_id: int,
+    amount_vnd: int,
+) -> PaymentTransaction:
+    """Tạo đơn nạp tiền qua cổng sandbox (SCRUM-196, SCRUM-197)."""
+    now = datetime.now(UTC)
+    timestamp_str = now.strftime("%Y%m%d%H%M%S")
+    suffix = uuid4().hex[:6].upper()
+    order_code = f"TOPUP-{timestamp_str}-{suffix}"
+
+    tx = PaymentTransaction(
+        order_code=order_code,
+        user_id=user_id,
+        amount_vnd=amount_vnd,
+        status="pending",
+        provider="sandbox",
+        payment_url=f"/wallet/sandbox-checkout?order_code={order_code}",
+    )
+    db.add(tx)
+    db.flush()
+    return tx
+
+
+def process_sandbox_webhook(
+    db: Session,
+    order_code: str,
+    status: str,
+    failure_reason: str | None = None,
+) -> tuple[PaymentTransaction | None, WalletLedgerEntry | None]:
+    """Xử lý webhook callback từ cổng sandbox với cơ chế idempotent (SCRUM-198)."""
+    tx = db.query(PaymentTransaction).filter_by(order_code=order_code).first()
+    if not tx:
+        return None, None
+
+    # Idempotent: nếu giao dịch đã hoàn tất trước đó thì không cộng tiền lại
+    if tx.status == "success":
+        existing_entry = (
+            db.query(WalletLedgerEntry)
+            .filter_by(idempotency_key=f"sandbox-topup:{tx.order_code}")
+            .first()
+        )
+        return tx, existing_entry
+
+    if tx.status in ("failed", "cancelled"):
+        return tx, None
+
+    if status == "success":
+        tx.status = "success"
+        tx.failure_reason = None
+        entry = WalletLedgerEntry(
+            user_id=tx.user_id,
+            entry_type="sandbox_topup",
+            amount_vnd=tx.amount_vnd,
+            idempotency_key=f"sandbox-topup:{tx.order_code}",
+            receipt_code=tx.order_code,
+            reference_type="payment_transaction",
+            reference_id=tx.id,
+            description=f"Nạp ví qua cổng sandbox ({tx.order_code})",
+        )
+        db.add(entry)
+        db.flush()
+        return tx, entry
+
+    # Trường hợp thất bại hoặc hủy
+    tx.status = status if status in ("failed", "cancelled") else "failed"
+    tx.failure_reason = (
+        failure_reason or "Giao dịch thanh toán bị hủy hoặc không thành công"
+    )
+    db.flush()
+    return tx, None
+
+
+def list_user_payment_transactions(
+    db: Session,
+    user_id: int,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """Lấy danh sách lịch sử các yêu cầu nạp tiền của tài xế (SCRUM-197)."""
+    query = (
+        db.query(PaymentTransaction)
+        .filter(PaymentTransaction.user_id == user_id)
+        .order_by(PaymentTransaction.created_at.desc(), PaymentTransaction.id.desc())
+    )
+    total = query.count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [
+            {
+                "id": tx.id,
+                "order_code": tx.order_code,
+                "amount_vnd": tx.amount_vnd,
+                "status": tx.status,
+                "provider": tx.provider,
+                "payment_url": tx.payment_url,
+                "failure_reason": tx.failure_reason,
+                "created_at": (
+                    tx.created_at.isoformat() + "Z" if tx.created_at else None
+                ),
+                "updated_at": (
+                    tx.updated_at.isoformat() + "Z" if tx.updated_at else None
+                ),
+            }
+            for tx in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def has_minimum_balance(
+    db: Session,
+    user_id: int,
+    min_amount_vnd: int = 50_000,
+) -> bool:
+    """Kiểm tra số dư đạt ngưỡng tối thiểu trước khi sạc (SCRUM-199, 72)."""
+    totals = wallet_totals(db, user_id)
+    return totals["balance_vnd"] >= min_amount_vnd
+
+
+def deduct_session_charge(
+    db: Session,
+    user_id: int,
+    session_id: int,
+    amount_vnd: int,
+    *,
+    actor_id: int | None = None,
+) -> WalletLedgerEntry:
+    """Trừ tiền tự động từ ví khi phiên sạc kết thúc (SCRUM-199, SCRUM-71)."""
+    idempotency_key = f"session-charge:{session_id}"
+    existing = (
+        db.query(WalletLedgerEntry).filter_by(idempotency_key=idempotency_key).first()
+    )
+    if existing:
+        return existing
+
+    amount_to_deduct = -abs(amount_vnd)
+    entry = WalletLedgerEntry(
+        user_id=user_id,
+        entry_type="session_charge",
+        amount_vnd=amount_to_deduct,
+        idempotency_key=idempotency_key,
+        receipt_code=f"CHARGE-{session_id}",
+        reference_type="charging_session",
+        reference_id=session_id,
+        description=f"Thanh toán phiên sạc #{session_id}",
+        actor_id=actor_id,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def refund_wallet_charge(
+    db: Session,
+    user_id: int,
+    original_receipt_code: str,
+    amount_vnd: int,
+    reason: str,
+    *,
+    actor_id: int | None = None,
+) -> WalletLedgerEntry:
+    """Hoàn tiền vào ví tài xế khi giao dịch có sự cố (SCRUM-201)."""
+    idempotency_key = f"refund:{original_receipt_code}"
+    existing = (
+        db.query(WalletLedgerEntry).filter_by(idempotency_key=idempotency_key).first()
+    )
+    if existing:
+        return existing
+
+    entry = WalletLedgerEntry(
+        user_id=user_id,
+        entry_type="refund",
+        amount_vnd=abs(amount_vnd),
+        idempotency_key=idempotency_key,
+        receipt_code=f"REFUND-{original_receipt_code}",
+        reference_type="wallet_ledger",
+        description=f"Hoàn tiền giao dịch {original_receipt_code}: {reason}",
+        actor_id=actor_id,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
