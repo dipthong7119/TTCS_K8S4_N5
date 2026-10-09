@@ -37,7 +37,8 @@ def _tariff_payload(tariff: StationTariff) -> dict:
         "station_id": tariff.station_id,
         "name": tariff.name,
         "timezone_name": tariff.timezone_name,
-        "effective_from": tariff.effective_from,
+        # Database timestamps are stored as naive UTC; expose UTC explicitly.
+        "effective_from": tariff.effective_from.replace(tzinfo=UTC),
         "occupancy_fee_vnd_per_minute": tariff.occupancy_fee_vnd_per_minute,
         "grace_period_minutes": tariff.grace_period_minutes,
         "is_demo": tariff.is_demo,
@@ -91,9 +92,15 @@ async def create_station_tariff(
     except (ZoneInfoNotFoundError, ValueError):
         raise HTTPException(status_code=422, detail="Múi giờ trạm không hợp lệ") from None
 
-    effective_from = body.effective_from or datetime.now(UTC)
-    if effective_from.tzinfo is not None:
-        effective_from = effective_from.astimezone(UTC).replace(tzinfo=None)
+    if body.effective_from is None:
+        effective_from = datetime.now(UTC).replace(tzinfo=None)
+    else:
+        try:
+            effective_from = _normalize_effective_from(body.effective_from, body.timezone_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        if effective_from < datetime.now(UTC).replace(tzinfo=None):
+            raise HTTPException(status_code=422, detail="Thời điểm hiệu lực không được nằm trong quá khứ")
     tariff = StationTariff(
         station_id=station.id,
         name=tariff_name,
@@ -123,6 +130,35 @@ async def create_station_tariff(
         ) from None
     db.refresh(tariff)
     return _tariff_payload(tariff)
+
+
+def _normalize_effective_from(value: datetime | None, timezone_name: str) -> datetime:
+    """Normalize API timestamps to naive UTC for database storage.
+
+    Naive values from datetime-local are interpreted as station wall time.
+    Aware values already identify an absolute instant.
+    """
+    if value is None:
+        return datetime.now(UTC).replace(tzinfo=None)
+
+    if value.tzinfo is None:
+        station_zone = ZoneInfo(timezone_name)
+        candidates = [value.replace(tzinfo=station_zone, fold=fold) for fold in (0, 1)]
+        valid_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.astimezone(UTC).astimezone(station_zone).replace(tzinfo=None) == value
+        ]
+        if not valid_candidates:
+            raise ValueError("Thời điểm hiệu lực không tồn tại trong múi giờ trạm")
+        if (
+            len(valid_candidates) == 2
+            and valid_candidates[0].utcoffset() != valid_candidates[1].utcoffset()
+        ):
+            raise ValueError("Thời điểm hiệu lực bị lặp trong múi giờ trạm; hãy gửi thời điểm kèm múi giờ")
+        value = valid_candidates[0]
+
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _paginate(query, page: int, size: int):

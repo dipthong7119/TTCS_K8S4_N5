@@ -36,7 +36,10 @@
           const item = document.createElement('li');
           const rate = tariff.price_vnd_per_kwh == null
             ? 'biểu giá nhiều khung giờ' : `${money(tariff.price_vnd_per_kwh)}/kWh`;
-          item.textContent = `${tariff.name}: ${rate} · ${money(tariff.occupancy_fee_vnd_per_minute)}/phút · ân hạn ${tariff.grace_period_minutes} phút · hiệu lực ${new Date(tariff.effective_from).toLocaleString('vi-VN')}${tariff.is_demo ? ' (demo)' : ''}`;
+          const effectiveAt = new Intl.DateTimeFormat('vi-VN', {
+            dateStyle: 'short', timeStyle: 'short', timeZone: tariff.timezone_name,
+          }).format(new Date(tariff.effective_from));
+          item.textContent = `${tariff.name}: ${rate} · ${money(tariff.occupancy_fee_vnd_per_minute)}/phút · ân hạn ${tariff.grace_period_minutes} phút · hiệu lực ${effectiveAt} (${tariff.timezone_name})${tariff.is_demo ? ' (demo)' : ''}`;
           list.append(item);
         });
         history.append(list);
@@ -72,7 +75,8 @@
         timezone_name: 'Asia/Ho_Chi_Minh',
       };
       const effective = data.get('effective_from');
-      if (effective) payload.effective_from = new Date(effective).toISOString();
+      // Send station-local wall time; the API resolves it with timezone_name.
+      if (effective) payload.effective_from = effective;
       submit.disabled = true;
       submit.textContent = 'Đang lưu...';
       try {
