@@ -226,6 +226,7 @@ class SimpleSimulator:
                     "timestamp": charging_iso,
                 })
         except Exception:  # noqa: S110
+            pass
 
     async def _trigger_remote_stop(self, transaction_id: int) -> None:
         """Dừng phiên sạc sau khi nhận RemoteStopTransaction."""
@@ -245,6 +246,8 @@ class SimpleSimulator:
                     "timestamp": now_iso,
                 })
         except Exception:  # noqa: S110
+            pass
+
 
     async def _run_loop(self):
         """Vòng lặp chính: gửi BootNotification, rồi Heartbeat định kỳ."""
