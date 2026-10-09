@@ -7,7 +7,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import CurrentUser, deny_unannotated_route, require_role
+from app.core.deps import (
+    CurrentUser,
+    deny_unannotated_route,
+    public_route,
+    require_role,
+)
 from app.database import get_db
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
@@ -200,6 +205,7 @@ async def create_sandbox_topup(
 
 
 @router.post("/topups/sandbox/webhook")
+@public_route
 async def sandbox_topup_webhook(
     payload: SandboxWebhookPayload,
     db: Session = Depends(get_db),
