@@ -79,6 +79,12 @@ const ApiClient = (() => {
     // --- Audit trail ---
     listAuditLogs:    (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
 
+    // --- Reconciliation (SCRUM-183 / SCRUM-184) ---
+    getKwhReconciliation: (params = {}, opts = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/reconciliation/kwh' + (q ? '?' + q : ''), null, opts);
+    },
+
     // --- Wallet ---
     getWallet:        ()            => _request('GET', '/wallet'),
     listLedger:       (params = {}) => _request('GET', '/wallet/ledger?' + new URLSearchParams(params)),
