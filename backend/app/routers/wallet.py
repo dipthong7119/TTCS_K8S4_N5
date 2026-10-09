@@ -14,7 +14,6 @@ from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
 from app.services.wallet import (
     create_sandbox_topup_request,
-    has_minimum_balance,
     list_driver_wallet_summaries,
     list_user_payment_transactions,
     list_wallet_entries,

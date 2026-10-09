@@ -1,7 +1,6 @@
 """Unit tests for SCRUM-69: Sandbox wallet top-up and ledger consistency."""
 
 from collections.abc import Generator
-from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
