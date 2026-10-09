@@ -419,6 +419,19 @@ Tất cả biến được định nghĩa trong `backend/app/config.py` — **kh
 | `OCPP_REMOTE_CALL_TIMEOUT_SECONDS` | `30` | Thời gian chờ câu trả lời lệnh Reset |
 | `SESSION_OFFLINE_GRACE_SECONDS` | `21600` | Thời gian trụ ngoại tuyến trước khi phiên thành bất thường (6 giờ) |
 | `REMOTE_STOP_REVIEW_SECONDS` | `120` | Thời gian chờ StopTransaction sau lệnh dừng từ xa |
+| `OCPP_JOB_POLL_SECONDS` | `60` | Chu kỳ job kiểm tra trụ và phiên treo |
+
+T-53 chỉ đánh dấu phiên: trụ offline quá ngưỡng thành `anomaly/offline`, lệnh
+dừng quá hạn thành `needs_review/remote_stop_timeout`. Nếu cả hai điều kiện
+cùng đúng, giữ lý do hết hạn lệnh dừng và chỉ phát một thông báo. Job chạy lại
+không đóng phiên hoặc đánh dấu lại phiên đã xử lý. `StopTransaction` tới muộn
+vẫn chốt phiên theo `transactionId`, số đo và thời gian do trụ gửi; số đo dồn
+được lọc theo cùng quy tắc chống trùng/lùi của `MeterValues`.
+
+Danh sách phiên bất thường lấy dữ liệu từ API thật. Bộ dữ liệu tính tay
+SCRUM-188 dùng chung cho test hàm kWh và handler ở
+`backend/tests/scrum188_sessions.json`. Xem lệnh kiểm tra và kết quả mong đợi
+trong [hướng dẫn T-43, T-45, T-53 và SCRUM-188](huongdan/kiem_thu_T43_T45_T53_SCRUM188.md).
 
 ---
 

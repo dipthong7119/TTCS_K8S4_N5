@@ -549,10 +549,121 @@ function authClient(fetchResponse) {
   const redirects = [];
   const window = { location: { origin: 'http://localhost:8000', pathname: '/monitoring',
     search: '?status=fault', replace: url => redirects.push(url) } };
-  const context = vm.createContext({ window, fetch: fetchResponse, URL });
+  const context = vm.createContext({ window, fetch: fetchResponse, URL, URLSearchParams });
   vm.runInContext(read('api_client.js'), context);
   return { api: window.ApiClient, redirects };
 }
+
+function auditPage(fetchResponse, filters = {}) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) { if (!ids.has(id)) ids.set(id, element()); return ids.get(id); },
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  const toasts = [];
+  const window = { location: { pathname: '/audit', search: '', replace() {} } };
+  const context = vm.createContext({ document, window, fetch: fetchResponse, URLSearchParams,
+    FormData: class { entries() { return Object.entries(filters); } },
+    showToast: message => toasts.push(message),
+  });
+  vm.runInContext(read('api_client.js'), context);
+  vm.runInContext(read('pages/audit.js'), context);
+  return { document, api: window.ApiClient, toasts,
+    load: () => document.handlers.DOMContentLoaded(),
+    html: () => document.getElementById('audit-tbody').innerHTML };
+}
+
+const auditResponse = data => ({ ok: true, status: 200,
+  headers: { get: () => 'application/json' }, json: async () => data });
+
+test('T-53 anomaly list uses server data and filters, without fabricated sessions', async () => {
+  const requests = [];
+  const data = { items: [{ id: 731, charge_point_code: 'OFFLINE-REAL', anomaly_reason: 'offline' }],
+    total: 1, offline_count: 1, negative_kwh_count: 0 };
+  const client = authClient(async (url, config) => {
+    requests.push({ url, config });
+    return auditResponse(data);
+  });
+  const result = await client.api.listAnomalies({ reason: 'offline', days: 'all', page: 2, page_size: 15 });
+  assert.equal(result, data);
+  assert.equal(requests[0].url, '/api/sessions/anomalies?reason=offline&days=all&page=2&page_size=15');
+  assert.equal(requests[0].config.method, 'GET');
+  assert.equal(requests[0].config.credentials, 'include');
+});
+
+test('T-53 anomaly list propagates API errors instead of returning sample data', async () => {
+  const client = authClient(async () => ({ ok: false, status: 500,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Anomalies unavailable' }) }));
+  await assert.rejects(client.api.listAnomalies(), error => error.status === 500 && error.message === 'Anomalies unavailable');
+});
+
+test('audit displays the real Reset event returned by the server', async () => {
+  const items = [];
+  const requests = [];
+  const page = auditPage(async (url, config) => {
+    requests.push({ url, config });
+    if (config.method === 'POST') {
+      const body = JSON.parse(config.body);
+      items.push({ id: 73, created_at: '2026-10-08T08:00:00Z',
+        actor_name: 'Operator real', actor_email: 'operator@example.test',
+        action: 'charge_point.reset.accepted', object_type: 'charge_point', object_id: '31',
+        charge_point_code: 'RESET-NEW-03', details: { reset_type: body.type, outcome: 'Accepted' } });
+      return auditResponse({ status: 'Accepted' });
+    }
+    return auditResponse({ items, total: items.length, page: 1, page_size: 50 });
+  });
+  await page.api.resetChargePoint('RESET-NEW-03', 'Hard');
+  page.load();
+  await flush();
+  assert.deepEqual(requests.map(request => request.url), [
+    '/api/charge_points/RESET-NEW-03/reset', '/api/audit?page=1&page_size=50',
+  ]);
+  assert.equal(requests[1].config.method, 'GET');
+  assert.equal(requests[1].config.credentials, 'include');
+  assert.match(page.html(), /RESET-NEW-03/);
+  assert.match(page.html(), /Reset trụ thành công/);
+  assert.match(page.html(), /Operator real/);
+  assert.match(page.html(), /operator@example.test/);
+  assert.match(page.html(), /Hard/);
+  assert.equal(page.document.getElementById('audit-count').textContent, '1 sự kiện');
+  assert.doesNotMatch(page.html(), /CP_VIN_01|CP_LOT_02/);
+});
+
+test('audit sends filters and pagination to the server and resets page on filtering', async () => {
+  const filters = { charge_point_code: 'CP A&B', actor: 'Vận hành', date_from: '2026-10-08', date_to: '' };
+  const requests = [];
+  const page = auditPage(async url => {
+    requests.push(new URL(url, 'http://localhost').searchParams);
+    return auditResponse({ items: [], total: 51 });
+  }, filters);
+  page.load(); await flush();
+  assert.equal(requests[0].get('charge_point_code'), 'CP A&B');
+  assert.equal(requests[0].get('actor'), 'Vận hành');
+  assert.equal(requests[0].get('date_from'), '2026-10-08');
+  assert.equal(requests[0].has('date_to'), false);
+  assert.equal(page.document.getElementById('audit-next').disabled, false);
+  page.document.getElementById('audit-next').handlers.click(); await flush();
+  assert.equal(requests[1].get('page'), '2');
+  assert.equal(page.document.getElementById('audit-page-label').textContent, 'Trang 2 / 2');
+  filters.charge_point_code = 'OTHER-POINT';
+  page.document.getElementById('audit-filters').handlers.submit({ preventDefault() {} }); await flush();
+  assert.equal(requests[2].get('page'), '1');
+  assert.equal(requests[2].get('charge_point_code'), 'OTHER-POINT');
+});
+
+test('audit shows actual empty and failed API responses without sample events', async () => {
+  const empty = auditPage(async () => auditResponse({ items: [], total: 0 }));
+  empty.load(); await flush();
+  assert.match(empty.html(), /Chưa có nhật ký phù hợp/);
+  assert.equal(empty.document.getElementById('audit-count').textContent, '0 sự kiện');
+  const failed = auditPage(async () => ({ ok: false, status: 500,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Audit unavailable' }) }));
+  failed.load(); await flush();
+  assert.match(failed.html(), /Audit unavailable/);
+  assert.deepEqual(failed.toasts, ['Audit unavailable']);
+  assert.equal(failed.document.getElementById('audit-count').textContent, 'Lỗi tải dữ liệu');
+});
 
 test('protected API 401 preserves the requested page; failed login stays on the form', async () => {
   const client = authClient(async () => ({ ok: false, status: 401,

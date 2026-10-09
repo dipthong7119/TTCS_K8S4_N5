@@ -97,6 +97,90 @@ def test_simulator_acknowledges_reset_and_requests_reconnect() -> None:
     assert simulator._disconnect_event.is_set()
 
 
+def test_simulator_acknowledges_remote_start_transaction() -> None:
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = iter(
+                [
+                    json.dumps(
+                        [
+                            2,
+                            "remotestart-1",
+                            "RemoteStartTransaction",
+                            {"connectorId": 1, "idTag": "DEMO-DRIVER-0005"},
+                        ]
+                    )
+                ]
+            )
+            self.sent = []
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self.messages)
+            except StopIteration:
+                raise StopAsyncIteration from None
+
+        async def send(self, message):
+            self.sent.append(json.loads(message))
+
+    async def scenario():
+        simulator = SimpleSimulator()
+        simulator.ws = FakeWebSocket()
+        try:
+            await asyncio.wait_for(simulator._receive_loop(), timeout=0.1)
+        except (asyncio.TimeoutError, StopAsyncIteration):
+            pass
+        return simulator
+
+    simulator = asyncio.run(scenario())
+    assert [3, "remotestart-1", {"status": "Accepted"}] in simulator.ws.sent
+
+
+def test_simulator_acknowledges_remote_stop_transaction() -> None:
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = iter(
+                [
+                    json.dumps(
+                        [
+                            2,
+                            "remotestop-1",
+                            "RemoteStopTransaction",
+                            {"transactionId": 100},
+                        ]
+                    )
+                ]
+            )
+            self.sent = []
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self.messages)
+            except StopIteration:
+                raise StopAsyncIteration from None
+
+        async def send(self, message):
+            self.sent.append(json.loads(message))
+
+    async def scenario():
+        simulator = SimpleSimulator()
+        simulator.ws = FakeWebSocket()
+        try:
+            await asyncio.wait_for(simulator._receive_loop(), timeout=0.1)
+        except (asyncio.TimeoutError, StopAsyncIteration):
+            pass
+        return simulator
+
+    simulator = asyncio.run(scenario())
+    assert [3, "remotestop-1", {"status": "Accepted"}] in simulator.ws.sent
+
+
 @pytest.mark.parametrize("count", [1, 3, 20])
 def test_fleet_uses_only_codes_seeded_by_the_server(count):
     from seed_data import SIMULATOR_CODES

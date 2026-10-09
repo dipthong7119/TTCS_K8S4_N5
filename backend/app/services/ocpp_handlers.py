@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
-from app.models.meter_value import MeterValue
 from app.models.ocpp_message import OcppMessage
 from app.models.orphan_message import OrphanMessage
 from app.models.station import Station
@@ -69,7 +68,7 @@ def handle_ocpp_message(
     has_connection_context = connection_ctx is not None
     if connection_ctx is None:
         connection_ctx = ReconciliationContext()
-    if action == "MeterValues":
+    if action in {"MeterValues", "StopTransaction"}:
         # Khóa SQLite phải có trước tra cứu trụ, phiên và số đo mới nhất.
         from app.ocpp.handlers.meter_values import begin_meter_values_transaction
 
@@ -331,18 +330,18 @@ def _normalize_meter_values(readings: list, fallback_timestamp: datetime | None)
 
 
 def _store_meter_values(db: Session, session: ChargingSession, samples: list[dict]) -> None:
-    db.add_all(
-        [
-            MeterValue(
-                session_id=session.id,
-                measured_at=datetime.fromisoformat(sample["measured_at"]),
-                measurand=sample["measurand"],
-                value=Decimal(sample["value"]),
-                unit=sample["unit"],
-            )
-            for sample in samples
-        ]
-    )
+    from app.ocpp.handlers.meter_values import MeterSample, store_meter_samples
+
+    normalized: list[MeterSample] = [
+        {
+            "measured_at": datetime.fromisoformat(sample["measured_at"]),
+            "measurand": sample["measurand"],
+            "value": Decimal(sample["value"]),
+            "unit": sample["unit"],
+        }
+        for sample in samples
+    ]
+    store_meter_samples(db, session.id, normalized, session.charge_point_code)
 
 
 def _save_orphan_message(

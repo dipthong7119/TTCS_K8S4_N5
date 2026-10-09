@@ -1,4 +1,4 @@
-"""Handler cho sự kiện StopTransaction (SCRUM-163)."""
+"""StopTransaction, kể cả tin tới muộn sau ngoại tuyến (T-38, T-45)."""
 
 import logging
 
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
+from app.models.meter_value import MeterValue
 from app.services.billing import finalize_session_billing
 from app.services.ocpp_handlers import (
     _normalize_meter_values,
@@ -37,6 +38,7 @@ def handle_stop_transaction(db: Session, point: ChargePoint, msg_id: str, payloa
     session = (
         db.query(ChargingSession)
         .filter_by(id=transaction_id, charge_point_id=point.id)
+        .with_for_update()
         .first()
     )
     if session is None:
@@ -80,7 +82,22 @@ def handle_stop_transaction(db: Session, point: ChargePoint, msg_id: str, payloa
         session.energy_kwh = calculated_kwh
         session.status = "completed"
         session.anomaly_reason = None
-        finalize_session_billing(db, session, _normalize_meter_values(transaction_data, ended_at))
+        if session.review_reason == "connector_available_after_reconnect":
+            session.review_reason = None
+        # Billing uses persisted readings, including samples received before the
+        # outage. Skipping a duplicate must not lose its time-band boundary.
+        db.flush()
+        readings = (
+            db.query(MeterValue)
+            .filter_by(session_id=session.id, measurand="Energy.Active.Import.Register")
+            .order_by(MeterValue.measured_at, MeterValue.id)
+            .all()
+        )
+        finalize_session_billing(db, session, [
+            {"measured_at": row.measured_at.isoformat(), "measurand": row.measurand,
+             "value": str(row.value), "unit": row.unit}
+            for row in readings
+        ])
     else:
         session.energy_kwh = None
         session.status = "needs_review"
