@@ -24,6 +24,12 @@ let activeFilter = 'all';
 let searchQuery = '';
 let reportIsSample = false;
 
+function getApiClient() {
+  if (typeof ApiClient !== 'undefined') return ApiClient;
+  if (typeof globalThis !== 'undefined' && globalThis.ApiClient) return globalThis.ApiClient;
+  return null;
+}
+
 /* ── DOM refs ───────────────────────────────────────────── */
 const tbody        = document.getElementById('recon-tbody');
 const searchInput  = document.getElementById('recon-search');
@@ -55,25 +61,55 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ── Data loading ───────────────────────────────────────── */
 async function loadData() {
   try {
+    const apiClient = getApiClient();
     let data;
     let isSample = false;
-    const res = await fetch(API_ENDPOINT, { credentials: 'include' });
-    if (res.ok) {
-      data = await res.json();
-      isSample = data.metadata?.is_sample === true;
-    } else if (res.status === 404) {
-      const sample = await fetch(MOCK_ENDPOINT, { cache: 'no-store' });
-      if (!sample.ok) throw new Error('Không thể tải dữ liệu đối chiếu mẫu.');
-      data = await sample.json();
-      isSample = true;
-    } else {
-      throw new Error('Không thể tải dữ liệu đối chiếu. Vui lòng đăng nhập lại hoặc thử lại sau.');
+    try {
+      if (apiClient && typeof apiClient.getKwhReconciliation === 'function') {
+        data = await apiClient.getKwhReconciliation();
+        isSample = data?.metadata?.is_sample === true;
+      } else {
+        const res = await fetch(API_ENDPOINT, { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json();
+          isSample = data.metadata?.is_sample === true;
+        } else if (res.status === 404) {
+          throw { status: 404 };
+        } else if (res.status === 401 || res.status === 403) {
+          throw { status: res.status, message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.' };
+        } else {
+          throw { status: res.status, message: 'Không thể tải dữ liệu đối chiếu.' };
+        }
+      }
+    } catch (apiErr) {
+      if (apiErr.status === 404 || apiErr.status === 0) {
+        const sample = await fetch(MOCK_ENDPOINT, { cache: 'no-store' });
+        if (!sample.ok) throw new Error('Không thể tải dữ liệu đối chiếu mẫu.');
+        data = await sample.json();
+        isSample = true;
+      } else {
+        throw new Error(apiErr.message || 'Không thể tải dữ liệu đối chiếu. Vui lòng thử lại sau.');
+      }
     }
 
-    const inventory = await fetch(INVENTORY_ENDPOINT, { credentials: 'include', cache: 'no-store' });
-    if (!inventory.ok) throw new Error('Không thể đồng bộ danh sách trạm và mã trụ. Vui lòng thử lại sau.');
+    let stations = [];
+    try {
+      if (apiClient && typeof apiClient.getMonitoringTree === 'function') {
+        stations = await apiClient.getMonitoringTree();
+      } else {
+        const inventory = await fetch(INVENTORY_ENDPOINT, { credentials: 'include', cache: 'no-store' });
+        if (!inventory.ok) throw new Error('inventory unavailable');
+        stations = await inventory.json();
+      }
+    } catch (invErr) {
+      if (isSample) throw new Error('Không thể đồng bộ danh sách trạm và mã trụ.');
+      console.warn('Không thể đồng bộ danh sách trạm qua tree API, sử dụng dữ liệu trực tiếp từ báo cáo:', invErr);
+    }
+
     reportIsSample = isSample;
-    const synced = syncReportInventory(data, await inventory.json(), isSample);
+    const synced = isSample
+      ? syncReportInventory(data, stations || [], true)
+      : (stations && stations.length ? syncReportInventory(data, stations, false) : data);
     if (isSample) showMockNotice();
     initPage(synced);
   } catch (err) {
