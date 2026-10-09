@@ -210,13 +210,15 @@ def test_owner_cannot_add_charge_point_to_another_owners_station(
     assert response.status_code == 403, response.text
 
 
-def test_driver_is_denied_operator_monitoring_route(client, user_factory) -> None:
+def test_driver_can_access_monitoring_tree_read_only(client, user_factory) -> None:
+    """SCRUM-194: driver may view active station status for charging session context."""
     driver = user_factory(email="driver-route@example.com", password=PASSWORD, role_name="driver")
     login(client, driver)
 
     response = client.get("/api/monitoring/tree")
 
-    assert response.status_code == 403, response.text
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json(), list)
 
 
 def test_station_pages_require_login_and_operator_is_read_only(client, user_factory) -> None:
