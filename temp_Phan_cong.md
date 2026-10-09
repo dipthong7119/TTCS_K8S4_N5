@@ -1,171 +1,291 @@
-# Phân công lại Sprint 3 (chỉ Backend / Frontend, không có Tester)
+# Phân công công việc – SCRUM Sprint 345 (bản cập nhật)
 
-> Tổng: **60 SP**, **23 task chính**, **9 thành viên**. Tải trung bình ≈ **6,7 SP/người**.
-> Mục tiêu: **không trùng việc**, **không chờ nhau**, tải mỗi người đều (5–8 SP).
+**Thời gian Sprint:** 9/10 – 31/10 | **Mục tiêu:** hoàn thành toàn bộ trong 1 tuần | **Số work item:** 26 | **Tổng story point:** 64
 
----
-
-## 1. Giả định cần bạn xác nhận
-
-| # | Giả định | Nếu khác thì sao |
-|---|----------|------------------|
-| 1 | **Tạ Như Vinh** và **Hoàng Văn Đức** (trước là Tester) chuyển sang **Backend**, tự viết test cho phần mình làm. | Đổi vai trò thì chỉ cần hoán đổi người ở bảng mục 3, logic chia không đổi. |
-| 2 | **Trịnh Thanh Tùng** (Scrum Master) giữ T-55, T-56 và 1 phần T-46. Tải nhẹ hơn (5 SP) vì còn điều phối. | Có thể chuyển bớt cho Vy Hoàng Tú. |
-| 3 | Jira chưa có SP cho subtask, nên SP subtask ở dưới là **ước lượng tạm** (tổng khớp SP task cha). | Nên poker lại nhanh 10 phút đầu sprint. |
-| 4 | Sprint ≈ **10 ngày làm việc**. Cột "Ngày" ở mục 6 chỉ là gợi ý. | Co giãn theo độ dài sprint thật. |
+> Đây là bản đề xuất phân công đã chia lại để hoàn thành trong 1 tuần: bớt việc cho những người đang nằm trên đường găng (Ngô, Tân, Vinh, Đức) và chuyển sang cho **Scrum Master (Trịnh Thanh Tùng)** những phần độc lập hoặc cùng mảng kiểm thử. Cả nhóm có thể điều chỉnh lại khi họp Sprint Planning.
 
 ---
 
-## 2. Nguyên tắc chia (vì sao ít chờ, ít trùng)
+## 1. Thành viên và vai trò
 
-1. **Chia theo lát dọc (vertical slice)**: mỗi người làm trọn một mảng, không nhiều người cùng sửa một handler.
-   - Vòng đời phiên → Quang Tùng
-   - Số đo (MeterValues) → Lâm Tùng
-   - Tính kWh + API phiên hiện tại + audit → Tân
-   - Mất kết nối / phiên bất thường → Vinh
-   - Điều khiển từ xa (bắt đầu/dừng) → Đức (BE) + Đại, Tuấn (FE)
-2. **Task nền tảng đặt đầu sprint**: T-36 (bảng phiên), T-40 (bảng số đo), T-57 (audit), T-55 (docker trụ ảo) làm xong sớm vì nhiều người cần.
-3. **Việc không phụ thuộc ai** được xếp ngay đầu sprint cho người đang chờ (ví dụ hàm tính kWh thuần của Tân, dữ liệu mẫu của Vinh, mock API cho FE).
-4. **FE làm bằng mock API** từ ngày 1 theo hợp đồng API chốt chung, tới khi BE xong thì đổi sang API thật.
-5. **Người rảnh sớm nhận việc cuối sprint** (kịch bản 20 trụ, bảng đối chiếu, bằng chứng kiểm thử) thay vì ngồi chờ.
+| Vai trò | Thành viên |
+|---|---|
+| Scrum Master | Trịnh Thanh Tùng |
+| Backend Developer | Ngô Quang Tùng, Nguyễn Lâm Tùng, Hoàng Văn Tân, Tạ Như Vinh, Hoàng Văn Đức |
+| Frontend Developer | Phạm Văn Tuấn, Vy Hoàng Tú, Đặng Ngọc Đại |
+| Kiểm thử / review | Các thành viên tự kiểm thử và review chéo |
 
----
+## 2. Các Epic trong Sprint
 
-## 3. Phân công mới theo người
-
-| Thành viên | Vai trò | Công việc | SP |
-|------------|---------|-----------|----|
-| **Trịnh Thanh Tùng** | Scrum Master | T-55, T-56, SCRUM-185 (đóng gói kịch bản vào CI) | **5** |
-| **Ngô Quang Tùng** | Backend | T-36, T-37, T-38, SCRUM-189 (tích hợp kWh vào luồng phiên) | **8** |
-| **Nguyễn Lâm Tùng** | Backend | T-40, T-41, T-42, T-44 | **8** |
-| **Hoàng Văn Tân** | Backend | SCRUM-187 (hàm tính kWh), T-47, T-57 | **7** |
-| **Tạ Như Vinh** | Backend | SCRUM-188 (dữ liệu 3 phiên mẫu), T-43, T-45, T-53 | **7** |
-| **Hoàng Văn Đức** | Backend | T-51, T-49, SCRUM-193 (tích hợp API bắt đầu sạc), SCRUM-183 (đối chiếu kWh) | **7** |
-| **Phạm Văn Tuấn** | Frontend | T-48, T-50, SCRUM-184 (xuất bảng đối chiếu), SCRUM-186 (bằng chứng kiểm thử) | **6** |
-| **Vy Hoàng Tú** | Frontend | T-54, T-58, SCRUM-182 (thiết kế kịch bản 20 trụ) | **5** |
-| **Đặng Ngọc Đại** | Frontend | SCRUM-190, 191, 192, 194 (thuộc T-52) | **7** |
-| **Tổng** | | | **60** |
-
-Theo nhóm: Backend 37 SP (5 người) · Frontend 18 SP (3 người) · Scrum Master 5 SP.
+| Epic | Các work item |
+|---|---|
+| Kết nối OCPP và phiên sạc | SCRUM-53 → 59, SCRUM-60 |
+| Giám sát vận hành | SCRUM-89 |
+| Ứng dụng tài xế | SCRUM-94, SCRUM-95 |
+| Biểu giá và tính tiền | SCRUM-61 → 68 |
+| Ví và thanh toán | SCRUM-69 → 75 |
 
 ---
 
-## 4. Chi tiết từng task (23 task chính)
+## 3. Bảng tổng hợp phân công
 
-"Review" là người duyệt code/PR, chọn khác người làm và khác lát việc để có thêm một góc nhìn.
-
-| Mã Jira | Mã Excel | Tiêu đề | SP | Người làm | Review | Thay đổi so với cũ |
-|---------|----------|---------|----|-----------|--------|--------------------|
-| SCRUM-115 | T-55 | Dịch vụ trụ ảo trong `docker-compose`, số lượng cấu hình được | 2 | Trịnh Thanh Tùng | Đức | Giữ nguyên |
-| SCRUM-116 | T-56 | Bước CI chạy kịch bản 20 trụ ảo, chặn merge khi thất bại | 2 | Trịnh Thanh Tùng | Đức | Giữ nguyên |
-| SCRUM-161 | T-36 | Bảng `charging_sessions` + migration | 2 | Ngô Quang Tùng | Lâm Tùng | Giữ nguyên |
-| SCRUM-162 | T-37 | Handler `StartTransaction` | 2 | Ngô Quang Tùng | Lâm Tùng | Giữ nguyên |
-| SCRUM-163 | T-38 | Handler `StopTransaction` | 2 | Ngô Quang Tùng | Lâm Tùng | Giữ nguyên |
-| SCRUM-164 | T-39 | Tính kWh bằng hiệu số đo, test 3 phiên mẫu | 8 | Tân + Vinh + Quang Tùng | Xem dòng con | Giữ nguyên người, **chia lại SP subtask** |
-| ↳ SCRUM-187 | | Hàm thuần tính kWh từ hai số đo Wh + unit test | 4 | Hoàng Văn Tân | Vinh | Giữ nguyên |
-| ↳ SCRUM-188 | | Dữ liệu 3 phiên mẫu tính tay | 2 | Tạ Như Vinh | Tân | Giữ nguyên |
-| ↳ SCRUM-189 | | Tích hợp hàm kWh vào luồng `StopTransaction` | 2 | Ngô Quang Tùng | Lâm Tùng | Giữ nguyên |
-| SCRUM-165 | T-40 | Bảng `meter_values` + migration + chỉ mục | 2 | Nguyễn Lâm Tùng | Quang Tùng | Giữ nguyên |
-| SCRUM-166 | T-41 | Handler `MeterValues` | 2 | Nguyễn Lâm Tùng | Quang Tùng | Giữ nguyên |
-| SCRUM-167 | T-42 | So mốc thời gian với số đo mới nhất | 1 | Nguyễn Lâm Tùng | Quang Tùng | Giữ nguyên |
-| SCRUM-168 | T-43 | Test số đo lùi / trùng, cảnh báo trong log | 1 | Tạ Như Vinh | Tân | Giữ nguyên người, đổi vai trò Tester → Backend |
-| SCRUM-169 | T-44 | Khớp phiên đang chạy theo `transactionId` khi trụ nối lại | 3 | Nguyễn Lâm Tùng | Quang Tùng | Giữ nguyên |
-| SCRUM-170 | T-45 | Xử lý `StopTransaction` tới muộn sau khi trụ ngoại tuyến | 3 | **Tạ Như Vinh** | Lâm Tùng | **Đổi** từ Lâm Tùng (giảm tải, gom nhóm "mất kết nối" cùng T-53) |
-| SCRUM-171 | T-46 | Kịch bản 20 trụ ảo ngắt–nối ngẫu nhiên, kiểm kWh cuối | 8 | Tú + Đức + Tuấn + Thanh Tùng | Xem dòng con | **Chia lại cho 4 người** (trước đó Đức làm 4 subtask) |
-| ↳ SCRUM-182 | | Thiết kế kịch bản tự động 20 trụ | 3 | Vy Hoàng Tú | Đức | **Đổi** từ Đức |
-| ↳ SCRUM-183 | | Thu thập và đối chiếu kWh hệ thống vs simulator | 2 | Hoàng Văn Đức | Tân | Giữ nguyên |
-| ↳ SCRUM-184 | | Xuất bảng đối chiếu kết quả | 1 | Phạm Văn Tuấn | Tú | **Đổi** từ Đức |
-| ↳ SCRUM-185 | | Đóng gói kịch bản để chạy trong CI | 1 | Trịnh Thanh Tùng | Đức | Giữ nguyên |
-| ↳ SCRUM-186 | | Bằng chứng kiểm thử cho AC của S-21 và E-04 | 1 | Phạm Văn Tuấn | Tú | **Đổi** từ Đức |
-| SCRUM-172 | T-49 | Gửi `RemoteStopTransaction`, chờ trụ gửi `StopTransaction` thật | 2 | **Hoàng Văn Đức** | Quang Tùng | **Đổi** từ Quang Tùng |
-| SCRUM-173 | T-50 | Nút dừng trên màn hình phiên | 2 | Phạm Văn Tuấn | Đại | Giữ nguyên |
-| SCRUM-174 | T-53 | Job quét phiên đang chạy mà trụ ngoại tuyến quá ngưỡng | 1 | **Tạ Như Vinh** | Tân | **Đổi** từ Tân |
-| SCRUM-175 | T-54 | Danh sách phiên bất thường trên màn hình vận hành | 1 | Vy Hoàng Tú | Tuấn | Giữ nguyên |
-| SCRUM-176 | T-57 | Bảng `audit_logs` + hàm ghi dùng chung | 1 | Hoàng Văn Tân | Vinh | Giữ nguyên |
-| SCRUM-177 | T-58 | Màn hình tra nhật ký | 1 | Vy Hoàng Tú | Tuấn | Giữ nguyên |
-| SCRUM-178 | T-47 | API phiên hiện tại của tài xế, kèm kWh mới nhất | 2 | Hoàng Văn Tân | Vinh | Giữ nguyên |
-| SCRUM-179 | T-48 | Màn hình phiên đang sạc, kWh tăng dần không cần tải lại | 2 | Phạm Văn Tuấn | Đại | Giữ nguyên |
-| SCRUM-180 | T-51 | API bắt đầu phiên, gửi `RemoteStartTransaction` | 2 | **Hoàng Văn Đức** | Quang Tùng | **Đổi** từ Quang Tùng |
-| SCRUM-181 | T-52 | Nút bắt đầu sạc trên màn hình trụ | 8 | Đại + Đức | Tuấn | Giữ nguyên Đại, **chuyển subtask BE/test** |
-| ↳ SCRUM-190 | | [FE] Nút bắt đầu sạc + danh sách đầu nối | 3 | Đặng Ngọc Đại | Tuấn | Giữ nguyên |
-| ↳ SCRUM-191 | | [FE] Trạng thái chờ tối đa 60 giây | 2 | Đặng Ngọc Đại | Tuấn | Giữ nguyên |
-| ↳ SCRUM-192 | | [FE] 3 thông báo: từ chối, trụ bận, hết thời gian | 1 | Đặng Ngọc Đại | Tuấn | Giữ nguyên |
-| ↳ SCRUM-193 | | [BE] Tích hợp API bắt đầu sạc, map phản hồi từ trụ | 1 | **Hoàng Văn Đức** | Quang Tùng | **Đổi** từ Quang Tùng (cùng người làm T-51 nên không phải chờ ai) |
-| ↳ SCRUM-194 | | Test tính năng bắt đầu sạc trên màn hình chi tiết trụ | 1 | **Đặng Ngọc Đại** | Tuấn | **Đổi** từ Vinh (không còn Tester) |
+| Thành viên | Vai trò | Mảng phụ trách | Work item chính |
+|---|---|---|---|
+| Trịnh Thanh Tùng | Scrum Master (kiêm BE hỗ trợ) | Điều phối, theo dõi tiến độ; nhận thêm việc để kịp tiến độ | Toàn Sprint; 65, 67, 68 (BE), 62 (BE), 73, 89 (BE), 209, 210 |
+| Ngô Quang Tùng | BE | OCPP – vòng đời phiên sạc | 53, 54, 55, 56, 58, 59, 94 (BE) |
+| Nguyễn Lâm Tùng | BE | OCPP nâng cao, ví (quản trị) | 57, 60, 70, 74, 95 (BE) |
+| Hoàng Văn Tân | BE | Biểu giá và thuật toán chia đoạn | 61, 63 (203 → 206) |
+| Tạ Như Vinh | BE | Tính tiền phiên sạc | 63 (207), 64, 66 (BE), 72 |
+| Hoàng Văn Đức | BE | Ví và thanh toán sandbox | 69 (BE), 71, 75 |
+| Phạm Văn Tuấn | FE | Giao diện ví, thuê bao, nhật ký | 69 (FE), 70 (FE), 74 (FE), 68 (FE), 89 (FE) |
+| Vy Hoàng Tú | FE | Giao diện biểu giá, hoá đơn | 61 (FE), 62 (FE), 63 (FE: 208), 66 (FE) |
+| Đặng Ngọc Đại | FE | Giao diện tài xế, vận hành | 94, 95 (FE), 58 (FE), 60 (FE) |
 
 ---
 
-## 5. Lý do các thay đổi chính
+## 4. Chi tiết theo từng thành viên
 
-| Thay đổi | Lý do |
-|----------|-------|
-| T-49, T-51, SCRUM-193 chuyển từ Quang Tùng sang Đức | Quang Tùng đang giữ đường găng (T-36 → T-37 → T-38). Cũ: 10 SP + 2 subtask = trên 13 SP. Mới: 8 SP. Điều khiển từ xa thành một mảng riêng, Đức làm trọn cả bắt đầu lẫn dừng. |
-| T-45, T-53 chuyển sang Vinh | Cùng chủ đề "mất kết nối / phiên bất thường", Vinh làm trọn mảng này. Lâm Tùng giảm từ 11 SP xuống 8, Tân giảm từ 12 SP xuống 7. |
-| T-46 chia 4 người | Cũ: Đức gánh một mình 8 SP và là mắt xích cuối. Mới: các phần độc lập chạy song song (thiết kế kịch bản, đối chiếu, xuất bảng, đóng gói CI). |
-| Tú, Tuấn nhận phần việc kịch bản/bảng đối chiếu | Việc FE của hai bạn ít (tổng 14 SP FE cho 3 người). Nhận thêm các việc dạng script/test để tải đều. |
-| SCRUM-194 chuyển cho Đại | Người làm tính năng tự test đường chạy đầy đủ, Tuấn review. |
+### Trịnh Thanh Tùng – Scrum Master
+- Tổ chức Daily Scrum, Sprint Review, Sprint Retrospective.
+- Theo dõi tiến độ trên Jira, cập nhật burndown, phát hiện và gỡ vướng mắc.
+- Gán assignee cho các work item và subtask theo bảng phân công này.
+- Điều phối lịch review chéo, đảm bảo mọi ticket có người review trước khi chuyển Done.
+- Làm việc với các thành viên để làm rõ tiêu chí hoàn thành (Definition of Done).
+- Thống nhất với nhóm mức ưu tiên cắt giảm (mục 6.2) vì khối lượng Sprint được dồn vào 1 tuần.
+
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-65 | Bộ ca kiểm thử tính tiền có đáp án tính tay | 2 |
+| SCRUM-67 | Đổi biểu giá không làm đổi tiền của phiên đã kết thúc | 2 |
+| SCRUM-68 | Gói thuê bao hàng tháng với biểu giá riêng (BE) | 3 (chung) |
+| SCRUM-62 | Biểu giá có nhiều khung giờ, không chồng lấn và phủ kín 24 giờ (BE) | 3 (chung) |
+| SCRUM-73 | Webhook nạp ví gửi lại nhiều lần chỉ ghi nhận một, sai chữ ký bị từ chối | 3 |
+| SCRUM-89 | Mọi lệnh điều khiển từ xa được ghi nhật ký kèm người thực hiện (BE) | 1 (chung) |
+| SCRUM-209 | Viết test tự động cho các kịch bản phiên sạc qua nhiều khung giờ (thuộc SCRUM-63) | trong 5 (chung) |
+| SCRUM-210 | [QA] Đối soát kết quả tính tiền với dữ liệu mô phỏng phiên sạc thực tế (thuộc SCRUM-63) | – |
+
+**Gợi ý nhóm việc:**
+- Bộ kiểm thử tính tiền: 65, 209, 210 dùng chung một bộ dữ liệu có đáp án tính tay. Không viết code SCRUM-203 → 207 nên đúng quy ước người kiểm thử không phải người viết code.
+- Việc độc lập, làm trước: 65, 62 (kiểm tra khung giờ), 89 (làm trước hàm ghi log dùng chung), 73 (làm trên nền webhook của SCRUM-198).
+- Việc chờ phụ thuộc: 67, 68 (chờ SCRUM-206 và 204 của Tân), 209 (chờ 203 → 205), 210 (chờ tính tiền và trừ ví chạy được).
+
+**Review chéo:**
+- Review SCRUM-64, 72 của Tạ Như Vinh và SCRUM-71, 75 của Hoàng Văn Đức.
+- Được review: Tạ Như Vinh review SCRUM-65, 67, 68, 209; Hoàng Văn Tân review SCRUM-62, 210; Hoàng Văn Đức review SCRUM-73; Ngô Quang Tùng review SCRUM-89.
+
+### Ngô Quang Tùng – Backend (OCPP – vòng đời phiên sạc)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-53 | Phiên sạc bắt đầu khi trụ gửi `StartTransaction` | 2 |
+| SCRUM-54 | Phiên sạc kết thúc khi trụ gửi `StopTransaction` và chốt số kWh | 2 |
+| SCRUM-55 | Số đo điện năng được ghi liên tục qua `MeterValues` | 2 |
+| SCRUM-56 | Số đo lùi hoặc trùng mốc thời gian bị bỏ qua | 1 |
+| SCRUM-58 | Vận hành viên dừng phiên sạc từ xa bằng `RemoteStopTransaction` | 2 |
+| SCRUM-59 | Phiên không có tin kết thúc quá lâu bị đánh dấu bất thường | 1 |
+| SCRUM-94 | API/kênh cập nhật thời gian thực cho phiên đang sạc (BE, lấy dữ liệu từ SCRUM-55) | 2 (chung) |
+
+**Review chéo:** review SCRUM-57, 60, 95 của Nguyễn Lâm Tùng; review SCRUM-89 của Trịnh Thanh Tùng.
+
+### Nguyễn Lâm Tùng – Backend (OCPP nâng cao, ví phía quản trị)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-57 | Phiên đang dở được khôi phục đúng khi trụ nối lại | 3 |
+| SCRUM-60 | Vận hành viên đổi cấu hình trụ từ xa bằng `ChangeConfiguration` | 3 |
+| SCRUM-70 | Quản trị viên nạp tay vào ví khi chưa có cổng thanh toán | 2 |
+| SCRUM-74 | Tài xế xem số dư và lịch sử giao dịch ví (API) | 2 |
+| SCRUM-95 | Tài xế bắt đầu phiên từ ứng dụng bằng `RemoteStartTransaction` (API) | 2 |
+
+**Review chéo:** review SCRUM-53 → 56, 58, 59, 94 (BE) của Ngô Quang Tùng.
+
+### Hoàng Văn Tân – Backend (Biểu giá và thuật toán chia đoạn)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-61 | Chủ trạm khai báo biểu giá theo kWh và phí chiếm trụ theo phút | 3 |
+| SCRUM-63 | Phiên cắt qua nhiều khung giờ – các subtask BE: **203, 204, 205, 206** | 5 (chung) |
+Subtask phụ trách trong SCRUM-63:
+- SCRUM-203: Thiết kế thuật toán chia phiên sạc theo các khung giờ biểu giá
+- SCRUM-204: Xây dựng hàm tính tiền theo từng đoạn thời gian trong phiên
+- SCRUM-205: Xử lý trường hợp phiên cắt qua mốc đổi giá giữa đêm và giờ cao điểm
+- SCRUM-206: Chuẩn hóa nguồn dữ liệu biểu giá theo thời gian áp dụng
+**Review chéo:** review SCRUM-63 (207), 64, 66 (BE), 72 của Tạ Như Vinh; review SCRUM-62 và SCRUM-210 của Trịnh Thanh Tùng.
+
+### Tạ Như Vinh – Backend (Tính tiền phiên sạc)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-63 | Subtask BE: **207** | 5 (chung) |
+| SCRUM-64 | Phiên qua nửa đêm tính đúng sang biểu giá ngày hôm sau | 2 |
+| SCRUM-66 | Tài xế xem hoá đơn có diễn giải từng đoạn giá (API, dữ liệu chi tiết) | 3 (chung) |
+| SCRUM-72 | Ví dưới ngưỡng tối thiểu thì trụ từ chối bắt đầu phiên mới | 2 |
+
+Subtask phụ trách trong SCRUM-63:
+- SCRUM-207: Cập nhật luồng lưu trữ chi tiết các đoạn tính tiền của phiên
+**Review chéo:** review SCRUM-61, 63 (203 → 206) của Hoàng Văn Tân; review SCRUM-65, 67, 68, 209 của Trịnh Thanh Tùng.
+
+### Hoàng Văn Đức – Backend (Ví và thanh toán sandbox)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-69 | Tài xế nạp tiền vào ví qua cổng thanh toán sandbox – các subtask BE: **196, 197, 198, 199, 201** | 5 (chung) |
+| SCRUM-71 | Ví bị trừ tự động khi phiên kết thúc, có bản ghi giao dịch | 3 |
+| SCRUM-75 | Số dư ví luôn khớp sổ cái chỉ ghi thêm | 3 |
+
+Subtask phụ trách trong SCRUM-69:
+- SCRUM-196: Tích hợp cổng thanh toán sandbox cho chức năng nạp ví
+- SCRUM-197: Thiết kế và lưu lịch sử giao dịch nạp tiền
+- SCRUM-198: Xử lý callback/webhook và cập nhật số dư ví sau thanh toán
+- SCRUM-199: Kiểm tra số dư ví và trừ tiền tự động khi sạc
+- SCRUM-201: Xử lý các trường hợp lỗi/hoàn tiền khi nạp ví thất bại
+**Review chéo:** review SCRUM-70, 74 của Nguyễn Lâm Tùng; review SCRUM-73 của Trịnh Thanh Tùng. Phần của Đức được Nguyễn Lâm Tùng và Trịnh Thanh Tùng (SCRUM-71, 75) review.
+
+### Phạm Văn Tuấn – Frontend (Giao diện ví, thuê bao, nhật ký)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-69 | Các subtask FE: **195, 200** | 5 (chung) |
+| SCRUM-70 | Màn hình quản trị nạp tay vào ví (FE) | 2 (chung) |
+| SCRUM-74 | Màn hình xem số dư và lịch sử giao dịch ví (FE) | 2 (chung) |
+| SCRUM-68 | Giao diện đăng ký gói thuê bao hàng tháng (FE) | 3 (chung) |
+| SCRUM-89 | Màn hình xem nhật ký lệnh điều khiển từ xa (FE) | 1 (chung) |
+
+Subtask phụ trách trong SCRUM-69:
+- SCRUM-195: Thêm màn hình/luồng nạp tiền vào ví cho tài xế
+- SCRUM-200: Hiển thị số dư ví và trạng thái giao dịch nạp tiền
+
+**Test chéo:** SCRUM-202 – Test chức năng nạp tiền vào ví qua cổng thanh toán sandbox (phối hợp với Hoàng Văn Đức).
+
+### Vy Hoàng Tú – Frontend (Giao diện biểu giá và hoá đơn)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-61 | Màn hình khai báo biểu giá theo kWh và phí chiếm trụ (FE) | 3 (chung) |
+| SCRUM-62 | Màn hình cấu hình nhiều khung giờ, cảnh báo chồng lấn/thiếu giờ (FE) | 3 (chung) |
+| SCRUM-63 | Subtask FE: **208** – Hiển thị chi tiết cách tính tiền theo từng khung giờ cho phiên sạc | 5 (chung) |
+| SCRUM-66 | Màn hình hoá đơn có diễn giải từng đoạn giá (FE) | 3 (chung) |
+
+> Đã chuyển SCRUM-68 (FE) sang cho **Phạm Văn Tuấn**.
+
+### Đặng Ngọc Đại – Frontend (Giao diện tài xế và vận hành)
+| Ticket | Nội dung | SP |
+|---|---|---|
+| SCRUM-94 | Tài xế xem phiên đang sạc của mình cập nhật theo thời gian thực (FE) | 2 (chung) |
+| SCRUM-95 | Nút bắt đầu phiên sạc từ ứng dụng (FE) | 2 (chung) |
+| SCRUM-58 | Nút dừng phiên sạc từ xa cho vận hành viên (FE) | 2 (chung) |
+| SCRUM-60 | Form đổi cấu hình trụ từ xa (FE) | 3 (chung) |
+
+> Đã chuyển SCRUM-89 (FE) sang cho **Phạm Văn Tuấn**.
 
 ---
 
-## 6. Phụ thuộc và cách tránh chờ
+## 5. Phân công theo work item (tra cứu nhanh)
 
-| Ai cần | Chờ gì | Từ ai | Cách tránh chờ |
-|--------|--------|-------|----------------|
-| Quang Tùng (T-37, T-38) | Bảng phiên | Quang Tùng (T-36) | Cùng một người, làm T-36 trước và **merge migration ngay ngày 1–2**. |
-| Lâm Tùng (T-41) | Bảng số đo | Lâm Tùng (T-40) | Cùng một người. Migration dùng timestamp riêng, không trùng số thứ tự với T-36. |
-| Quang Tùng (SCRUM-189) | Hàm kWh | Tân (SCRUM-187) | Tân làm 187 từ ngày 1 (hàm thuần, không phụ thuộc ai), xong trước khi Quang Tùng cần. |
-| Tân (SCRUM-187) | Dữ liệu mẫu để test | Vinh (SCRUM-188) | Vinh làm 188 **đầu tiên** (ngày 1–2). Tân viết hàm trước, gắn test khi có dữ liệu. |
-| Đức (T-49, T-51) | Bảng phiên và handler | Quang Tùng | T-51 không cần bảng phiên nên làm trước. T-49 xếp sau, khi T-36/T-37 đã merge. |
-| Tân (T-47) | Bảng phiên và số đo | Quang Tùng, Lâm Tùng | Xếp T-47 vào giữa sprint, lúc hai bảng đã có. |
-| Vinh (T-45) | `StopTransaction` và khớp phiên | Quang Tùng, Lâm Tùng | Xếp T-45 sau T-38 và T-44. Review chéo với Lâm Tùng. |
-| Tuấn (T-48), Đại, Tú, Tuấn (T-50) | API thật | Tân, Đức, Vinh, Tân | **Mock API ngay ngày 1** theo hợp đồng chốt chung, đổi sang API thật khi BE xong. |
-| Tú (T-58) | `audit_logs` | Tân (T-57) | Tân làm T-57 **trước tiên trong ngày 1**. Tú làm T-58 sau. |
-| Tú (SCRUM-182) | Docker trụ ảo | Thanh Tùng (T-55) | T-55 làm ngày 1–2. Tú chỉ bắt đầu 182 sau khi T-55 xong. |
-| Đức (SCRUM-183) | Kết quả chạy kịch bản | Tú (SCRUM-182) | Chốt **định dạng dữ liệu (JSON)** ngay đầu sprint. Đức viết công cụ đối chiếu bằng dữ liệu giả trong lúc chờ. |
-| Tuấn (184, 186) | Dữ liệu đối chiếu | Đức | Tuấn viết khung bảng bằng dữ liệu giả; việc cuối sprint nên không chặn ai. |
-| Thanh Tùng (T-56, 185) | Kịch bản 20 trụ | Tú (182) | T-56 dựng khung CI trước với kịch bản nhỏ (3 trụ), khi 182 xong chỉ cần thay kịch bản. |
-
----
-
-## 7. Lịch gợi ý (giả định 10 ngày làm việc)
-
-| Người | N1 | N2 | N3 | N4 | N5 | N6 | N7 | N8 | N9 | N10 |
-|-------|----|----|----|----|----|----|----|----|----|-----|
-| **Thanh Tùng** | T-55 | T-55 | T-56 (khung CI) | T-56 | T-56 | Hỗ trợ gỡ vướng | | 185 | 185 | Buffer |
-| **Quang Tùng** | T-36 (merge sớm) | T-36 / T-37 | T-37 | T-38 | T-38 | 189 | 189 | Review / sửa lỗi | | |
-| **Lâm Tùng** | T-40 | T-40 / T-41 | T-41 | T-42 | T-44 | T-44 | T-44 | T-44 | Sửa lỗi | |
-| **Tân** | T-57 → 187 | 187 | 187 | 187 | T-47 | T-47 | T-47 | Review / buffer | | |
-| **Vinh** | 188 | 188 | T-53 | T-43 | T-43 | T-45 | T-45 | T-45 | T-45 | Buffer |
-| **Đức** | T-51 | T-51 | T-51 / 193 | 193 / T-49 | T-49 | T-49 | 183 (dữ liệu giả) | 183 | 183 (dữ liệu thật) | |
-| **Tuấn** | T-48 (mock) | T-48 | T-50 (mock) | T-50 | T-50 | Nối API thật | Nối API thật | 184 | 186 | 186 |
-| **Tú** | T-58 | T-58 | T-54 (mock) | 182 | 182 | 182 | 182 | 182 | Hỗ trợ bằng chứng | |
-| **Đại** | 190 | 190 | 190 | 191 | 191 | 192 | 194 (API thật) | 194 | Buffer / hỗ trợ | |
-
-Buffer cuối sprint dùng để sửa lỗi phát sinh khi chạy kịch bản 20 trụ và hoàn thiện bằng chứng.
+| Ticket | Tên ngắn | SP | Backend | Frontend |
+|---|---|---|---|---|
+| SCRUM-53 | StartTransaction | 2 | Ngô Quang Tùng | – |
+| SCRUM-54 | StopTransaction, chốt kWh | 2 | Ngô Quang Tùng | – |
+| SCRUM-55 | MeterValues | 2 | Ngô Quang Tùng | – |
+| SCRUM-56 | Bỏ qua số đo lùi/trùng | 1 | Ngô Quang Tùng | – |
+| SCRUM-57 | Khôi phục phiên khi trụ nối lại | 3 | Nguyễn Lâm Tùng | – |
+| SCRUM-58 | RemoteStopTransaction | 2 | Ngô Quang Tùng | Đặng Ngọc Đại |
+| SCRUM-59 | Phiên bất thường | 1 | Ngô Quang Tùng | – |
+| SCRUM-60 | ChangeConfiguration | 3 | Nguyễn Lâm Tùng | Đặng Ngọc Đại |
+| SCRUM-61 | Khai báo biểu giá | 3 | Hoàng Văn Tân | Vy Hoàng Tú |
+| SCRUM-62 | Biểu giá nhiều khung giờ | 3 | **Trịnh Thanh Tùng** | Vy Hoàng Tú |
+| SCRUM-63 | Phiên cắt qua nhiều khung giờ | 5 | Tân (203–206), Vinh (207), **Trịnh Thanh Tùng** (209, 210) | Vy Hoàng Tú (208) |
+| SCRUM-64 | Phiên qua nửa đêm | 2 | Tạ Như Vinh | – |
+| SCRUM-65 | Bộ ca kiểm thử tính tiền | 2 | **Trịnh Thanh Tùng** | – |
+| SCRUM-66 | Hoá đơn diễn giải từng đoạn | 3 | Tạ Như Vinh | Vy Hoàng Tú |
+| SCRUM-67 | Đổi biểu giá không ảnh hưởng phiên cũ | 2 | **Trịnh Thanh Tùng** | – |
+| SCRUM-68 | Gói thuê bao hàng tháng | 3 | **Trịnh Thanh Tùng** | Phạm Văn Tuấn |
+| SCRUM-69 | Nạp ví qua cổng sandbox | 5 | Hoàng Văn Đức (196–199, 201) | Phạm Văn Tuấn (195, 200) |
+| SCRUM-70 | Admin nạp tay vào ví | 2 | Nguyễn Lâm Tùng | Phạm Văn Tuấn |
+| SCRUM-71 | Trừ ví khi phiên kết thúc | 3 | Hoàng Văn Đức | – |
+| SCRUM-72 | Ví dưới ngưỡng thì từ chối phiên mới | 2 | Tạ Như Vinh | – |
+| SCRUM-73 | Webhook idempotent, kiểm tra chữ ký | 3 | **Trịnh Thanh Tùng** | – |
+| SCRUM-74 | Xem số dư và lịch sử ví | 2 | Nguyễn Lâm Tùng | Phạm Văn Tuấn |
+| SCRUM-75 | Sổ cái chỉ ghi thêm | 3 | Hoàng Văn Đức | – |
+| SCRUM-89 | Nhật ký lệnh điều khiển từ xa | 1 | **Trịnh Thanh Tùng** | Phạm Văn Tuấn |
+| SCRUM-94 | Xem phiên sạc thời gian thực | 2 | Ngô Quang Tùng | Đặng Ngọc Đại |
+| SCRUM-95 | RemoteStartTransaction từ app | 2 | Nguyễn Lâm Tùng | Đặng Ngọc Đại |
 
 ---
 
-## 8. Quy tắc phối hợp
+## 6. Phụ thuộc giữa các task (ai có thể bị ai chặn)
 
-1. **Họp chốt hợp đồng ngày 1 (30–45 phút)**, cả team tham dự, chốt:
-   - Schema `charging_sessions`, `meter_values`, `audit_logs`.
-   - Hình dạng response/lỗi của các API: T-47, T-51, T-49, T-53, T-57.
-   - Cách FE nhận kWh tăng dần (WebSocket hoặc SSE hoặc polling).
-   - Định dạng JSON kết quả đối chiếu cho SCRUM-183/184.
-2. **Mỗi file/handler có một chủ**: `StartTransaction`/`StopTransaction` chỉ Quang Tùng sửa; `MeterValues` chỉ Lâm Tùng sửa; hàm ghi audit chỉ Tân sửa. Người khác cần thay đổi thì nhờ chủ file hoặc tạo PR nhỏ cho chủ file duyệt.
-3. **Merge sớm, merge nhỏ**: ưu tiên merge T-36, T-40, T-57, T-55 trong 2 ngày đầu để các việc sau bám vào.
-4. **Review trong ngày**: người được chỉ định review trả lời trong vòng nửa ngày làm việc, tránh PR nằm chờ.
-5. **Họp đầu ngày 10 phút**: mỗi người nói đang làm gì, ai đang chờ ai. Việc bị chặn quá nửa ngày thì báo Scrum Master để đổi người hỗ trợ.
-6. **Ai xong sớm thì hỗ trợ**: người xong việc nên nhận review hoặc phụ việc cho người có tải nặng cuối sprint (Vinh với T-45, Đức với 183, Tuấn với 186).
+> Các phụ thuộc dưới đây được suy ra từ nội dung ticket, vì mục "Linked work items" trên Jira đang trống. Nên tạo liên kết "is blocked by" tương ứng để cả nhóm nhìn thấy.
+
+### 6.1 Các điểm có thể gây nghẽn
+
+| Task bị chặn | Người làm | Đang chờ | Người làm trước | Cách giảm chặn |
+|---|---|---|---|---|
+| SCRUM-57, 95 | Nguyễn Lâm Tùng | Model phiên sạc từ SCRUM-53 | Ngô Quang Tùng | Ngô chốt model `Session` và hàm dùng chung sớm; Lâm Tùng làm 60, 70, 74 trước |
+| SCRUM-94 (FE) | Đặng Ngọc Đại | API dữ liệu từ SCRUM-55 | Ngô Quang Tùng | Chốt format dữ liệu realtime sớm, FE dùng dữ liệu giả trước |
+| SCRUM-89 (BE) | Trịnh Thanh Tùng | Các lệnh từ xa 58, 60, 95 gọi vào hàm ghi log | Ngô Quang Tùng, Nguyễn Lâm Tùng | Trịnh Thanh Tùng làm trước một hàm ghi log dùng chung, các lệnh chỉ việc gọi vào |
+| SCRUM-204, 205 | Hoàng Văn Tân | SCRUM-203, 206 (cùng người) | Hoàng Văn Tân | Làm theo thứ tự 206 → 203 → 204 → 205 |
+| SCRUM-207, 64 | Tạ Như Vinh | Thuật toán chia đoạn SCRUM-203 – 205 | Hoàng Văn Tân | Tân chốt cấu trúc dữ liệu "đoạn tính tiền" và chữ ký hàm 204 sớm; Vinh code trên bản giả trước |
+| SCRUM-209 | Trịnh Thanh Tùng | Thuật toán chia đoạn SCRUM-203 – 205 | Hoàng Văn Tân | Trịnh Thanh Tùng dựng sẵn bộ ca từ SCRUM-65, chạy khi Tân có bản dùng được |
+| SCRUM-66 (BE) | Tạ Như Vinh | Dữ liệu đoạn tính tiền từ SCRUM-207 (cùng người) | Tạ Như Vinh | Làm 207 trước, 66 sau |
+| SCRUM-67, 68 (BE) | Trịnh Thanh Tùng | Biểu giá có hiệu lực theo thời gian (206) và hàm tính tiền (204) | Hoàng Văn Tân | Trịnh Thanh Tùng bắt đầu bằng 65, 62, 89, 73 (không phụ thuộc hoặc phụ thuộc ít), 67 và 68 làm sau khi Tân xong 206 và 204 |
+| SCRUM-62 (BE) | Trịnh Thanh Tùng | Cấu trúc biểu giá và khung giờ từ SCRUM-61 | Hoàng Văn Tân | Tân chốt schema biểu giá sớm để Trịnh Thanh Tùng viết hàm kiểm tra chồng lấn/phủ 24 giờ |
+| SCRUM-73 | Trịnh Thanh Tùng | Handler webhook và cập nhật số dư (SCRUM-198), sổ cái (75) | Hoàng Văn Đức | Cùng một luồng webhook với 198: Đức dựng khung xử lý trước, Trịnh Thanh Tùng thêm kiểm tra chữ ký và chống ghi nhận trùng; hai bên thống nhất ranh giới ngay từ đầu |
+| SCRUM-70, 74 (BE) | Nguyễn Lâm Tùng | Sổ cái và lịch sử giao dịch (75, 197) | Hoàng Văn Đức | Đức chốt schema sổ cái và hàm cộng/trừ ví sớm |
+| SCRUM-195, 200, 70, 74 (FE) | Phạm Văn Tuấn | API ví (196, 198, 70, 74) | Hoàng Văn Đức, Nguyễn Lâm Tùng | Thống nhất hợp đồng API, FE dùng mock |
+| SCRUM-68 (FE) | Phạm Văn Tuấn | API gói thuê bao (68 BE) | Trịnh Thanh Tùng | Trịnh Thanh Tùng chốt API sớm, Tuấn dùng mock |
+| SCRUM-89 (FE) | Phạm Văn Tuấn | API nhật ký (89 BE) | Trịnh Thanh Tùng | Trịnh Thanh Tùng chốt format nhật ký sớm, Tuấn dùng mock |
+| SCRUM-72 | Tạ Như Vinh | Số dư ví (Đức) và luồng bắt đầu phiên 53 (Ngô) | Hoàng Văn Đức, Ngô Quang Tùng | Đức cung cấp hàm `kiemTraSoDuToiThieu` sớm |
+| SCRUM-71 | Hoàng Văn Đức | Chốt kWh (54), tính tiền (204, 207), sổ cái (75) | Ngô Quang Tùng, Tân, Vinh | Làm sau khi các phần trên có bản chạy được |
+| SCRUM-208, 66 (FE) | Vy Hoàng Tú | Dữ liệu đoạn tính tiền (207, 66 BE) | Tạ Như Vinh | Chốt format hoá đơn sớm, FE dùng mock |
+| SCRUM-61, 62 (FE) | Vy Hoàng Tú | API biểu giá | Hoàng Văn Tân, Trịnh Thanh Tùng (62) | Chốt API trước, FE dùng mock |
+| SCRUM-58, 60, 95 (FE) | Đặng Ngọc Đại | API lệnh từ xa | Ngô Quang Tùng, Nguyễn Lâm Tùng | Chốt hợp đồng API, FE dùng mock |
+| SCRUM-210 (QA), 202 (test) | Trịnh Thanh Tùng, Phạm Văn Tuấn | Toàn bộ phần tính tiền / nạp ví đã xong | Nhiều người | Làm sau cùng, chuẩn bị kịch bản từ trước |
+
+### 6.2 Mức ưu tiên khi cần cắt giảm
+
+Vì toàn bộ Sprint dồn vào 1 tuần, nên thống nhất sớm với Scrum Master thứ tự ưu tiên:
+
+| Mức | Nội dung | Ticket |
+|---|---|---|
+| Bắt buộc | Chuỗi sạc → tính tiền → trừ ví | 53, 54, 55, 61, 62, 63, 64, 66, 71, 75 |
+| Nên có | Nạp ví và điều khiển từ xa | 69, 70, 72, 73, 74, 58, 94, 95, 89 |
+| Làm nếu kịp | Phần mở rộng | 56, 57, 59, 60, 65, 67, 68 |
+
+> Riêng SCRUM-65 (bộ ca kiểm thử) nên làm sớm dù xếp mức thấp, vì 209 và 210 dùng lại bộ dữ liệu này.
+
+### 6.3 Quy tắc chống nghẽn
+- Chốt hợp đồng API và schema dữ liệu ngay đầu Sprint, ghi vào một chỗ chung.
+- Người làm phần "nền" mở PR nháp sớm để người phụ thuộc có thể bám theo.
+- Thêm liên kết "is blocked by" trên Jira cho các cặp task ở bảng 6.1.
+- Ai bị chờ quá 1 ngày thì báo Scrum Master ngay trong Daily Scrum.
 
 ---
 
-## 9. Rủi ro cần theo dõi
+## 7. Kế hoạch review và kiểm thử chéo (Sprint 3)
 
-| Rủi ro | Cách giảm |
-|--------|-----------|
-| Vinh và Đức trước đây là Tester, nhận việc BE có thể chậm hơn dự kiến. | Ghép review với người cùng mảng (Lâm Tùng với T-45, Quang Tùng với T-49/T-51). Có buffer ở N9–N10. |
-| Quang Tùng là đường găng của cả sprint (T-36 → T-37 → T-38 → 189). | Chỉ giữ việc lõi, ưu tiên cho T-36 trước; Lâm Tùng review nhanh. |
-| T-46 (20 trụ ngắt–nối ngẫu nhiên) dễ lộ lỗi muộn. | Chạy thử bản nhỏ (3 trụ) trên CI từ giữa sprint, tăng dần lên 20 trụ. |
-| SP subtask ước lượng, có thể lệch. | Poker lại đầu sprint; điều chỉnh nhưng giữ tổng SP task cha. |
-test thư commit setup gmail name để vào contributors
+| Người làm | Người review / test chéo |
+|---|---|
+| Ngô Quang Tùng | Nguyễn Lâm Tùng |
+| Nguyễn Lâm Tùng | Ngô Quang Tùng (57, 60, 95), Hoàng Văn Đức (70, 74) |
+| Hoàng Văn Tân | Tạ Như Vinh |
+| Tạ Như Vinh | Hoàng Văn Tân (63 – 207, 66) và Trịnh Thanh Tùng (64, 72) |
+| Trịnh Thanh Tùng | Tạ Như Vinh (65, 67, 68, 209), Hoàng Văn Tân (62, 210), Hoàng Văn Đức (73), Ngô Quang Tùng (89) |
+| Hoàng Văn Đức | Nguyễn Lâm Tùng, Trịnh Thanh Tùng (71, 75) |
+| Phạm Văn Tuấn | Vy Hoàng Tú |
+| Vy Hoàng Tú | Đặng Ngọc Đại |
+| Đặng Ngọc Đại | Phạm Văn Tuấn |
+
+**Quy ước:**
+- Mỗi ticket phải được ít nhất một người khác review trước khi chuyển sang Done.
+- Review trong ngày khi PR được mở, không dồn đến cuối Sprint.
+- Các subtask kiểm thử (SCRUM-202, SCRUM-209, SCRUM-210) do người không viết phần code tương ứng thực hiện.
+- Việc tích hợp FE – BE (ví dụ SCRUM-69, SCRUM-63, SCRUM-66, SCRUM-68, SCRUM-89) cần FE và BE cùng thống nhất hợp đồng API ngay từ đầu Sprint.
+
+---
+
+## 8. Lưu ý
+
+- Cột "SP (chung)" nghĩa là story point được chia cho cả BE và FE (hoặc nhiều subtask), chưa tách riêng từng phần.
+- Các ticket chưa có subtask trên Jira (ví dụ SCRUM-61, 62, 66, 68, 70, 74...) nên được tách subtask `[BE]` / `[FE]` khi Sprint Planning để bám sát phân công trên.
+- Các điều chỉnh so với bản trước, nhằm giảm tải và giảm phụ thuộc:
+  - Ngô Quang Tùng giao SCRUM-89 (BE) cho Trịnh Thanh Tùng.
+  - Hoàng Văn Tân giao SCRUM-62 (BE) cho Trịnh Thanh Tùng.
+  - Tạ Như Vinh giao SCRUM-209 cho Trịnh Thanh Tùng.
+  - Hoàng Văn Đức giao SCRUM-73 và SCRUM-210 cho Trịnh Thanh Tùng.
+  - Vy Hoàng Tú giao SCRUM-68 (FE) cho Phạm Văn Tuấn; Đặng Ngọc Đại giao SCRUM-89 (FE) cho Phạm Văn Tuấn.
+  - Đã chuyển trước đó: SCRUM-66 (BE) từ Hoàng Văn Tân sang Tạ Như Vinh; SCRUM-94 (BE) giao cho Ngô Quang Tùng.
+- Nếu có người nghỉ hoặc quá tải, ưu tiên chuyển ticket cùng Epic để giữ ngữ cảnh nghiệp vụ.
