@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.models  # noqa: F401
+import app.models
 from app.config import settings
 from app.core.deps import get_current_user
 from app.database import Base, get_db
@@ -506,8 +506,9 @@ async def test_concurrent_changes_serialize_and_store_last_accepted(
     max_active_calls = 0
     accepted_order: list[str] = []
 
-    async def send_call(_code, _action, payload, _timeout):
+    async def send_call(_code, _action, payload, timeout):
         nonlocal active_calls, max_active_calls
+        assert timeout == settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS
         active_calls += 1
         max_active_calls = max(max_active_calls, active_calls)
         accepted_order.append(payload["value"])

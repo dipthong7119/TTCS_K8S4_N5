@@ -20,7 +20,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.charge_point import ChargePoint
 from app.models.station import Station
 from app.services.charge_point_configuration import (

@@ -1,7 +1,7 @@
 """Danh sách cấu hình OCPP được phép đổi từ xa."""
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

@@ -110,7 +110,7 @@ def calculate_session_price(
     grouped_segments: dict[tuple[datetime, datetime, str, int], _EnergySegment] = {}
     for (interval_start, wh_start), (interval_end, wh_end) in pairwise(monotonic_points):
         duration_seconds = Decimal(str((interval_end - interval_start).total_seconds()))
-        if duration_seconds <= 0 or wh_end <= wh_start:
+        if duration_seconds <= 0 or wh_end < wh_start:
             continue
         cuts = [interval_start, *_tariff_boundaries(interval_start, interval_end, station_zone, boundary_minutes), interval_end]
         for segment_start, segment_end in pairwise(cuts):
