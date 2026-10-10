@@ -421,6 +421,21 @@
     const titleEl = document.getElementById('session-detail-title');
     if (titleEl) titleEl.textContent = `Chi tiết phiên sạc #${session.id}`;
 
+    const invoiceSegments = Array.isArray(session.invoice_segments) ? session.invoice_segments : [];
+    const invoiceBreakdown = invoiceSegments.length ? `
+      <section aria-label="Chi tiết hóa đơn" style="margin-top:var(--space-5);">
+        <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Phân bổ chi phí theo khung giá</h3>
+        <p class="form-hint">${escHtml(session.invoice_rounding_rule || 'Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu sau ân hạn.')}</p>
+        <ol style="padding-left:var(--space-5);display:grid;gap:var(--space-2);">
+          ${invoiceSegments.map(segment => {
+            const detail = segment.kind === 'occupancy_fee'
+              ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
+              : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
+            return `<li><strong>${escHtml(segment.band || 'Khung giá')}</strong> (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
+          }).join('')}
+        </ol>
+      </section>` : '';
+
     const bodyEl = document.getElementById('session-detail-body');
     if (bodyEl) {
       bodyEl.innerHTML = `
@@ -434,7 +449,7 @@
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Chi phí sạc</dt><dd style="font-weight:700;">${session.cost_vnd != null ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(session.cost_vnd) : 'Chưa có cấu hình biểu giá'}</dd></div>
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạng thái</dt><dd><span class="badge ${STATUS_CLASS[session.status] || 'badge--neutral'}">${STATUS_LABEL[session.status] || 'Không rõ'}</span></dd></div>
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Lý do kết thúc</dt><dd>${escHtml(session.stop_reason || '—')}</dd></div>
-        </dl>`;
+        </dl>${invoiceBreakdown}`;
     }
     const modal = document.getElementById('session-detail-modal');
     if (modal) modal.classList.remove('is-hidden');

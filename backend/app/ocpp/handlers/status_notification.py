@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
+from app.models.charging_session import ChargingSession
 from app.models.connector_error import ConnectorError
 from app.ocpp.session_reconciliation import (
     ReconciliationContext,
@@ -115,6 +116,24 @@ def handle_status_notification(
         status_raw,
         error_code,
     )
+
+    session = (
+        db.query(ChargingSession)
+        .filter(
+            ChargingSession.charge_point_id == charge_point_id,
+            ChargingSession.connector_number == connector_id,
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.status == "active",
+        )
+        .order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
+        .first()
+    )
+    if session is not None:
+        if status_raw in {"Finishing", "SuspendedEV"} and session.occupancy_started_at is None:
+            session.occupancy_started_at = occurred_at
+        elif status_raw == "Charging":
+            # A temporary vehicle suspension resumed charging; no occupancy fee is due yet.
+            session.occupancy_started_at = None
 
     if error_code != "NoError":
         db.add(

@@ -51,6 +51,9 @@ def finalize_session_billing(
             meter_readings=meter_readings,
             bands=tariff.bands,
             timezone_name=tariff.timezone_name,
+            occupancy_started_at=session.occupancy_started_at,
+            occupancy_fee_vnd_per_minute=tariff.occupancy_fee_vnd_per_minute,
+            grace_period_minutes=tariff.grace_period_minutes,
         )
     except ValueError:
         # Do not turn a completed OCPP transaction into a failed transaction if
@@ -63,6 +66,7 @@ def finalize_session_billing(
         tariff_id=tariff.id,
         total_vnd=breakdown["total_vnd"],
         segments=breakdown["segments"],
+        rounding_rule=breakdown["rounding_rule"],
         calculation_version=CALCULATION_VERSION,
         is_demo=tariff.is_demo,
     )

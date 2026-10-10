@@ -37,6 +37,12 @@ class ChargingInvoice(Base):
     )
     total_vnd = Column(Integer, nullable=False)
     segments = Column(JSON, nullable=False, default=list)
+    rounding_rule = Column(
+        String(150),
+        nullable=False,
+        default="Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu.",
+        server_default="Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu.",
+    )
     calculation_version = Column(String(30), nullable=False, default="time-band-v1")
     is_demo = Column(Boolean, nullable=False, default=False, server_default=false())
     created_at = Column(DateTime, nullable=False, server_default=func.now())
