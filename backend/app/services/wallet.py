@@ -359,3 +359,133 @@ def refund_wallet_charge(
     db.flush()
     return entry
 
+
+# ---------------------------------------------------------------------------
+# SCRUM-75 — Sổ cái chỉ ghi thêm: kiểm tra tính toàn vẹn
+# ---------------------------------------------------------------------------
+
+def verify_ledger_integrity(
+    db: Session,
+    user_id: int | None = None,
+) -> dict:
+    """
+    Kiểm tra tính toàn vẹn của sổ cái ví (SCRUM-75).
+
+    Nguyên tắc append-only đảm bảo:
+      - Số dư tài xế = SUM(amount_vnd) trên toàn bộ wallet_ledger theo user_id
+      - Mọi bút toán đều có idempotency_key duy nhất (ràng buộc DB)
+      - Không có bút toán nào vi phạm ràng buộc dấu số (CheckConstraint trên model)
+      - Không tồn tại receipt_code trùng lặp (UNIQUE trên model)
+
+    Hàm này thực hiện đối chiếu phần mềm:
+      1. Tính balance bằng SUM(amount_vnd) từ ledger (nguồn sự thật duy nhất).
+      2. So sánh kết quả với chính SUM đó (self-consistent check).
+      3. Kiểm tra không tồn tại bút toán nào vi phạm ràng buộc dấu số.
+      4. Kiểm tra không có idempotency_key trùng lặp trong phạm vi user.
+
+    Trả về dict:
+      {
+        "scope": "all" | "user:<id>",
+        "user_count": int,           # số tài xế được kiểm tra
+        "total_entries": int,        # tổng số bút toán
+        "total_balance_vnd": int,    # tổng số dư toàn hệ thống (hoặc của 1 user)
+        "violations": list[dict],    # danh sách vi phạm phát hiện được
+        "passed": bool,              # True nếu không có vi phạm
+      }
+    """
+    from sqlalchemy import text
+
+    violations: list[dict] = []
+
+    # --- 1. Xây dựng base query theo phạm vi ---
+    base_q = db.query(WalletLedgerEntry)
+    if user_id is not None:
+        base_q = base_q.filter(WalletLedgerEntry.user_id == user_id)
+
+    total_entries = base_q.count()
+
+    # --- 2. Tổng số dư toàn phạm vi ---
+    total_balance = (
+        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .scalar()
+    ) or 0
+
+    # --- 3. Kiểm tra vi phạm ràng buộc dấu số (phần mềm, bổ sung CheckConstraint DB) ---
+    CREDIT_TYPES = ("manual_topup", "demo_topup", "sandbox_topup", "refund")
+    DEBIT_TYPES = ("session_charge",)
+
+    bad_credits = (
+        base_q.filter(
+            WalletLedgerEntry.entry_type.in_(CREDIT_TYPES),
+            WalletLedgerEntry.amount_vnd <= 0,
+        ).all()
+    )
+    for e in bad_credits:
+        violations.append({
+            "type": "sign_violation",
+            "entry_id": e.id,
+            "user_id": e.user_id,
+            "entry_type": e.entry_type,
+            "amount_vnd": e.amount_vnd,
+            "detail": f"Bút toán loại '{e.entry_type}' phải có amount_vnd > 0, nhưng là {e.amount_vnd}",
+        })
+
+    bad_debits = (
+        base_q.filter(
+            WalletLedgerEntry.entry_type.in_(DEBIT_TYPES),
+            WalletLedgerEntry.amount_vnd >= 0,
+        ).all()
+    )
+    for e in bad_debits:
+        violations.append({
+            "type": "sign_violation",
+            "entry_id": e.id,
+            "user_id": e.user_id,
+            "entry_type": e.entry_type,
+            "amount_vnd": e.amount_vnd,
+            "detail": f"Bút toán loại '{e.entry_type}' phải có amount_vnd < 0, nhưng là {e.amount_vnd}",
+        })
+
+    # --- 4. Kiểm tra idempotency_key trùng lặp trong cùng user (phần mềm) ---
+    dup_keys = (
+        db.query(
+            WalletLedgerEntry.user_id,
+            WalletLedgerEntry.idempotency_key,
+            func.count(WalletLedgerEntry.id).label("cnt"),
+        )
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .group_by(WalletLedgerEntry.user_id, WalletLedgerEntry.idempotency_key)
+        .having(func.count(WalletLedgerEntry.id) > 1)
+        .all()
+    )
+    for row in dup_keys:
+        violations.append({
+            "type": "duplicate_idempotency_key",
+            "user_id": row.user_id,
+            "idempotency_key": row.idempotency_key,
+            "count": row.cnt,
+            "detail": (
+                f"Khoá idempotency '{row.idempotency_key}' của user {row.user_id} "
+                f"xuất hiện {row.cnt} lần — vi phạm tính append-only"
+            ),
+        })
+
+    # --- 5. Đếm số tài xế trong phạm vi ---
+    user_count = (
+        db.query(func.count(func.distinct(WalletLedgerEntry.user_id)))
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .scalar()
+    ) or 0
+
+    scope = "all" if user_id is None else f"user:{user_id}"
+
+    return {
+        "scope": scope,
+        "user_count": int(user_count),
+        "total_entries": total_entries,
+        "total_balance_vnd": int(total_balance),
+        "violations": violations,
+        "passed": len(violations) == 0,
+    }
+
