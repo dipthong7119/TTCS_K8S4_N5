@@ -155,7 +155,7 @@ def test_ac3_detects_negative_credit_violation() -> None:
     SQLite enforce CheckConstraint nên không thể insert bản ghi xấu vào DB trực tiếp.
     Test này kiểm tra logic phân loại vi phạm bằng cách patch query trả về object giả.
     """
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     # Tạo entry giả lập vi phạm dấu (không insert vào DB)
     fake_entry = MagicMock(spec=WalletLedgerEntry)
