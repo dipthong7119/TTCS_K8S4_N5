@@ -1,9 +1,9 @@
 """Driver wallet APIs and read-only administrator driver balances."""
 
-import re
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictInt
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,15 +14,15 @@ from app.core.deps import (
     require_role,
 )
 from app.database import get_db
-from app.models.user import Role, User, user_roles
-from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
 from app.services.wallet import (
     create_sandbox_topup_request,
     list_driver_wallet_summaries,
     list_user_payment_transactions,
     list_wallet_entries,
+    manual_topup,
     process_sandbox_webhook,
+    verify_ledger_integrity,
     wallet_totals,
 )
 
@@ -34,61 +34,67 @@ router = APIRouter(
 
 
 class ManualTopUpRequest(BaseModel):
-    amount_vnd: int = Field(ge=10_000, le=10_000_000)
-    receipt_code: str = Field(min_length=3, max_length=80)
-
-    @field_validator("receipt_code")
-    @classmethod
-    def normalize_receipt_code(cls, value: str) -> str:
-        normalized = value.strip().upper()
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{2,79}", normalized):
-            raise ValueError("Mã phiếu chỉ gồm chữ, số, gạch ngang hoặc gạch dưới")
-        return normalized
+    amount: StrictInt
+    receipt_code: str
+    note: str = ""
 
 
-@router.get("", dependencies=[Depends(require_role("driver"))])
-async def get_my_wallet(
+class LegacyManualTopUpRequest(BaseModel):
+    amount_vnd: StrictInt
+    receipt_code: str
+
+
+@router.post(
+    "/admin/wallets/{driver_user_id}/manual-topups",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def manually_top_up_driver(
+    driver_user_id: int,
+    body: ManualTopUpRequest,
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ):
+    try:
+        entry = manual_topup(
+            db=db,
+            admin_user_id=current_user.id,
+            driver_user_id=driver_user_id,
+            amount_vnd=body.amount,
+            receipt_code=body.receipt_code,
+            note=body.note,
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng") from exc
+
+    balance_after = wallet_totals(db, driver_user_id)["balance_vnd"]
     return {
-        "account_id": f"CSMS-{current_user.id:06d}",
-        **wallet_totals(db, current_user.id),
+        "ledger_entry_id": entry.id,
+        "wallet_id": driver_user_id,  # Theo giả định dùng user_id thay wallet_id
+        "amount": entry.amount_vnd,
+        "balance_after": balance_after,
+        "amount_vnd": entry.amount_vnd,
+        "balance_vnd": balance_after,
+        "receipt_code": entry.receipt_code,
     }
 
 
-@router.get("/ledger", dependencies=[Depends(require_role("driver"))])
-async def get_my_wallet_ledger(
-    current_user: CurrentUser,
-    db: Session = Depends(get_db),
-    days: str = Query("30", max_length=10),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=50),
-):
-    day_count = None
-    if days != "all":
-        try:
-            day_count = int(days)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
-        if not 1 <= day_count <= 3650:
-            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
-    return list_wallet_entries(
-        db,
-        current_user.id,
-        days=day_count,
-        page=page,
-        page_size=page_size,
-    )
-
-
-@router.get("/drivers", dependencies=[Depends(require_role("admin", "accountant"))])
+@router.get(
+    "/drivers",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
 async def get_driver_wallets(
     db: Session = Depends(get_db),
     q: str | None = Query(None, max_length=120),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
 ):
+    """List driver balances for the existing administrator screen."""
     return list_driver_wallet_summaries(
         db, query_text=q, page=page, page_size=page_size
     )
@@ -99,60 +105,54 @@ async def get_driver_wallets(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_role("admin"))],
 )
-async def manually_top_up_driver(
+async def legacy_manually_top_up_driver(
     driver_id: int,
-    body: ManualTopUpRequest,
+    body: LegacyManualTopUpRequest,
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    driver = (
-        db.query(User)
-        .join(user_roles, user_roles.c.user_id == User.id)
-        .join(Role, Role.id == user_roles.c.role_id)
-        .filter(User.id == driver_id, Role.name == "driver")
-        .first()
-    )
-    if driver is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
-    if not driver.is_active:
-        raise HTTPException(status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa")
-    if db.query(WalletLedgerEntry.id).filter_by(receipt_code=body.receipt_code).first():
-        raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng")
-
-    entry = WalletLedgerEntry(
-        user_id=driver.id,
-        entry_type="manual_topup",
-        amount_vnd=body.amount_vnd,
-        idempotency_key=f"manual-topup:{body.receipt_code}",
-        receipt_code=body.receipt_code,
-        description="Nạp thủ công theo phiếu thu",
-        actor_id=current_user.id,
-    )
-    db.add(entry)
+    """Keep the endpoint and response shape used by the current admin UI."""
     try:
-        db.flush()
-        append_audit(
-            db,
-            action="wallet.manual_topup",
-            object_type="wallet_ledger",
-            object_id=entry.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
-            details={"driver_id": driver.id, "amount_vnd": body.amount_vnd, "receipt_code": body.receipt_code},
+        entry = manual_topup(
+            db=db,
+            admin_user_id=current_user.id,
+            driver_user_id=driver_id,
+            amount_vnd=body.amount_vnd,
+            receipt_code=body.receipt_code,
         )
         db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng") from exc
 
     return {
         "id": entry.id,
-        "driver_id": driver.id,
+        "driver_id": driver_id,
         "amount_vnd": entry.amount_vnd,
         "receipt_code": entry.receipt_code,
-        "balance_vnd": wallet_totals(db, driver.id)["balance_vnd"],
+        "balance_vnd": wallet_totals(db, driver_id)["balance_vnd"],
     }
+
+
+@router.get(
+    "/admin/wallets/{driver_user_id}/ledger",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def get_admin_wallet_ledger(
+    driver_user_id: int,
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=100),
+):
+    return list_wallet_entries(
+        db,
+        driver_user_id,
+        days=None,
+        page=1,
+        page_size=limit,
+    )
 
 
 class SandboxTopUpRequest(BaseModel):
@@ -341,4 +341,144 @@ async def check_wallet_balance(
         "minimum_required_vnd": min_amount_vnd,
         "has_minimum_balance": balance >= min_amount_vnd,
     }
+
+
+
+@router.get(
+    "/ledger/verify",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def verify_wallet_ledger(
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(None, description="Giới hạn kiểm tra cho 1 user cụ thể (bỏ trống = kiểm tra toàn hệ thống)"),
+) -> dict:
+    """
+    Kiểm tra tính toàn vẹn sổ cái append-only của ví (SCRUM-75).
+
+    - Đảm bảo số dư = SUM(ledger) — nguồn sự thật duy nhất.
+    - Phát hiện vi phạm ràng buộc dấu số (credit phải > 0, debit phải < 0).
+    - Phát hiện idempotency_key trùng lặp trong cùng một tài khoản.
+
+    Chỉ admin hoặc kế toán mới có quyền gọi endpoint này.
+    """
+    return verify_ledger_integrity(db, user_id=user_id)
+
+
+wallets_router = APIRouter(
+    prefix="/wallets",
+    tags=["wallets"],
+    dependencies=[Depends(deny_unannotated_route)],
+)
+
+class WalletTotalsResponse(BaseModel):
+    account_id: str
+    balance_vnd: int
+    total_topup_vnd: int
+    total_spent_vnd: int
+    as_of: datetime
+
+class LedgerItem(BaseModel):
+    entry_id: int
+    created_at: datetime
+    type: str
+    entry_type: str
+    amount_vnd: int
+    balance_after_vnd: int
+    description: str
+    session_id: int | None
+    reference_code: str | None
+
+class LedgerResponse(BaseModel):
+    items: list[LedgerItem]
+    total: int
+    page: int
+    page_size: int
+
+def _check_driver_ownership(current_user: CurrentUser, target_user_id: int):
+    # Dùng chung cho các route kiểm tra quyền sở hữu
+    if current_user.id != target_user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập ví của người khác")
+
+@router.get("", response_model=WalletTotalsResponse, dependencies=[Depends(require_role("driver"))])
+async def get_my_wallet(
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    totals = wallet_totals(db, current_user.id)
+    return {
+        "account_id": f"W-{current_user.id:06d}",
+        **totals,
+        "as_of": datetime.now(UTC),
+    }
+
+@wallets_router.get("/{driver_user_id}", response_model=WalletTotalsResponse, dependencies=[Depends(require_role("driver"))])
+async def get_driver_wallet(
+    driver_user_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    _check_driver_ownership(current_user, driver_user_id)
+    totals = wallet_totals(db, driver_user_id)
+    return {
+        "account_id": f"W-{driver_user_id:06d}",
+        **totals,
+        "as_of": datetime.now(UTC),
+    }
+
+@router.get("/ledger", response_model=LedgerResponse, dependencies=[Depends(require_role("driver"))])
+async def get_my_wallet_ledger(
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: str = Query("all", max_length=10),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1),
+):
+    page_size = min(page_size, 50) # Giới hạn tối đa 50 dòng theo yêu cầu
+        
+    day_count = None
+    if days != "all":
+        try:
+            day_count = int(days)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+        if not 1 <= day_count <= 3650:
+            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            
+    return list_wallet_entries(
+        db,
+        current_user.id,
+        days=day_count,
+        page=page,
+        page_size=page_size,
+    )
+
+@wallets_router.get("/{driver_user_id}/ledger", response_model=LedgerResponse, dependencies=[Depends(require_role("driver"))])
+async def get_driver_wallet_ledger(
+    driver_user_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: str = Query("all", max_length=10),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1),
+):
+    _check_driver_ownership(current_user, driver_user_id)
+    
+    page_size = min(page_size, 50)
+        
+    day_count = None
+    if days != "all":
+        try:
+            day_count = int(days)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+        if not 1 <= day_count <= 3650:
+            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            
+    return list_wallet_entries(
+        db,
+        driver_user_id,
+        days=day_count,
+        page=page,
+        page_size=page_size,
+    )
 

@@ -70,8 +70,19 @@
 }
 
 @keyframes pulse-indicator {
-  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 8px hsl(150, 90%, 50%); }
-  50% { transform: scale(1.3); opacity: 0.75; box-shadow: 0 0 16px hsl(150, 90%, 50%); }
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 8px hsl(150, 90%, 50%);
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 0.75;
+    box-shadow: 0 0 16px hsl(150, 90%, 50%);
+  }
 }
 
 .active-session-banner__tag {
@@ -115,8 +126,15 @@
 }
 
 @keyframes pulse-timer {
-  0% { transform: scale(1); opacity: 0.9; }
-  100% { transform: scale(1.06); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
 }
 
 .active-session-banner__body {
@@ -190,8 +208,17 @@
 }
 
 @keyframes kwhHighlight {
-  0% { transform: scale(1.12); color: hsl(60, 100%, 75%); text-shadow: 0 0 12px hsl(60, 100%, 75%); }
-  100% { transform: scale(1); color: hsl(155, 95%, 65%); text-shadow: none; }
+  0% {
+    transform: scale(1.12);
+    color: hsl(60, 100%, 75%);
+    text-shadow: 0 0 12px hsl(60, 100%, 75%);
+  }
+
+  100% {
+    transform: scale(1);
+    color: hsl(155, 95%, 65%);
+    text-shadow: none;
+  }
 }
 
 .active-unit {
@@ -255,38 +282,86 @@
 }
 
 /* ── Audit and Tables ────────────────────────────────────────────────────── */
-.audit-filters { align-items: end; gap: var(--space-3); margin-bottom: var(--space-4); }
-.audit-filter { display: grid; gap: 6px; min-width: 160px; color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 600; }
-.audit-filter .form-input { min-width: 160px; }
-.audit-pagination { display: flex; align-items: center; justify-content: space-between; }
-.audit-subtext { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: var(--font-size-xs); }
-.audit-nowrap { white-space: nowrap; }
-.audit-details { min-width: 220px; max-width: 420px; overflow-wrap: anywhere; color: var(--color-text-secondary); font-family: monospace; font-size: var(--font-size-xs); }
+.audit-filters {
+  align-items: end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.audit-filter {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.audit-filter .form-input {
+  min-width: 160px;
+}
+
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.audit-subtext {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.audit-nowrap {
+  white-space: nowrap;
+}
+
+.audit-details {
+  min-width: 220px;
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+}
 
 /* ── Mobile Responsive (NFR E-11: 360px & landscape) ─────────────────────── */
 @media (max-width: 720px) {
   .active-session-banner {
     padding: var(--space-4);
   }
+
   .active-session-banner__body {
     flex-direction: column;
     gap: var(--space-3);
   }
+
+  .active-session-banner__info {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
   .active-session-banner__metrics {
     width: 100%;
     justify-content: space-between;
   }
+
   .active-metric-box {
     flex: 1 1 120px;
     text-align: left;
   }
+
   .no-active-session-card {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .no-active-session-card__action {
     width: 100%;
   }
+
   .no-active-session-card__action .btn {
     width: 100%;
     justify-content: center;
@@ -298,16 +373,20 @@
     padding: var(--space-3);
     border-radius: var(--radius-md);
   }
+
   .active-session-banner__location {
     font-size: var(--font-size-base);
   }
+
   .active-session-banner__kwh {
     font-size: var(--font-size-lg);
   }
+
   .active-metric-box {
     padding: var(--space-2) var(--space-3);
     min-width: 100%;
   }
+
   .active-session-banner__actions {
     width: 100%;
     justify-content: flex-start;

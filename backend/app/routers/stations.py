@@ -22,6 +22,7 @@ from app.schemas.station import (
 )
 from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
 from app.services.ownership import filter_by_owner, get_station_for_user
+from app.services.pricing import normalize_daily_bands
 
 router = APIRouter(prefix="/stations", tags=["stations"], dependencies=[Depends(deny_unannotated_route)])
 
@@ -43,6 +44,15 @@ def _tariff_payload(tariff: StationTariff) -> dict:
         "grace_period_minutes": tariff.grace_period_minutes,
         "is_demo": tariff.is_demo,
         "price_vnd_per_kwh": flat_rate,
+        "bands": [
+            {
+                "label": band.label,
+                "start_minute": band.start_minute,
+                "end_minute": band.end_minute,
+                "price_vnd_per_kwh": band.price_vnd_per_kwh,
+            }
+            for band in tariff.bands
+        ],
     }
 
 
@@ -101,6 +111,23 @@ async def create_station_tariff(
             raise HTTPException(status_code=422, detail=str(exc)) from None
         if effective_from < datetime.now(UTC).replace(tzinfo=None):
             raise HTTPException(status_code=422, detail="Thời điểm hiệu lực không được nằm trong quá khứ")
+
+    try:
+        if body.bands is not None:
+            band_data = normalize_daily_bands(body.bands)
+        else:
+            assert body.price_vnd_per_kwh is not None
+            band_data = [
+                {
+                    "label": "Cả ngày",
+                    "start_minute": 0,
+                    "end_minute": 1440,
+                    "price_vnd_per_kwh": body.price_vnd_per_kwh,
+                }
+            ]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
     tariff = StationTariff(
         station_id=station.id,
         name=tariff_name,
@@ -109,17 +136,9 @@ async def create_station_tariff(
         occupancy_fee_vnd_per_minute=body.occupancy_fee_vnd_per_minute,
         grace_period_minutes=body.grace_period_minutes,
         is_demo=False,
+        bands=[TariffBand(**band) for band in band_data],
     )
     db.add(tariff)
-    db.add(
-        TariffBand(
-            tariff=tariff,
-            label="Cả ngày",
-            start_minute=0,
-            end_minute=1440,
-            price_vnd_per_kwh=body.price_vnd_per_kwh,
-        )
-    )
     try:
         db.commit()
     except IntegrityError:

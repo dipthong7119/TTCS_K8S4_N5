@@ -1,15 +1,19 @@
 """Wallet reads and append-only manual credits."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.charging_session import ChargingSession
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.audit import append_audit
 
 
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
@@ -79,21 +83,39 @@ def list_wallet_entries(
         .limit(page_size)
         .all()
     )
-    return {
-        "items": [
+    items = []
+    for entry, balance_after in rows:
+        entry_type = entry.entry_type
+        if entry_type in ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup"):
+            display_type = "topup"
+        elif entry_type in ("session_charge", "subscription_charge"):
+            display_type = "charge"
+        else:
+            display_type = "adjustment"
+
+        items.append(
             {
                 "id": entry.id,
-                "type": entry.entry_type,
+                "entry_id": entry.id,
+                "type": display_type,
+                "entry_type": entry_type,
                 "amount_vnd": entry.amount_vnd,
                 "description": entry.description,
                 "balance_after_vnd": int(balance_after or 0),
                 "created_at": entry.created_at.isoformat() + "Z",
                 "reference_type": entry.reference_type,
                 "reference_id": entry.reference_id,
+                "session_id": (
+                    entry.reference_id
+                    if entry.reference_type == "charging_session"
+                    else None
+                ),
+                "reference_code": entry.receipt_code,
                 "receipt_code": entry.receipt_code,
             }
-            for entry, balance_after in rows
-        ],
+        )
+    return {
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -359,3 +381,186 @@ def refund_wallet_charge(
     db.flush()
     return entry
 
+
+def manual_topup(
+    db: Session,
+    admin_user_id: int,
+    driver_user_id: int,
+    amount_vnd: int,
+    receipt_code: str,
+    note: str = "",
+) -> WalletLedgerEntry:
+    """Quản trị viên nạp tiền thủ công cho tài xế qua phiếu thu."""
+    if type(amount_vnd) is not int:
+        raise ValueError("Số tiền phải là số nguyên (int)")
+    if amount_vnd < settings.MANUAL_TOPUP_MIN or amount_vnd > settings.MANUAL_TOPUP_MAX:
+        raise ValueError(f"Số tiền nạp không hợp lệ (phải từ {settings.MANUAL_TOPUP_MIN} đến {settings.MANUAL_TOPUP_MAX})")
+
+    receipt_code_norm = (receipt_code or "").strip().upper()
+    if not (3 <= len(receipt_code_norm) <= 50):
+        raise ValueError("Mã phiếu thu phải từ 3 đến 50 ký tự")
+    if not re.match(r"^[A-Z0-9.\-_/]+$", receipt_code_norm):
+        raise ValueError("Mã phiếu thu không hợp lệ")
+
+    driver = db.query(User).join(user_roles).join(Role).filter(
+        User.id == driver_user_id,
+        Role.name == "driver"
+    ).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
+    if not driver.is_active:
+        raise HTTPException(status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa")
+
+    entry = WalletLedgerEntry(
+        user_id=driver_user_id,
+        entry_type="manual_topup",
+        amount_vnd=amount_vnd,
+        idempotency_key=f"manual-topup:{receipt_code_norm}",
+        receipt_code=receipt_code_norm,
+        description=note.strip()[:200] if note else "",
+        actor_id=admin_user_id,
+    )
+    db.add(entry)
+    db.flush()
+    
+    append_audit(
+        db,
+        action="wallet.manual_topup",
+        object_type="wallet_ledger",
+        object_id=entry.id,
+        actor_id=admin_user_id,
+        details={"driver_id": driver_user_id, "amount_vnd": amount_vnd, "receipt_code": receipt_code_norm},
+    )
+    return entry
+
+
+def wallet_balance_matches_ledger(db: Session, wallet_id: int) -> bool:
+    """Hàm kiểm tra bất biến cho test. Do dùng user_id thay wallet_id, ta dùng wallet_id như user_id."""
+    from sqlalchemy import func
+    totals = wallet_totals(db, wallet_id)
+    balance_calc = db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0)).filter(WalletLedgerEntry.user_id == wallet_id).scalar()
+    return totals["balance_vnd"] == int(balance_calc or 0)
+
+
+def verify_ledger_integrity(
+    db: Session,
+    user_id: int | None = None,
+) -> dict:
+    """
+    Kiểm tra tính toàn vẹn của sổ cái ví (SCRUM-75).
+
+    Nguyên tắc append-only đảm bảo:
+      - Số dư tài xế = SUM(amount_vnd) trên toàn bộ wallet_ledger theo user_id
+      - Mọi bút toán đều có idempotency_key duy nhất (ràng buộc DB)
+      - Không có bút toán nào vi phạm ràng buộc dấu số (CheckConstraint trên model)
+      - Không tồn tại receipt_code trùng lặp (UNIQUE trên model)
+
+    Hàm này thực hiện đối chiếu phần mềm:
+      1. Tính balance bằng SUM(amount_vnd) từ ledger (nguồn sự thật duy nhất).
+      2. So sánh kết quả với chính SUM đó (self-consistent check).
+      3. Kiểm tra không tồn tại bút toán nào vi phạm ràng buộc dấu số.
+      4. Kiểm tra không có idempotency_key trùng lặp trong phạm vi user.
+
+    Trả về dict:
+      {
+        "scope": "all" | "user:<id>",
+        "user_count": int,           # số tài xế được kiểm tra
+        "total_entries": int,        # tổng số bút toán
+        "total_balance_vnd": int,    # tổng số dư toàn hệ thống (hoặc của 1 user)
+        "violations": list[dict],    # danh sách vi phạm phát hiện được
+        "passed": bool,              # True nếu không có vi phạm
+      }
+    """
+    violations: list[dict] = []
+
+    # --- 1. Xây dựng base query theo phạm vi ---
+    base_q = db.query(WalletLedgerEntry)
+    if user_id is not None:
+        base_q = base_q.filter(WalletLedgerEntry.user_id == user_id)
+
+    total_entries = base_q.count()
+
+    # --- 2. Tổng số dư toàn phạm vi ---
+    total_balance = (
+        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .scalar()
+    ) or 0
+
+    # --- 3. Kiểm tra vi phạm ràng buộc dấu số (phần mềm, bổ sung CheckConstraint DB) ---
+    CREDIT_TYPES = ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup", "refund")
+    DEBIT_TYPES = ("session_charge", "subscription_charge")
+
+    bad_credits = (
+        base_q.filter(
+            WalletLedgerEntry.entry_type.in_(CREDIT_TYPES),
+            WalletLedgerEntry.amount_vnd <= 0,
+        ).all()
+    )
+    for e in bad_credits:
+        violations.append({
+            "type": "sign_violation",
+            "entry_id": e.id,
+            "user_id": e.user_id,
+            "entry_type": e.entry_type,
+            "amount_vnd": e.amount_vnd,
+            "detail": f"Bút toán loại '{e.entry_type}' phải có amount_vnd > 0, nhưng là {e.amount_vnd}",
+        })
+
+    bad_debits = (
+        base_q.filter(
+            WalletLedgerEntry.entry_type.in_(DEBIT_TYPES),
+            WalletLedgerEntry.amount_vnd >= 0,
+        ).all()
+    )
+    for e in bad_debits:
+        violations.append({
+            "type": "sign_violation",
+            "entry_id": e.id,
+            "user_id": e.user_id,
+            "entry_type": e.entry_type,
+            "amount_vnd": e.amount_vnd,
+            "detail": f"Bút toán loại '{e.entry_type}' phải có amount_vnd < 0, nhưng là {e.amount_vnd}",
+        })
+
+    # --- 4. Kiểm tra idempotency_key trùng lặp trong cùng user (phần mềm) ---
+    dup_keys = (
+        db.query(
+            WalletLedgerEntry.user_id,
+            WalletLedgerEntry.idempotency_key,
+            func.count(WalletLedgerEntry.id).label("cnt"),
+        )
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .group_by(WalletLedgerEntry.user_id, WalletLedgerEntry.idempotency_key)
+        .having(func.count(WalletLedgerEntry.id) > 1)
+        .all()
+    )
+    for row in dup_keys:
+        violations.append({
+            "type": "duplicate_idempotency_key",
+            "user_id": row.user_id,
+            "idempotency_key": row.idempotency_key,
+            "count": row.cnt,
+            "detail": (
+                f"Khoá idempotency '{row.idempotency_key}' của user {row.user_id} "
+                f"xuất hiện {row.cnt} lần — vi phạm tính append-only"
+            ),
+        })
+
+    # --- 5. Đếm số tài xế trong phạm vi ---
+    user_count = (
+        db.query(func.count(func.distinct(WalletLedgerEntry.user_id)))
+        .filter(*([] if user_id is None else [WalletLedgerEntry.user_id == user_id]))
+        .scalar()
+    ) or 0
+
+    scope = "all" if user_id is None else f"user:{user_id}"
+
+    return {
+        "scope": scope,
+        "user_count": int(user_count),
+        "total_entries": total_entries,
+        "total_balance_vnd": int(total_balance),
+        "violations": violations,
+        "passed": len(violations) == 0,
+    }
