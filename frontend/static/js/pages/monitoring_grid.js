@@ -239,6 +239,7 @@
 
     return `
       <div class="start-charging-controls">
+      <p class="muted-text">Cắm súng sạc vào xe, chọn đúng đầu nối và nhập mã RFID được cấp để bắt đầu sạc từ ứng dụng.</p>
         <label>
           Chọn đầu nối
           <select class="form-select" data-start-connector>

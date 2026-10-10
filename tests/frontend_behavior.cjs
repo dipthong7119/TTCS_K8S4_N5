@@ -1100,31 +1100,49 @@ test('SCRUM-194: leaving page (pagehide) clears pending timers and aborts in-fli
   assert.equal(page.calls[0][3].signal.aborted, true);
 });
 
-function sessionPage(getSessions) {
+function sessionPage(getSessions, options = {}) {
   const ids = new Map();
   const document = {
     handlers: {},
     getElementById(id) {
-      if (!ids.has(id)) { const el = element(); el.style = {}; ids.set(id, el); }
+      if (!ids.has(id)) {
+        const el = element();
+        el.style = {};
+        ids.set(id, el);
+      }
       return ids.get(id);
     },
     createElement: element,
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
-  document.getElementById('sessions-page').dataset = { scope: 'mine', canRemoteStop: 'false', liveUpdates: 'false' };
+  document.getElementById('sessions-page').dataset = {
+    scope: 'mine',
+    canRemoteStop: 'false',
+    liveUpdates: options.liveUpdates ? 'true' : 'false',
+  };
+
   const calls = [], timers = [], toasts = [];
+  const callbacks = {};
+  const sse = {
+    connect() { },
+    on(name, fn) { callbacks[name] = fn; },
+  };
   const api = {
-    listMySessions: async params => { calls.push(params); return getSessions(); },
-    getCurrentSession: async () => null
+    listMySessions: async params => {
+      calls.push(params);
+      return getSessions();
+    },
+    getCurrentSession: options.currentSession || (async () => null),
   };
   vm.runInContext(read('pages/my_session.js'), vm.createContext({
-    document, window: {}, ApiClient: api,
-    Date, Intl, console, setTimeout, clearTimeout, clearInterval() { },
+    document, window: { SseClient: sse }, SseClient: sse, ApiClient: api,
+    Date: options.clock || Date,
+    Intl, console, setTimeout, clearTimeout, clearInterval() { },
     setInterval: fn => { timers.push(fn); return timers.length; },
     showToast: message => toasts.push(message),
   }));
   document.handlers.DOMContentLoaded();
-  return { document, calls, timers, toasts };
+  return { document, calls, timers, toasts, callbacks };
 }
 
 test('driver session page uses the API and stays empty without fabricated sessions', async () => {
@@ -1340,4 +1358,64 @@ test('reconciliation network failures do not turn sample energy into a successfu
   assert.match(page.html(), /Không thể kết nối đến máy chủ/);
   assert.deepEqual(page.state('allSessions'), []);
   assert.doesNotMatch(page.html(), /CP01|CP_VINCOM/);
+});
+test('SCRUM-94: reconnect refreshes active session energy', async () => {
+  let session = {
+    id: 123,
+    station_name: 'API station',
+    charge_point_code: 'API-01',
+    connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z',
+    status: 'active',
+    live_kwh: 1.234,
+  };
+  const page = sessionPage(
+    async () => ({ items: [session], total: 1 }),
+    { liveUpdates: true }
+  );
+  await flush();
+  assert.match(
+    page.document.getElementById('active-kwh').innerHTML,
+    /1\.234/
+  );
+
+  session = { ...session, live_kwh: 2.345 };
+  page.callbacks._connected();
+  await flush();
+
+  assert.equal(page.calls.length, 2);
+  assert.match(
+    page.document.getElementById('active-kwh').innerHTML,
+    /2\.345/
+  );
+});
+
+test('SCRUM-94: duration displays immediately and advances each second', async () => {
+  let now = Date.parse('2026-10-06T00:01:00Z');
+  class Clock extends Date {
+    static now() { return now; }
+  }
+  const session = {
+    id: 123,
+    station_name: 'API station',
+    charge_point_code: 'API-01',
+    connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z',
+    status: 'active',
+    live_kwh: 1.234,
+  };
+  const page = sessionPage(
+    async () => ({ items: [session], total: 1 }),
+    { clock: Clock }
+  );
+  await flush();
+
+  const duration = page.document.getElementById('active-duration');
+  const initial = duration.textContent;
+  assert.ok(initial && initial.trim());
+  assert.equal(page.timers.length, 1);
+
+  now += 1000;
+  page.timers[0]();
+  assert.notEqual(duration.textContent, initial);
 });
