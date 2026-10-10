@@ -70,6 +70,8 @@ function monitoring(getTree, clock = Date, options = {}) {
     const bind = context.window.RestartButton.bindEvents;
     context.window.RestartButton.bindEvents = (body, bindings) => { resetBindings.push(bindings); bind(body, bindings); };
   }
+  vm.runInContext(read('charge_point_configuration.js'), context);
+  context.ChargePointConfiguration = context.window.ChargePointConfiguration;
   vm.runInContext(read('pages/monitoring_grid.js'), context);
   document.handlers.DOMContentLoaded();
   return {
