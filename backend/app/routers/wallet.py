@@ -283,3 +283,129 @@ async def check_wallet_balance(
         "has_minimum_balance": balance >= min_amount_vnd,
     }
 
+
+
+wallets_router = APIRouter(
+    prefix="/wallets",
+    tags=["wallets"],
+    dependencies=[Depends(deny_unannotated_route)],
+)
+
+from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Optional
+
+class WalletTotalsResponse(BaseModel):
+    account_id: str
+    balance_vnd: int
+    total_topup_vnd: int
+    total_spent_vnd: int
+    as_of: datetime
+
+class LedgerItem(BaseModel):
+    entry_id: int
+    created_at: datetime
+    type: str
+    entry_type: str
+    amount_vnd: int
+    balance_after_vnd: int
+    description: str
+    session_id: Optional[int]
+    reference_code: Optional[str]
+
+class LedgerResponse(BaseModel):
+    items: List[LedgerItem]
+    total: int
+    page: int
+    page_size: int
+
+def _check_driver_ownership(current_user: CurrentUser, target_user_id: int):
+    # Dùng chung cho các route kiểm tra quyền sở hữu
+    if current_user.id != target_user_id:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập ví của người khác")
+
+@router.get("", response_model=WalletTotalsResponse, dependencies=[Depends(require_role("driver"))])
+async def get_my_wallet(
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    totals = wallet_totals(db, current_user.id)
+    return {
+        "account_id": f"W-{current_user.id:06d}",
+        **totals,
+        "as_of": datetime.now(UTC),
+    }
+
+@wallets_router.get("/{driver_user_id}", response_model=WalletTotalsResponse, dependencies=[Depends(require_role("driver"))])
+async def get_driver_wallet(
+    driver_user_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    _check_driver_ownership(current_user, driver_user_id)
+    totals = wallet_totals(db, driver_user_id)
+    return {
+        "account_id": f"W-{driver_user_id:06d}",
+        **totals,
+        "as_of": datetime.now(UTC),
+    }
+
+@router.get("/ledger", response_model=LedgerResponse, dependencies=[Depends(require_role("driver"))])
+async def get_my_wallet_ledger(
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: str = Query("all", max_length=10),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1),
+):
+    if page_size > 50:
+        page_size = 50 # Giới hạn tối đa 50 dòng theo yêu cầu
+        
+    day_count = None
+    if days != "all":
+        try:
+            day_count = int(days)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+        if not 1 <= day_count <= 3650:
+            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            
+    return list_wallet_entries(
+        db,
+        current_user.id,
+        days=day_count,
+        page=page,
+        page_size=page_size,
+    )
+
+@wallets_router.get("/{driver_user_id}/ledger", response_model=LedgerResponse, dependencies=[Depends(require_role("driver"))])
+async def get_driver_wallet_ledger(
+    driver_user_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: str = Query("all", max_length=10),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1),
+):
+    _check_driver_ownership(current_user, driver_user_id)
+    
+    if page_size > 50:
+        page_size = 50
+        
+    day_count = None
+    if days != "all":
+        try:
+            day_count = int(days)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="days phải là số ngày hoặc all") from exc
+        if not 1 <= day_count <= 3650:
+            raise HTTPException(status_code=422, detail="days nằm ngoài khoảng cho phép")
+            
+    return list_wallet_entries(
+        db,
+        driver_user_id,
+        days=day_count,
+        page=page,
+        page_size=page_size,
+    )
+

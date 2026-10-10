@@ -12,32 +12,23 @@ from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 
 
+from sqlalchemy import text
+from datetime import datetime, UTC, timedelta
+
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
-    balance = (
-        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
-        .filter(WalletLedgerEntry.user_id == user_id)
-        .scalar()
-    )
-    topups = (
-        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
-        .filter(
-            WalletLedgerEntry.user_id == user_id,
-            WalletLedgerEntry.amount_vnd > 0,
-        )
-        .scalar()
-    )
-    spent = (
-        db.query(func.coalesce(-func.sum(WalletLedgerEntry.amount_vnd), 0))
-        .filter(
-            WalletLedgerEntry.user_id == user_id,
-            WalletLedgerEntry.amount_vnd < 0,
-        )
-        .scalar()
-    )
+    sql = text('''
+        SELECT 
+            COALESCE(SUM(amount_vnd), 0) as balance_vnd,
+            COALESCE(SUM(CASE WHEN entry_type IN ('manual_topup', 'gateway_topup', 'sandbox_topup') THEN amount_vnd ELSE 0 END), 0) as total_topup_vnd,
+            COALESCE(SUM(CASE WHEN entry_type = 'session_charge' THEN -amount_vnd ELSE 0 END), 0) as total_spent_vnd
+        FROM wallet_ledger
+        WHERE user_id = :user_id
+    ''')
+    row = db.execute(sql, {"user_id": user_id}).fetchone()
     return {
-        "balance_vnd": int(balance or 0),
-        "total_topup_vnd": int(topups or 0),
-        "total_spent_vnd": int(spent or 0),
+        "balance_vnd": int(row.balance_vnd),
+        "total_topup_vnd": int(row.total_topup_vnd),
+        "total_spent_vnd": int(row.total_spent_vnd),
     }
 
 
@@ -49,49 +40,51 @@ def list_wallet_entries(
     page: int,
     page_size: int,
 ) -> dict:
-    balance_at_entry = (
-        db.query(
-            WalletLedgerEntry.id.label("entry_id"),
-            func.sum(WalletLedgerEntry.amount_vnd)
-            .over(
-                partition_by=WalletLedgerEntry.user_id,
-                order_by=(WalletLedgerEntry.created_at, WalletLedgerEntry.id),
-                rows=(None, 0),
-            )
-            .label("balance_after_vnd"),
-        )
-        .filter(WalletLedgerEntry.user_id == user_id)
-        .subquery()
-    )
-    query = (
-        db.query(WalletLedgerEntry, balance_at_entry.c.balance_after_vnd)
-        .join(balance_at_entry, balance_at_entry.c.entry_id == WalletLedgerEntry.id)
-        .filter(WalletLedgerEntry.user_id == user_id)
-    )
+    cutoff_sql = ""
+    params = {"user_id": user_id, "limit": page_size, "offset": (page - 1) * page_size}
     if days is not None:
         cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
-        query = query.filter(WalletLedgerEntry.created_at >= cutoff)
+        cutoff_sql = " AND created_at >= :cutoff"
+        params["cutoff"] = cutoff.strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    total = query.count()
-    rows = (
-        query.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return {
-        "items": [
-            {
-                "id": entry.id,
-                "type": entry.entry_type,
-                "amount_vnd": entry.amount_vnd,
-                "description": entry.description,
-                "balance_after_vnd": int(balance_after or 0),
-                "created_at": entry.created_at.isoformat() + "Z",
-                "reference_type": entry.reference_type,
-                "reference_id": entry.reference_id,
-                "receipt_code": entry.receipt_code,
-            }
+    count_sql = text(f"SELECT COUNT(*) FROM wallet_ledger WHERE user_id = :user_id{cutoff_sql}")
+    total = db.execute(count_sql, params).scalar()
+
+    query_sql = text(f'''
+        SELECT * FROM (
+            SELECT 
+                id, entry_type, amount_vnd, description, reference_type, reference_id, receipt_code, created_at,
+                SUM(amount_vnd) OVER (ORDER BY created_at, id) as balance_after_vnd
+            FROM wallet_ledger
+            WHERE user_id = :user_id
+        ) sub
+        WHERE 1=1 {cutoff_sql.replace('created_at', 'sub.created_at')}
+        ORDER BY sub.created_at DESC, sub.id DESC
+        LIMIT :limit OFFSET :offset
+    ''')
+    rows = db.execute(query_sql, params).fetchall()
+    items = []
+    for row in rows:
+        t_type = "adjustment"
+        if row.entry_type in ("manual_topup", "gateway_topup", "sandbox_topup"):
+            t_type = "topup"
+        elif row.entry_type == "session_charge":
+            t_type = "charge"
+        
+        created_at_dt = datetime.strptime(row.created_at, "%Y-%m-%d %H:%M:%S.%f") if isinstance(row.created_at, str) else row.created_at
+        created_at_iso = created_at_dt.isoformat() + "Z"
+        items.append({
+            "entry_id": row.id,
+            "type": t_type,
+            "entry_type": row.entry_type,
+            "amount_vnd": row.amount_vnd,
+            "balance_after_vnd": int(row.balance_after_vnd or 0),
+            "description": row.description,
+            "session_id": row.reference_id if row.reference_type == "charging_session" else None,
+            "reference_code": row.receipt_code,
+            "created_at": created_at_iso,
+        })
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
             for entry, balance_after in rows
         ],
         "total": total,
