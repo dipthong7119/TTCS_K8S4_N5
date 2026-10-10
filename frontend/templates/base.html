@@ -46,7 +46,7 @@
     <nav class="sidebar__nav" aria-label="Menu">
       <div class="sidebar__section-label">Tổng quan</div>
 
-      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'station_owner' in current_user.roles %}
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'station_owner' in current_user.roles or 'driver' in current_user.roles %}
       <a href="/monitoring" id="nav-monitoring"
          class="sidebar__link {% if active_page == 'monitoring' %}is-active{% endif %}"
          aria-current="{% if active_page == 'monitoring' %}page{% endif %}">
@@ -54,7 +54,7 @@
           <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
           <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
         </svg>
-        Giám sát thời gian thực
+        {% if 'driver' in current_user.roles and 'admin' not in current_user.roles and 'operator' not in current_user.roles and 'station_owner' not in current_user.roles %}Bắt đầu sạc{% else %}Giám sát thời gian thực{% endif %}
       </a>
       {% endif %}
 

@@ -1186,22 +1186,29 @@ function reconciliationPage(tree = inventoryTree, options = {}) {
   };
   const requests = [], downloads = [];
   const context = vm.createContext({
-    document, console, Date, downloads,
+    document, console, Date, downloads, URLSearchParams,
+    window: { location: { pathname: '/sessions/kwh-reconciliation', search: '', replace() { } } },
     fetch: async url => {
       requests.push(url);
       if (url === '/api/reconciliation/kwh') {
+        if (options.apiNetworkFailure) throw new Error('Network unavailable');
         return {
           ok: Boolean(options.report), status: options.apiStatus ?? (options.report ? 200 : 404),
-          json: async () => options.report
+          headers: { get: () => 'application/json' },
+          json: async () => options.report ?? { detail: 'Không có quyền truy cập' }
         };
       }
       if (url === '/static/data/kwh_reconciliation_sample.json') {
         return { ok: true, json: async () => structuredClone(options.sample ?? reconciliationSample) };
       }
       assert.equal(url, '/api/monitoring/tree');
-      return { ok: !options.inventoryFailure, json: async () => structuredClone(tree) };
+      return {
+        ok: !options.inventoryFailure, status: options.inventoryFailure ? 503 : 200,
+        headers: { get: () => 'application/json' }, json: async () => structuredClone(tree)
+      };
     },
   });
+  vm.runInContext(read('api_client.js'), context);
   vm.runInContext(read('pages/kwh_reconciliation.js'), context);
   vm.runInContext('downloadText = (text, filename, mime) => downloads.push({ text, filename, mime });', context);
   document.handlers.DOMContentLoaded();
@@ -1322,6 +1329,15 @@ test('reconciliation authorization failures do not fall back to sample data', as
   const page = reconciliationPage(inventoryTree, { apiStatus: 403 });
   await flush();
   assert.equal(page.requests.length, 1);
-  assert.match(page.html(), /đăng nhập lại/);
+  assert.match(page.html(), /Không có quyền truy cập/);
   assert.deepEqual(page.state('allSessions'), []);
+});
+
+test('reconciliation network failures do not turn sample energy into a successful report', async () => {
+  const page = reconciliationPage(inventoryTree, { apiNetworkFailure: true });
+  await flush();
+  assert.equal(page.requests.length, 1);
+  assert.match(page.html(), /Không thể kết nối đến máy chủ/);
+  assert.deepEqual(page.state('allSessions'), []);
+  assert.doesNotMatch(page.html(), /CP01|CP_VINCOM/);
 });

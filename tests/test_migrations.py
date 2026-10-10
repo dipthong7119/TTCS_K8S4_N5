@@ -10,10 +10,17 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from alembic import command
 from app.config import settings
 from app.core.security import verify_password
+from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.wallet import (
+    create_sandbox_topup_request,
+    process_sandbox_webhook,
+    wallet_totals,
+)
 
 
 @pytest.fixture
@@ -131,6 +138,38 @@ def test_meter_review_migration_preserves_existing_sessions(migrated_database):
             "SELECT meter_start_wh FROM charging_sessions WHERE charge_point_code = 'MIGRATION-TEST'"
         )).scalar_one() == 12500
     command.upgrade(config, "head")
+
+
+def test_migrated_wallet_accepts_sandbox_topup_once_and_refund(migrated_database):
+    """Exercise the real migrated constraint rather than metadata.create_all."""
+    _, engine = migrated_database
+    with Session(engine) as db:
+        user_id = db.execute(text("SELECT id FROM users WHERE email = 'driver@csms.local'")).scalar_one()
+        original_balance = wallet_totals(db, user_id)["balance_vnd"]
+        transaction = create_sandbox_topup_request(db, user_id, 50_000)
+        order_code = transaction.order_code
+        db.commit()
+        for _ in range(2):
+            transaction, entry = process_sandbox_webhook(db, order_code, "success")
+            assert transaction is not None and entry is not None
+            db.commit()
+        assert wallet_totals(db, user_id)["balance_vnd"] == original_balance + 50_000
+        assert db.query(WalletLedgerEntry).filter_by(
+            idempotency_key=f"sandbox-topup:{order_code}"
+        ).count() == 1
+        db.add(WalletLedgerEntry(
+            user_id=user_id, entry_type="refund", amount_vnd=1_000,
+            idempotency_key="migration-test-refund", description="Migration test refund",
+        ))
+        db.commit()
+        assert wallet_totals(db, user_id)["balance_vnd"] == original_balance + 51_000
+        db.add(WalletLedgerEntry(
+            user_id=user_id, entry_type="sandbox_topup", amount_vnd=-1_000,
+            idempotency_key="migration-test-invalid-topup", description="Invalid topup",
+        ))
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
 
 
 def test_postgres_version_table_holds_all_revision_ids(migrated_database):
