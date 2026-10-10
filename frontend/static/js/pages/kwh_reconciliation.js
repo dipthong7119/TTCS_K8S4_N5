@@ -82,7 +82,7 @@ async function loadData() {
         }
       }
     } catch (apiErr) {
-      if (apiErr.status === 404 || apiErr.status === 0) {
+      if (apiErr.status === 404) {
         const sample = await fetch(MOCK_ENDPOINT, { cache: 'no-store' });
         if (!sample.ok) throw new Error('Không thể tải dữ liệu đối chiếu mẫu.');
         data = await sample.json();
