@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from websockets.typing import Subprotocol
@@ -123,7 +124,7 @@ class SimpleSimulator:
             "HeartbeatInterval": 10,
             "MeterValueSampleInterval": 30,
         }
-        self._active_transactions = {}
+        self._active_transactions: dict[int, dict[str, Any]] = {}
         self._pending_calls: dict[str, asyncio.Future] = {}
         self._receiver_task: asyncio.Task | None = None
         self._reboot_requested = False
