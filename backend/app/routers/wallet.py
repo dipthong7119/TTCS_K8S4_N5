@@ -23,6 +23,7 @@ from app.services.wallet import (
     list_user_payment_transactions,
     list_wallet_entries,
     process_sandbox_webhook,
+    verify_ledger_integrity,
     wallet_totals,
 )
 
@@ -342,3 +343,22 @@ async def check_wallet_balance(
         "has_minimum_balance": balance >= min_amount_vnd,
     }
 
+
+@router.get(
+    "/ledger/verify",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def verify_wallet_ledger(
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(None, description="Giới hạn kiểm tra cho 1 user cụ thể (bỏ trống = kiểm tra toàn hệ thống)"),
+) -> dict:
+    """
+    Kiểm tra tính toàn vẹn sổ cái append-only của ví (SCRUM-75).
+
+    - Đảm bảo số dư = SUM(ledger) — nguồn sự thật duy nhất.
+    - Phát hiện vi phạm ràng buộc dấu số (credit phải > 0, debit phải < 0).
+    - Phát hiện idempotency_key trùng lặp trong cùng một tài khoản.
+
+    Chỉ admin hoặc kế toán mới có quyền gọi endpoint này.
+    """
+    return verify_ledger_integrity(db, user_id=user_id)
