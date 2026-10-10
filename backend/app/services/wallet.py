@@ -1,15 +1,19 @@
 """Wallet reads and append-only manual credits."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.charging_session import ChargingSession
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.audit import append_audit
 
 
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
@@ -79,21 +83,39 @@ def list_wallet_entries(
         .limit(page_size)
         .all()
     )
-    return {
-        "items": [
+    items = []
+    for entry, balance_after in rows:
+        entry_type = entry.entry_type
+        if entry_type in ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup"):
+            display_type = "topup"
+        elif entry_type in ("session_charge", "subscription_charge"):
+            display_type = "charge"
+        else:
+            display_type = "adjustment"
+
+        items.append(
             {
                 "id": entry.id,
-                "type": entry.entry_type,
+                "entry_id": entry.id,
+                "type": display_type,
+                "entry_type": entry_type,
                 "amount_vnd": entry.amount_vnd,
                 "description": entry.description,
                 "balance_after_vnd": int(balance_after or 0),
                 "created_at": entry.created_at.isoformat() + "Z",
                 "reference_type": entry.reference_type,
                 "reference_id": entry.reference_id,
+                "session_id": (
+                    entry.reference_id
+                    if entry.reference_type == "charging_session"
+                    else None
+                ),
+                "reference_code": entry.receipt_code,
                 "receipt_code": entry.receipt_code,
             }
-            for entry, balance_after in rows
-        ],
+        )
+    return {
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -360,9 +382,65 @@ def refund_wallet_charge(
     return entry
 
 
-# ---------------------------------------------------------------------------
-# SCRUM-75 — Sổ cái chỉ ghi thêm: kiểm tra tính toàn vẹn
-# ---------------------------------------------------------------------------
+def manual_topup(
+    db: Session,
+    admin_user_id: int,
+    driver_user_id: int,
+    amount_vnd: int,
+    receipt_code: str,
+    note: str = "",
+) -> WalletLedgerEntry:
+    """Quản trị viên nạp tiền thủ công cho tài xế qua phiếu thu."""
+    if type(amount_vnd) is not int:
+        raise ValueError("Số tiền phải là số nguyên (int)")
+    if amount_vnd < settings.MANUAL_TOPUP_MIN or amount_vnd > settings.MANUAL_TOPUP_MAX:
+        raise ValueError(f"Số tiền nạp không hợp lệ (phải từ {settings.MANUAL_TOPUP_MIN} đến {settings.MANUAL_TOPUP_MAX})")
+
+    receipt_code_norm = (receipt_code or "").strip().upper()
+    if not (3 <= len(receipt_code_norm) <= 50):
+        raise ValueError("Mã phiếu thu phải từ 3 đến 50 ký tự")
+    if not re.match(r"^[A-Z0-9.\-_/]+$", receipt_code_norm):
+        raise ValueError("Mã phiếu thu không hợp lệ")
+
+    driver = db.query(User).join(user_roles).join(Role).filter(
+        User.id == driver_user_id,
+        Role.name == "driver"
+    ).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
+    if not driver.is_active:
+        raise HTTPException(status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa")
+
+    entry = WalletLedgerEntry(
+        user_id=driver_user_id,
+        entry_type="manual_topup",
+        amount_vnd=amount_vnd,
+        idempotency_key=f"manual-topup:{receipt_code_norm}",
+        receipt_code=receipt_code_norm,
+        description=note.strip()[:200] if note else "",
+        actor_id=admin_user_id,
+    )
+    db.add(entry)
+    db.flush()
+    
+    append_audit(
+        db,
+        action="wallet.manual_topup",
+        object_type="wallet_ledger",
+        object_id=entry.id,
+        actor_id=admin_user_id,
+        details={"driver_id": driver_user_id, "amount_vnd": amount_vnd, "receipt_code": receipt_code_norm},
+    )
+    return entry
+
+
+def wallet_balance_matches_ledger(db: Session, wallet_id: int) -> bool:
+    """Hàm kiểm tra bất biến cho test. Do dùng user_id thay wallet_id, ta dùng wallet_id như user_id."""
+    from sqlalchemy import func
+    totals = wallet_totals(db, wallet_id)
+    balance_calc = db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0)).filter(WalletLedgerEntry.user_id == wallet_id).scalar()
+    return totals["balance_vnd"] == int(balance_calc or 0)
+
 
 def verify_ledger_integrity(
     db: Session,
@@ -410,8 +488,8 @@ def verify_ledger_integrity(
     ) or 0
 
     # --- 3. Kiểm tra vi phạm ràng buộc dấu số (phần mềm, bổ sung CheckConstraint DB) ---
-    CREDIT_TYPES = ("manual_topup", "demo_topup", "sandbox_topup", "refund")
-    DEBIT_TYPES = ("session_charge",)
+    CREDIT_TYPES = ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup", "refund")
+    DEBIT_TYPES = ("session_charge", "subscription_charge")
 
     bad_credits = (
         base_q.filter(
@@ -486,4 +564,3 @@ def verify_ledger_integrity(
         "violations": violations,
         "passed": len(violations) == 0,
     }
-
