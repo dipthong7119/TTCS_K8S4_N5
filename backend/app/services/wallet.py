@@ -359,3 +359,68 @@ def refund_wallet_charge(
     db.flush()
     return entry
 
+
+def manual_topup(
+    db: Session,
+    admin_user_id: int,
+    driver_user_id: int,
+    amount_vnd: int,
+    receipt_code: str,
+    note: str = ""
+) -> WalletLedgerEntry:
+    """Quản trị viên nạp tiền thủ công cho tài xế qua phiếu thu."""
+    import re
+    from fastapi import HTTPException
+    from app.config import settings
+    from app.services.audit import append_audit
+    from sqlalchemy import func
+    
+    if type(amount_vnd) is not int or type(amount_vnd) is float:
+        raise ValueError("Số tiền phải là số nguyên (int)")
+    if amount_vnd < settings.MANUAL_TOPUP_MIN or amount_vnd > settings.MANUAL_TOPUP_MAX:
+        raise ValueError(f"Số tiền nạp không hợp lệ (phải từ {settings.MANUAL_TOPUP_MIN} đến {settings.MANUAL_TOPUP_MAX})")
+
+    receipt_code_norm = (receipt_code or "").strip().upper()
+    if not (3 <= len(receipt_code_norm) <= 50):
+        raise ValueError("Mã phiếu thu phải từ 3 đến 50 ký tự")
+    if not re.match(r"^[A-Z0-9.\-_/]+$", receipt_code_norm):
+        raise ValueError("Mã phiếu thu không hợp lệ")
+
+    driver = db.query(User).join(user_roles).join(Role).filter(
+        User.id == driver_user_id,
+        Role.name == "driver"
+    ).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
+    if not driver.is_active:
+        raise HTTPException(status_code=409, detail="Không thể nạp ví cho tài khoản đã khóa")
+
+    entry = WalletLedgerEntry(
+        user_id=driver_user_id,
+        entry_type="manual_topup",
+        amount_vnd=amount_vnd,
+        idempotency_key=f"manual-topup:{receipt_code_norm}",
+        receipt_code=receipt_code_norm,
+        description=note.strip()[:200] if note else "",
+        actor_id=admin_user_id,
+    )
+    db.add(entry)
+    db.flush()
+    
+    append_audit(
+        db,
+        action="wallet.manual_topup",
+        object_type="wallet_ledger",
+        object_id=entry.id,
+        actor_id=admin_user_id,
+        details={"driver_id": driver_user_id, "amount_vnd": amount_vnd, "receipt_code": receipt_code_norm},
+    )
+    return entry
+
+
+def wallet_balance_matches_ledger(db: Session, wallet_id: int) -> bool:
+    """Hàm kiểm tra bất biến cho test. Do dùng user_id thay wallet_id, ta dùng wallet_id như user_id."""
+    from sqlalchemy import func
+    totals = wallet_totals(db, wallet_id)
+    balance_calc = db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0)).filter(WalletLedgerEntry.user_id == wallet_id).scalar()
+    return totals["balance_vnd"] == int(balance_calc or 0)
