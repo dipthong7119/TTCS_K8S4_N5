@@ -1,14 +1,14 @@
 """Tests for manual topup."""
 
 import asyncio
-import re
-from typing import Generator
+from collections.abc import Generator
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import get_current_user
 from app.database import Base, get_db
@@ -55,6 +55,7 @@ def setup_database() -> Generator[None, None, None]:
     driver_user = User(
         id=10, email="driver@demo.vn", password_hash="hashed", full_name="Driver", is_active=True
     )
+    driver_user.roles.append(role_driver)
     db.add_all([driver_user, role_driver])
     db.commit()
     
@@ -113,6 +114,21 @@ def test_ac1_manual_topup_success() -> None:
     entries = db.query(WalletLedgerEntry).filter_by(user_id=10).all()
     assert len(entries) == 2
     db.close()
+
+
+def test_existing_admin_driver_wallet_routes_remain_compatible() -> None:
+    """The current admin UI still uses the original list and top-up routes."""
+    listing = client.get("/api/wallet/drivers?q=Driver")
+    assert listing.status_code == 200
+    assert listing.json()["items"][0]["id"] == 10
+
+    response = client.post(
+        "/api/wallet/drivers/10/topups",
+        json={"amount_vnd": 50_000, "receipt_code": "UI-PT-001"},
+    )
+    assert response.status_code == 201
+    assert response.json()["amount_vnd"] == 50_000
+    assert response.json()["balance_vnd"] == 50_000
 
 
 def test_ac2_duplicate_receipt_code() -> None:
@@ -220,7 +236,7 @@ def test_ac5_audit_log_created() -> None:
 @pytest.mark.asyncio
 async def test_ac6_concurrent_topups() -> None:
     """AC6: nạp tay đồng thời"""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
     
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         req1 = ac.post("/api/wallet/admin/wallets/10/manual-topups", json={"amount": 100000, "receipt_code": "CONCUR-1"})

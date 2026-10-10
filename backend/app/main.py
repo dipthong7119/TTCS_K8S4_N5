@@ -31,7 +31,8 @@ from app.routers.remote import router as remote_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
 from app.routers.subscriptions import router as subscriptions_router
-from app.routers.wallet import router as wallet_router, wallets_router
+from app.routers.wallet import router as wallet_router
+from app.routers.wallet import wallets_router
 
 logger = logging.getLogger(__name__)
 

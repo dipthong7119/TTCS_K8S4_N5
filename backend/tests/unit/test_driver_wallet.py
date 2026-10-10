@@ -1,11 +1,11 @@
 """Tests for driver wallet read endpoints."""
 
-import asyncio
-from datetime import datetime, UTC, timedelta
-from typing import Generator
+from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,7 +14,6 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.user import Role, User
 from app.models.wallet_ledger import WalletLedgerEntry
-from app.services.wallet import wallet_totals
 
 engine_test = create_engine(
     "sqlite:///:memory:",
@@ -31,6 +30,11 @@ def override_get_db() -> Generator[Session, None, None]:
         db.close()
 
 client = TestClient(app)
+
+
+class ReadOnlyViolationError(RuntimeError):
+    """Raised when a wallet read endpoint attempts a database write."""
+
 
 class MockRole:
     def __init__(self, name: str) -> None:
@@ -53,6 +57,9 @@ def setup_database() -> Generator[None, None, None]:
     driver_a = User(id=10, email="driverA@demo.vn", password_hash="hashed", full_name="Driver A", is_active=True)
     driver_b = User(id=11, email="driverB@demo.vn", password_hash="hashed", full_name="Driver B", is_active=True)
     driver_no_wallet = User(id=12, email="driverC@demo.vn", password_hash="hashed", full_name="Driver C", is_active=True)
+    driver_a.roles.append(role_driver)
+    driver_b.roles.append(role_driver)
+    driver_no_wallet.roles.append(role_driver)
     db.add_all([driver_a, driver_b, driver_no_wallet, role_driver, role_admin])
     db.commit()
 
@@ -82,7 +89,7 @@ def setup_database() -> Generator[None, None, None]:
     # Driver B có 1 dòng (ví âm)
     entries.append(WalletLedgerEntry(
         user_id=11,
-        entry_type="adjustment",
+        entry_type="session_charge",
         amount_vnd=-5000,
         description="Nợ",
         created_at=base_time,
@@ -216,7 +223,7 @@ def test_no_writes(monkeypatch) -> None:
     def mock_execute(statement, *args, **kwargs):
         sql_str = str(statement).upper()
         if any(kw in sql_str for kw in ["INSERT", "UPDATE", "DELETE"]):
-            raise Exception("Read-only violation!")
+            raise ReadOnlyViolationError("Read-only violation!")
         return original_execute(statement, *args, **kwargs)
     
     monkeypatch.setattr(db, "execute", mock_execute)

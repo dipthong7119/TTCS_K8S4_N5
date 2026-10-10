@@ -1,34 +1,47 @@
 """Wallet reads and append-only manual credits."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.charging_session import ChargingSession
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.audit import append_audit
 
-
-from sqlalchemy import text
-from datetime import datetime, UTC, timedelta
 
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
-    sql = text('''
-        SELECT 
-            COALESCE(SUM(amount_vnd), 0) as balance_vnd,
-            COALESCE(SUM(CASE WHEN entry_type IN ('manual_topup', 'gateway_topup', 'sandbox_topup') THEN amount_vnd ELSE 0 END), 0) as total_topup_vnd,
-            COALESCE(SUM(CASE WHEN entry_type = 'session_charge' THEN -amount_vnd ELSE 0 END), 0) as total_spent_vnd
-        FROM wallet_ledger
-        WHERE user_id = :user_id
-    ''')
-    row = db.execute(sql, {"user_id": user_id}).fetchone()
+    balance = (
+        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
+        .filter(WalletLedgerEntry.user_id == user_id)
+        .scalar()
+    )
+    topups = (
+        db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
+        .filter(
+            WalletLedgerEntry.user_id == user_id,
+            WalletLedgerEntry.amount_vnd > 0,
+        )
+        .scalar()
+    )
+    spent = (
+        db.query(func.coalesce(-func.sum(WalletLedgerEntry.amount_vnd), 0))
+        .filter(
+            WalletLedgerEntry.user_id == user_id,
+            WalletLedgerEntry.amount_vnd < 0,
+        )
+        .scalar()
+    )
     return {
-        "balance_vnd": int(row.balance_vnd),
-        "total_topup_vnd": int(row.total_topup_vnd),
-        "total_spent_vnd": int(row.total_spent_vnd),
+        "balance_vnd": int(balance or 0),
+        "total_topup_vnd": int(topups or 0),
+        "total_spent_vnd": int(spent or 0),
     }
 
 
@@ -40,53 +53,69 @@ def list_wallet_entries(
     page: int,
     page_size: int,
 ) -> dict:
-    cutoff_sql = ""
-    params = {"user_id": user_id, "limit": page_size, "offset": (page - 1) * page_size}
+    balance_at_entry = (
+        db.query(
+            WalletLedgerEntry.id.label("entry_id"),
+            func.sum(WalletLedgerEntry.amount_vnd)
+            .over(
+                partition_by=WalletLedgerEntry.user_id,
+                order_by=(WalletLedgerEntry.created_at, WalletLedgerEntry.id),
+                rows=(None, 0),
+            )
+            .label("balance_after_vnd"),
+        )
+        .filter(WalletLedgerEntry.user_id == user_id)
+        .subquery()
+    )
+    query = (
+        db.query(WalletLedgerEntry, balance_at_entry.c.balance_after_vnd)
+        .join(balance_at_entry, balance_at_entry.c.entry_id == WalletLedgerEntry.id)
+        .filter(WalletLedgerEntry.user_id == user_id)
+    )
     if days is not None:
         cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
-        cutoff_sql = " AND created_at >= :cutoff"
-        params["cutoff"] = cutoff.strftime("%Y-%m-%d %H:%M:%S.%f")
+        query = query.filter(WalletLedgerEntry.created_at >= cutoff)
 
-    count_sql = text(f"SELECT COUNT(*) FROM wallet_ledger WHERE user_id = :user_id{cutoff_sql}")
-    total = db.execute(count_sql, params).scalar()
-
-    query_sql = text(f'''
-        SELECT * FROM (
-            SELECT 
-                id, entry_type, amount_vnd, description, reference_type, reference_id, receipt_code, created_at,
-                SUM(amount_vnd) OVER (ORDER BY created_at, id) as balance_after_vnd
-            FROM wallet_ledger
-            WHERE user_id = :user_id
-        ) sub
-        WHERE 1=1 {cutoff_sql.replace('created_at', 'sub.created_at')}
-        ORDER BY sub.created_at DESC, sub.id DESC
-        LIMIT :limit OFFSET :offset
-    ''')
-    rows = db.execute(query_sql, params).fetchall()
+    total = query.count()
+    rows = (
+        query.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     items = []
-    for row in rows:
-        t_type = "adjustment"
-        if row.entry_type in ("manual_topup", "gateway_topup", "sandbox_topup"):
-            t_type = "topup"
-        elif row.entry_type == "session_charge":
-            t_type = "charge"
-        
-        created_at_dt = datetime.strptime(row.created_at, "%Y-%m-%d %H:%M:%S.%f") if isinstance(row.created_at, str) else row.created_at
-        created_at_iso = created_at_dt.isoformat() + "Z"
-        items.append({
-            "entry_id": row.id,
-            "type": t_type,
-            "entry_type": row.entry_type,
-            "amount_vnd": row.amount_vnd,
-            "balance_after_vnd": int(row.balance_after_vnd or 0),
-            "description": row.description,
-            "session_id": row.reference_id if row.reference_type == "charging_session" else None,
-            "reference_code": row.receipt_code,
-            "created_at": created_at_iso,
-        })
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
-            for entry, balance_after in rows
-        ],
+    for entry, balance_after in rows:
+        entry_type = entry.entry_type
+        if entry_type in ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup"):
+            display_type = "topup"
+        elif entry_type in ("session_charge", "subscription_charge"):
+            display_type = "charge"
+        else:
+            display_type = "adjustment"
+
+        items.append(
+            {
+                "id": entry.id,
+                "entry_id": entry.id,
+                "type": display_type,
+                "entry_type": entry_type,
+                "amount_vnd": entry.amount_vnd,
+                "description": entry.description,
+                "balance_after_vnd": int(balance_after or 0),
+                "created_at": entry.created_at.isoformat() + "Z",
+                "reference_type": entry.reference_type,
+                "reference_id": entry.reference_id,
+                "session_id": (
+                    entry.reference_id
+                    if entry.reference_type == "charging_session"
+                    else None
+                ),
+                "reference_code": entry.receipt_code,
+                "receipt_code": entry.receipt_code,
+            }
+        )
+    return {
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -359,16 +388,10 @@ def manual_topup(
     driver_user_id: int,
     amount_vnd: int,
     receipt_code: str,
-    note: str = ""
+    note: str = "",
 ) -> WalletLedgerEntry:
     """Quản trị viên nạp tiền thủ công cho tài xế qua phiếu thu."""
-    import re
-    from fastapi import HTTPException
-    from app.config import settings
-    from app.services.audit import append_audit
-    from sqlalchemy import func
-    
-    if type(amount_vnd) is not int or type(amount_vnd) is float:
+    if type(amount_vnd) is not int:
         raise ValueError("Số tiền phải là số nguyên (int)")
     if amount_vnd < settings.MANUAL_TOPUP_MIN or amount_vnd > settings.MANUAL_TOPUP_MAX:
         raise ValueError(f"Số tiền nạp không hợp lệ (phải từ {settings.MANUAL_TOPUP_MIN} đến {settings.MANUAL_TOPUP_MAX})")

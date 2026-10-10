@@ -1,40 +1,66 @@
-"""manual_topup_trigger
+"""Protect wallet ledger rows from updates and deletes."""
 
-Revision ID: 6a9fa9862b72
-Revises: e97a880b36e9
-Create Date: 2026-10-10 15:01:38.046716
-
-"""
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
-revision: str = '6a9fa9862b72'
-down_revision: Union[str, None] = 'e97a880b36e9'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "6a9fa9862b72"
+down_revision: str | None = "h20261010_monthly_subscriptions"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
 
 def upgrade() -> None:
-    # Trigger SQLite chặn UPDATE và DELETE trên wallet_ledger
-    op.execute("""
-    CREATE TRIGGER IF NOT EXISTS prevent_wallet_ledger_update
-    BEFORE UPDATE ON wallet_ledger
-    BEGIN
-        SELECT RAISE(ABORT, 'wallet_ledger is append-only, UPDATE is not allowed');
-    END;
-    """)
-    
-    op.execute("""
-    CREATE TRIGGER IF NOT EXISTS prevent_wallet_ledger_delete
-    BEFORE DELETE ON wallet_ledger
-    BEGIN
-        SELECT RAISE(ABORT, 'wallet_ledger is append-only, DELETE is not allowed');
-    END;
-    """)
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS prevent_wallet_ledger_update
+            BEFORE UPDATE ON wallet_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'wallet_ledger is append-only, UPDATE is not allowed');
+            END;
+            """
+        )
+        op.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS prevent_wallet_ledger_delete
+            BEFORE DELETE ON wallet_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'wallet_ledger is append-only, DELETE is not allowed');
+            END;
+            """
+        )
+    elif op.get_bind().dialect.name == "postgresql":
+        op.execute(
+            """
+            CREATE OR REPLACE FUNCTION prevent_wallet_ledger_mutation()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'wallet_ledger is append-only, UPDATE and DELETE are not allowed';
+                RETURN OLD;
+            END;
+            $$ LANGUAGE plpgsql;
+            """
+        )
+        op.execute(
+            "DROP TRIGGER IF EXISTS prevent_wallet_ledger_mutation ON wallet_ledger;"
+        )
+        op.execute(
+            """
+            CREATE TRIGGER prevent_wallet_ledger_mutation
+            BEFORE UPDATE OR DELETE ON wallet_ledger
+            FOR EACH ROW EXECUTE FUNCTION prevent_wallet_ledger_mutation();
+            """
+        )
+
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS prevent_wallet_ledger_update;")
-    op.execute("DROP TRIGGER IF EXISTS prevent_wallet_ledger_delete;")
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute("DROP TRIGGER IF EXISTS prevent_wallet_ledger_update;")
+        op.execute("DROP TRIGGER IF EXISTS prevent_wallet_ledger_delete;")
+    elif op.get_bind().dialect.name == "postgresql":
+        op.execute(
+            "DROP TRIGGER IF EXISTS prevent_wallet_ledger_mutation ON wallet_ledger;"
+        )
+        op.execute("DROP FUNCTION IF EXISTS prevent_wallet_ledger_mutation();")

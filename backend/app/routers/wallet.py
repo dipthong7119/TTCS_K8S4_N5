@@ -1,9 +1,9 @@
 """Driver wallet APIs and read-only administrator driver balances."""
 
-import re
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictInt
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,14 +14,13 @@ from app.core.deps import (
     require_role,
 )
 from app.database import get_db
-from app.models.user import Role, User, user_roles
-from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
 from app.services.wallet import (
     create_sandbox_topup_request,
     list_driver_wallet_summaries,
     list_user_payment_transactions,
     list_wallet_entries,
+    manual_topup,
     process_sandbox_webhook,
     wallet_totals,
 )
@@ -33,13 +32,15 @@ router = APIRouter(
 )
 
 
-from app.config import settings
-from app.services.wallet import manual_topup
-
 class ManualTopUpRequest(BaseModel):
-    amount: int
+    amount: StrictInt
     receipt_code: str
     note: str = ""
+
+
+class LegacyManualTopUpRequest(BaseModel):
+    amount_vnd: StrictInt
+    receipt_code: str
 
 
 @router.post(
@@ -64,17 +65,74 @@ async def manually_top_up_driver(
         )
         db.commit()
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng") from exc
 
+    balance_after = wallet_totals(db, driver_user_id)["balance_vnd"]
     return {
         "ledger_entry_id": entry.id,
         "wallet_id": driver_user_id,  # Theo giả định dùng user_id thay wallet_id
         "amount": entry.amount_vnd,
-        "balance_after": wallet_totals(db, driver_user_id)["balance_vnd"],
+        "balance_after": balance_after,
+        "amount_vnd": entry.amount_vnd,
+        "balance_vnd": balance_after,
         "receipt_code": entry.receipt_code,
+    }
+
+
+@router.get(
+    "/drivers",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def get_driver_wallets(
+    db: Session = Depends(get_db),
+    q: str | None = Query(None, max_length=120),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+):
+    """List driver balances for the existing administrator screen."""
+    return list_driver_wallet_summaries(
+        db, query_text=q, page=page, page_size=page_size
+    )
+
+
+@router.post(
+    "/drivers/{driver_id}/topups",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def legacy_manually_top_up_driver(
+    driver_id: int,
+    body: LegacyManualTopUpRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Keep the endpoint and response shape used by the current admin UI."""
+    try:
+        entry = manual_topup(
+            db=db,
+            admin_user_id=current_user.id,
+            driver_user_id=driver_id,
+            amount_vnd=body.amount_vnd,
+            receipt_code=body.receipt_code,
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Mã phiếu thu đã được sử dụng") from exc
+
+    return {
+        "id": entry.id,
+        "driver_id": driver_id,
+        "amount_vnd": entry.amount_vnd,
+        "receipt_code": entry.receipt_code,
+        "balance_vnd": wallet_totals(db, driver_id)["balance_vnd"],
     }
 
 
@@ -291,10 +349,6 @@ wallets_router = APIRouter(
     dependencies=[Depends(deny_unannotated_route)],
 )
 
-from datetime import datetime
-from pydantic import BaseModel
-from typing import List, Optional
-
 class WalletTotalsResponse(BaseModel):
     account_id: str
     balance_vnd: int
@@ -310,11 +364,11 @@ class LedgerItem(BaseModel):
     amount_vnd: int
     balance_after_vnd: int
     description: str
-    session_id: Optional[int]
-    reference_code: Optional[str]
+    session_id: int | None
+    reference_code: str | None
 
 class LedgerResponse(BaseModel):
-    items: List[LedgerItem]
+    items: list[LedgerItem]
     total: int
     page: int
     page_size: int
@@ -358,8 +412,7 @@ async def get_my_wallet_ledger(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1),
 ):
-    if page_size > 50:
-        page_size = 50 # Giới hạn tối đa 50 dòng theo yêu cầu
+    page_size = min(page_size, 50) # Giới hạn tối đa 50 dòng theo yêu cầu
         
     day_count = None
     if days != "all":
@@ -389,8 +442,7 @@ async def get_driver_wallet_ledger(
 ):
     _check_driver_ownership(current_user, driver_user_id)
     
-    if page_size > 50:
-        page_size = 50
+    page_size = min(page_size, 50)
         
     day_count = None
     if days != "all":
