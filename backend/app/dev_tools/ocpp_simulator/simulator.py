@@ -119,6 +119,11 @@ class SimpleSimulator:
         self.connected = False
         self.session_id = str(uuid.uuid4())
         self.last_heartbeat = time.time()
+        self.configuration = {
+            "HeartbeatInterval": 10,
+            "MeterValueSampleInterval": 30,
+        }
+        self._active_transactions = {}
         self._pending_calls: dict[str, asyncio.Future] = {}
         self._receiver_task: asyncio.Task | None = None
         self._reboot_requested = False
@@ -190,6 +195,48 @@ class SimpleSimulator:
                         await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
                         transaction_id = int(payload.get("transactionId", 1))
                         asyncio.create_task(self._trigger_remote_stop(transaction_id))
+                    elif action == "ChangeConfiguration":
+                        key = payload.get("key")
+                        limits = {
+                            "HeartbeatInterval": (30, 3600),
+                            "MeterValueSampleInterval": (5, 900),
+                        }
+                        status = "NotSupported"
+                        if key in limits:
+                            status = "Rejected"
+                            try:
+                                raw = payload.get("value")
+                                value = int(raw) if isinstance(raw, str) else None
+                                minimum, maximum = limits[key]
+                                if value is not None and minimum <= value <= maximum:
+                                    self.configuration[key] = value
+                                    status = "Accepted"
+                            except (ValueError, TypeError):
+                                pass
+                        await self.ws.send(
+                            json.dumps(make_callresult(message_id, {"status": status}))
+                        )
+                    elif action == "GetConfiguration":
+                        keys = payload.get("key") or list(self.configuration)
+                        result = {
+                            "configurationKey": [
+                                {
+                                    "key": key,
+                                    "readonly": False,
+                                    "value": str(self.configuration[key]),
+                                }
+                                for key in keys
+                                if key in self.configuration
+                            ],
+                            "unknownKey": [
+                                key for key in keys
+                                if key not in self.configuration
+                            ],
+                        }
+                        await self.ws.send(
+                            json.dumps(make_callresult(message_id, result))
+                        )
+
         except websockets.ConnectionClosed:
             self.connected = False
             self._disconnect_event.set()
@@ -218,6 +265,13 @@ class SimpleSimulator:
                 "timestamp": now_iso,
             })
             if isinstance(res, dict) and res.get("idTagInfo", {}).get("status") == "Accepted":
+                transaction_id = res.get("transactionId")
+                if transaction_id is not None:
+                    self._active_transactions[connector_id] = {
+                        "transaction_id": transaction_id,
+                        "meter_wh": 1000,
+                        "last_sample": time.monotonic(),
+                    }
                 charging_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 await self._call("StatusNotification", {
                     "connectorId": connector_id,
@@ -231,20 +285,25 @@ class SimpleSimulator:
     async def _trigger_remote_stop(self, transaction_id: int) -> None:
         """Dừng phiên sạc sau khi nhận RemoteStopTransaction."""
         try:
-            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            await self._call("StopTransaction", {
-                "transactionId": transaction_id,
-                "meterStop": 2500,
-                "timestamp": now_iso,
-                "reason": "Remote",
-            })
-            for cid in range(1, self.profile.connector_count + 1):
+            for connector_id, session in list(self._active_transactions.items()):
+                if session["transaction_id"] != transaction_id:
+                    continue
+
+                self._active_transactions.pop(connector_id)
+                now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                await self._call("StopTransaction", {
+                    "transactionId": transaction_id,
+                    "meterStop": max(2500, session["meter_wh"]),
+                    "timestamp": now_iso,
+                    "reason": "Remote",
+                })
                 await self._call("StatusNotification", {
-                    "connectorId": cid,
+                    "connectorId": connector_id,
                     "errorCode": "NoError",
                     "status": "Available",
                     "timestamp": now_iso,
                 })
+                return
         except Exception:  # noqa: S110
             pass
 
@@ -259,6 +318,7 @@ class SimpleSimulator:
         if boot_result.get("status") != "Accepted":
             raise RuntimeError(f"BootNotification rejected: {boot_result}")
         heartbeat_interval = max(1, int(boot_result.get("interval", 10)))
+        self.configuration["HeartbeatInterval"] = heartbeat_interval
         # 0 describes the whole device; positive IDs describe every seeded connector.
         for connector_id in range(self.profile.connector_count + 1):
             await self._call("StatusNotification", {
@@ -269,36 +329,61 @@ class SimpleSimulator:
             })
         print(f"[Simulator {self.code}] Boot accepted, interval={heartbeat_interval}s")
 
+        last_heartbeat_tick = time.monotonic()
         while self.connected:
             try:
-                await asyncio.wait_for(self._disconnect_event.wait(), timeout=heartbeat_interval)
+                await asyncio.wait_for(
+                    self._disconnect_event.wait(),
+                    timeout=1,
+                )
                 return
             except asyncio.TimeoutError:
                 pass
+
             if not self.connected:
                 return
-            await self._call("Heartbeat")
-            self.last_heartbeat = time.time()
+
+            now = time.monotonic()
+            if now - last_heartbeat_tick >= self.configuration["HeartbeatInterval"]:
+                await self._call("Heartbeat")
+                self.last_heartbeat = time.time()
+                last_heartbeat_tick = time.monotonic()
+
+            await self.send_meter_values()
 
     async def send_meter_values(self, timestamp: str | None = None):
-        """Gửi MeterValues."""
+        """Gửi MeterValues cho các phiên đang sạc đến kỳ lấy mẫu."""
         if not self.connected:
             return
-        now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z") if timestamp is None else timestamp
-        payload = {
-            "connectorId": 1,
-            "transactionId": 1,
-            "meterValue": [{
-                "timestamp": now_utc,
-                "sampledValue": [{
-                    "value": "1.5",
-                    "measurand": "Energy.Active.Import.Register",
-                    "unit": "kWh",
+
+        interval = self.configuration["MeterValueSampleInterval"]
+        for connector_id, session in list(self._active_transactions.items()):
+            if not self.connected:
+                return
+            if self._active_transactions.get(connector_id) is not session:
+                continue
+
+            now = time.monotonic()
+            if now - session["last_sample"] < interval:
+                continue
+
+            session["meter_wh"] += 100
+            session["last_sample"] = now
+            now_utc = timestamp or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            payload = {
+                "connectorId": connector_id,
+                "transactionId": session["transaction_id"],
+                "meterValue": [{
+                    "timestamp": now_utc,
+                    "sampledValue": [{
+                        "value": str(session["meter_wh"]),
+                        "measurand": "Energy.Active.Import.Register",
+                        "unit": "Wh",
+                    }],
                 }],
-            }],
-        }
-        await self._call("MeterValues", payload)
-        print(f"[Simulator] Sent MeterValues at {now_utc}")
+            }
+            await self._call("MeterValues", payload)
+            print(f"[Simulator {self.code}] Sent MeterValues at {now_utc}")
 
     async def start_transaction(self, id_tag: str = "TEST-USER") -> dict | None:
         """Gửi StartTransaction."""
@@ -311,12 +396,24 @@ class SimpleSimulator:
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         })
         print("[Simulator] Sent StartTransaction")
+        if result.get("idTagInfo", {}).get("status") == "Accepted":
+            transaction_id = result.get("transactionId")
+            if transaction_id is not None:
+                self._active_transactions[1] = {
+                    "transaction_id": transaction_id,
+                    "meter_wh": 0,
+                    "last_sample": time.monotonic(),
+                }
         return result
 
     async def stop_transaction(self, transaction_id: int, meter_stop: int = 5000) -> dict | None:
         """Gửi StopTransaction."""
         if not self.connected:
             return None
+        for connector_id, session in list(self._active_transactions.items()):
+            if session["transaction_id"] == transaction_id:
+                meter_stop = max(meter_stop, session["meter_wh"])
+                self._active_transactions.pop(connector_id)
         result = await self._call("StopTransaction", {
             "transactionId": transaction_id,
             "meterStop": meter_stop,
