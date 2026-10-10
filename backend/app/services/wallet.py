@@ -393,8 +393,6 @@ def verify_ledger_integrity(
         "passed": bool,              # True nếu không có vi phạm
       }
     """
-    from sqlalchemy import text
-
     violations: list[dict] = []
 
     # --- 1. Xây dựng base query theo phạm vi ---
