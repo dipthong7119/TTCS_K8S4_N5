@@ -10,8 +10,8 @@ from app.models.driver_subscription import DriverSubscription
 from app.models.station import Station
 from app.models.station_tariff import StationTariff
 from app.models.subscription_usage import SubscriptionUsage
-from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.pricing import CALCULATION_VERSION, calculate_session_price
+from app.services.wallet import deduct_session_charge
 
 logger = logging.getLogger(__name__)
 
@@ -122,23 +122,18 @@ def finalize_session_billing(
             db.flush()
 
     if session.user_id and invoice.total_vnd > 0:
-        idempotency_key = f"session-charge:{session.id}"
-        exists = (
-            db.query(WalletLedgerEntry.id)
-            .filter(WalletLedgerEntry.idempotency_key == idempotency_key)
-            .first()
+        desc = (
+            f"Thanh toán phiên sạc tại {session.station_name}"
+            if session.station_name
+            else f"Thanh toán phiên sạc #{session.id}"
         )
-        if exists is None:
-            db.add(
-                WalletLedgerEntry(
-                    user_id=session.user_id,
-                    entry_type="session_charge",
-                    amount_vnd=-invoice.total_vnd,
-                    idempotency_key=idempotency_key,
-                    reference_type="session",
-                    reference_id=session.id,
-                    description=f"Thanh toán phiên sạc tại {session.station_name}",
-                    created_at=session.ended_at,
-                )
-            )
+        deduct_session_charge(
+            db=db,
+            user_id=session.user_id,
+            session_id=session.id,
+            amount_vnd=invoice.total_vnd,
+            description=desc,
+            created_at=session.ended_at,
+            reference_type="session",
+        )
     return invoice
