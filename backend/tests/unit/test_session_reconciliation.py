@@ -488,7 +488,7 @@ def test_available_and_late_stop_order_have_same_final_session(
 
     db.refresh(session)
     assert session.status == "completed"
-    assert session.ended_at == datetime(2026, 10, 7, 10, 2)
+    assert session.ended_at == datetime(2026, 10, 7, 10, 2, tzinfo=UTC).replace(tzinfo=None)
     assert session.energy_kwh == 1
     assert session.review_reason is None
     assert context.waiting == {}

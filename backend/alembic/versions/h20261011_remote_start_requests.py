@@ -1,7 +1,7 @@
 """S-24 / T-51: virtual driver cards and remote-start request tracking."""
 
-from collections.abc import Sequence
 import secrets
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 

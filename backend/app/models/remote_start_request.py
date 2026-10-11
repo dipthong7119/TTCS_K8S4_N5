@@ -6,12 +6,14 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     Integer,
     String,
     text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.sql import func
 

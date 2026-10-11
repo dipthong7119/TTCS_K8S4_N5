@@ -1,10 +1,10 @@
 """Kiểm thử S-24/T-51 bằng SQLite tạm và trụ OCPP giả."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import threading
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,9 +19,9 @@ from app.config import settings
 from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
-from app.models.audit_log import AuditLog
 from app.models.id_tag import IdTag
 from app.models.remote_start_request import RemoteStartRequest, RemoteStartStatus
 from app.models.station import Station
@@ -246,6 +246,7 @@ def test_connector_not_available_never_sends(raw_status, has_session, context, m
     calls = _accepting(monkeypatch)
     connector = context["connector"]
     connector.ocpp_status = raw_status
+    context["db"].commit()
     if has_session:
         point = context["point"]
         db = context["db"]

@@ -14,7 +14,10 @@ from app.models.meter_value import MeterValue  # noqa: F401
 from app.models.ocpp_message import OcppMessage  # noqa: F401
 from app.models.orphan_message import OrphanMessage  # noqa: F401
 from app.models.payment_transaction import PaymentTransaction  # noqa: F401
-from app.models.remote_start_request import RemoteStartRequest, RemoteStartStatus  # noqa: F401
+from app.models.remote_start_request import (  # noqa: F401
+    RemoteStartRequest,
+    RemoteStartStatus,
+)
 from app.models.station import Station  # noqa: F401
 from app.models.station_tariff import StationTariff, TariffBand  # noqa: F401
 from app.models.subscription_plan import SubscriptionPlan  # noqa: F401

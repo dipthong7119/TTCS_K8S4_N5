@@ -534,7 +534,8 @@ def _seed_local_database(database_url: str, codes: tuple[str, ...]) -> str:
     os.environ["CSMS_ENV_FILE"] = str(ROOT / ".env.example")
     os.environ["CSMS_LOCAL_SIMULATOR_ENABLED"] = "false"
     import app.models  # noqa: F401
-    from app.database import SessionLocal, engine as scenario_engine
+    from app.database import SessionLocal
+    from app.database import engine as scenario_engine
     from app.models.charge_point import ChargePoint, Connector
     from app.models.id_tag import IdTag
     from app.models.station import Station

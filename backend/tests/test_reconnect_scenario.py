@@ -12,10 +12,10 @@ import pytest
 
 from tests.reconnect_scenario import (
     RunResult,
+    _render_comparisons,
     build_plans,
     evaluate_results,
     scenario_exit_code,
-    _render_comparisons,
 )
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -37,7 +37,7 @@ def test_scenario_reports_failure_when_offline_stop_is_ignored(capsys):
         transaction_id=7,
         meter_start_wh=10_000,
         meter_stop_wh=12_000,
-        expected_kwh=Decimal("2"),
+        expected_kwh=Decimal(2),
         ended_at="2026-10-11T10:00:00Z",
         disconnects=1,
         sample_count=2,

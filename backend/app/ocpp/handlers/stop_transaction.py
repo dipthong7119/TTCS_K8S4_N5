@@ -1,9 +1,10 @@
 """StopTransaction, kể cả tin tới muộn sau ngoại tuyến (T-38, T-45)."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint, Connector
@@ -133,7 +134,7 @@ def handle_stop_transaction(
         )
         .execution_options(synchronize_session=False)
     )
-    if changed.rowcount != 1:
+    if cast(CursorResult[Any], changed).rowcount != 1:
         logger.info(
             "StopTransaction already settled: cp=%s connector=%s transaction=%s",
             point.code,

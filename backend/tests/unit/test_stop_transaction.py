@@ -391,7 +391,7 @@ def test_late_stop_closes_every_open_status(db_session, status):
     assert session.status == "completed"
     assert session.meter_stop_wh == 2345
     assert session.energy_kwh == Decimal("1.345")
-    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4)
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4, tzinfo=UTC).replace(tzinfo=None)
     assert session.review_reason is None
 
 
@@ -414,7 +414,7 @@ def test_stop_timestamp_before_start_closes_for_review_using_message_time(db_ses
     assert parse_message(response)[0] == 3
     db_session.refresh(session)
     assert session.meter_stop_wh == 2345
-    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4)
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4, tzinfo=UTC).replace(tzinfo=None)
     assert session.energy_kwh == Decimal("1.345")
     assert session.status == "needs_review"
     assert session.review_reason == "stop_timestamp_before_start"
@@ -481,7 +481,7 @@ def test_ended_stop_replay_with_different_meter_stop_warns_without_changes(db_se
     session = db_session.get(ChargingSession, 1)
     session.status = "completed"
     session.meter_stop_wh = 2000
-    session.ended_at = datetime(2026, 10, 1, 8, 3)
+    session.ended_at = datetime(2026, 10, 1, 8, 3, tzinfo=UTC).replace(tzinfo=None)
     db_session.commit()
     point = db_session.get(ChargePoint, 1)
 
@@ -498,7 +498,7 @@ def test_ended_stop_replay_with_different_meter_stop_warns_without_changes(db_se
     assert parse_message(response)[3]["idTagInfo"]["status"] == "Accepted"
     db_session.refresh(session)
     assert session.meter_stop_wh == 2000
-    assert session.ended_at == datetime(2026, 10, 1, 8, 3)
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, tzinfo=UTC).replace(tzinfo=None)
     assert any("StopTransaction replay differs" in record.message for record in caplog.records)
 
 
@@ -614,7 +614,7 @@ def test_two_concurrent_stop_calls_close_session_once(tmp_path):
             station_name=station.name,
             connector_number=1,
             meter_start_wh=1000,
-            started_at=datetime(2026, 10, 1, 8),
+            started_at=datetime(2026, 10, 1, 8, tzinfo=UTC).replace(tzinfo=None),
             status="active",
         ))
         seed_db.commit()
@@ -641,6 +641,6 @@ def test_two_concurrent_stop_calls_close_session_once(tmp_path):
     with factory() as db:
         session = db.get(ChargingSession, 1)
         assert session.status == "completed"
-        assert session.ended_at == datetime(2026, 10, 1, 9)
+        assert session.ended_at == datetime(2026, 10, 1, 9, tzinfo=UTC).replace(tzinfo=None)
         assert session.meter_stop_wh == 2000
     engine.dispose()

@@ -1,6 +1,7 @@
 """API tài xế gửi và theo dõi yêu cầu bắt đầu sạc từ xa."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -39,7 +40,7 @@ def _error_response(error: RemoteStartFailure) -> JSONResponse:
 class _RemoteStartRoute(APIRoute):
     """Chuẩn hóa lỗi xác thực/phân quyền cho hợp đồng API này."""
 
-    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         handler = super().get_route_handler()
 
         async def handle(request: Request) -> Response:

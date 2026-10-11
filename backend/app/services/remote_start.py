@@ -6,8 +6,10 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from math import ceil
+from typing import Any, cast
 
 from sqlalchemy import and_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -159,7 +161,7 @@ def expire_waiting_requests(db: Session, now: datetime) -> int:
         )
         .execution_options(synchronize_session="fetch")
     )
-    return int(result.rowcount or 0)
+    return int(cast(CursorResult[Any], result).rowcount or 0)
 
 
 def _active_request(db: Session, connector_id: int) -> RemoteStartRequest | None:
@@ -571,7 +573,7 @@ def resolve_pending_start(
             )
             .execution_options(synchronize_session=False)
         )
-        changed += int(result.rowcount or 0)
+        changed += int(cast(CursorResult[Any], result).rowcount or 0)
 
     if matched is not None:
         return changed
@@ -606,5 +608,5 @@ def resolve_pending_start(
             )
             .execution_options(synchronize_session=False)
         )
-        changed += int(result.rowcount or 0)
+        changed += int(cast(CursorResult[Any], result).rowcount or 0)
     return changed
