@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.charge_point import ChargePoint, Connector
 from app.models.station import Station
 from app.models.user import User
@@ -141,6 +142,16 @@ def test_reset_online(monkeypatch):
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     assert point.status == "offline"
     assert point.connectors[0].status == "unknown"
+    audit = db.query(AuditLog).filter_by(
+        action="charge_point.reset.accepted", charge_point_code="CP01"
+    ).one()
+    assert audit.actor_id == 1
+    assert audit.actor_email == "admin@test.com"
+    assert audit.details == {
+        "reset_type": "Soft",
+        "command": "Reset",
+        "outcome": "Accepted",
+    }
     db.close()
 
 @pytest.fixture(scope="function", autouse=True)
@@ -333,6 +344,19 @@ def test_remote_start_online_accepted(monkeypatch):
     data = resp.json()
     assert data["status"] == "Accepted"
     assert "chấp nhận" in data["message"]
+
+    db = SessionLocalTest()
+    audit = db.query(AuditLog).filter_by(
+        action="charge_point.remote_start.accepted", charge_point_code="CP01"
+    ).one()
+    assert audit.actor_id == 2
+    assert audit.actor_email == "driver@test.com"
+    assert audit.details == {
+        "connector_id": 1,
+        "command": "RemoteStartTransaction",
+        "outcome": "Accepted",
+    }
+    db.close()
 
 
 def test_remote_start_online_rejected(monkeypatch):

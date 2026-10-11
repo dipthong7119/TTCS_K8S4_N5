@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # Bảo mật
     SECRET_KEY: str = "change-me-in-production"
+    SANDBOX_WEBHOOK_SECRET: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Môi trường ứng dụng
