@@ -31,3 +31,29 @@ def ghi_nhat_ky(
 
 # Preserve the existing name for callers while standardizing on the T-57 API.
 append_audit = ghi_nhat_ky
+
+
+def record_remote_command(
+    db,
+    *,
+    action: str,
+    command: str,
+    object_type: str,
+    object_id: int | str,
+    actor,
+    charge_point_code: str,
+    outcome: str,
+    details: dict | None = None,
+) -> AuditLog:
+    """Record a remote control command with its actor, target, and outcome."""
+    return append_audit(
+        db,
+        action=action,
+        object_type=object_type,
+        object_id=object_id,
+        actor_id=actor.id,
+        actor_email=actor.email,
+        actor_name=actor.full_name,
+        charge_point_code=charge_point_code,
+        details={**(details or {}), "command": command, "outcome": outcome},
+    )

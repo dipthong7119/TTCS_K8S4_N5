@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, StrictInt
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import (
     CurrentUser,
     deny_unannotated_route,
@@ -15,6 +16,7 @@ from app.core.deps import (
 )
 from app.database import get_db
 from app.services.audit import append_audit
+from app.services.payment_signatures import verify_sandbox_webhook_signature
 from app.services.wallet import (
     create_sandbox_topup_request,
     list_driver_wallet_summaries,
@@ -210,7 +212,24 @@ async def sandbox_topup_webhook(
     payload: SandboxWebhookPayload,
     db: Session = Depends(get_db),
 ):
-    """Cổng sandbox gọi callback cập nhật kết quả giao dịch (SCRUM-198)."""
+    """Verify and process an idempotent sandbox callback (SCRUM-73, SCRUM-198)."""
+    if not settings.SANDBOX_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook sandbox chưa được cấu hình khóa bí mật",
+        )
+    if not verify_sandbox_webhook_signature(
+        order_code=payload.order_code,
+        status=payload.status,
+        failure_reason=payload.failure_reason,
+        signature=payload.signature,
+        secret=settings.SANDBOX_WEBHOOK_SECRET,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Chữ ký webhook không hợp lệ",
+        )
+
     tx, entry = process_sandbox_webhook(
         db,
         order_code=payload.order_code,

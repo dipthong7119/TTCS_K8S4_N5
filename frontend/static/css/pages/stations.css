@@ -126,3 +126,343 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* ==========================================================================
+   SCRUM-61 & SCRUM-62: Biểu giá trạm, Phí chiếm trụ & Khung giờ 24h
+   ========================================================================== */
+.input-with-suffix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-with-suffix .form-input {
+  padding-right: 70px;
+}
+.input-suffix {
+  position: absolute;
+  right: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.tariff-header-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ── Tab chọn loại biểu giá (Cố định vs Nhiều khung giờ) ── */
+.tariff-type-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+@media (max-width: 640px) {
+  .tariff-type-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+.tariff-type-tab {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.tariff-type-tab:hover {
+  border-color: var(--color-primary-light);
+  background: var(--color-surface-alt);
+}
+.tariff-type-tab.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+.tariff-type-tab__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.tariff-type-tab.is-active .tariff-type-tab__icon {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.tariff-type-tab__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tariff-type-tab__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.tariff-type-tab__desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* ── Section cấu hình nhiều khung giờ (SCRUM-62) ── */
+.tariff-bands-section {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.tariff-bands-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.tariff-bands-section__title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 4px 0;
+}
+.tariff-bands-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── Thanh biểu đồ trực quan 24h ── */
+.timeline-24h {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.timeline-24h__ruler {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+.timeline-24h__track {
+  display: flex;
+  height: 28px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: hsl(220, 15%, 92%);
+  border: 1px solid var(--color-border-strong);
+  position: relative;
+}
+.timeline-24h__segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-inverse);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+  transition: width 0.2s ease, opacity 0.2s;
+  cursor: default;
+}
+.timeline-24h__segment--low {
+  background: hsl(150, 70%, 38%);
+}
+.timeline-24h__segment--standard {
+  background: hsl(210, 85%, 50%);
+}
+.timeline-24h__segment--peak {
+  background: hsl(28, 92%, 52%);
+}
+.timeline-24h__segment--custom {
+  background: hsl(265, 70%, 55%);
+}
+.timeline-24h__segment--gap {
+  background: repeating-linear-gradient(45deg, hsl(0, 0%, 82%), hsl(0, 0%, 82%) 8px, hsl(0, 0%, 90%) 8px, hsl(0, 0%, 90%) 16px);
+  color: hsl(0, 0%, 35%);
+  text-shadow: none;
+  font-size: 10px;
+  font-weight: 700;
+}
+.timeline-24h__segment--overlap {
+  background: repeating-linear-gradient(45deg, hsl(0, 72%, 51%), hsl(0, 72%, 51%) 8px, hsl(0, 85%, 65%) 8px, hsl(0, 85%, 65%) 16px);
+  color: #fff;
+  font-weight: 700;
+}
+
+.timeline-24h__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.timeline-24h__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.timeline-24h__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* ── Cảnh báo Validation thời gian thực ── */
+.tariff-validation-alert {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  line-height: 1.5;
+}
+.tariff-validation-alert--valid {
+  background: var(--color-online-bg);
+  border: 1px solid var(--color-online);
+  color: var(--color-online);
+  font-weight: 500;
+}
+.tariff-validation-alert--error {
+  background: var(--color-fault-bg);
+  border: 1px solid var(--color-fault);
+  color: var(--color-fault);
+  font-weight: 500;
+}
+.tariff-validation-alert--warning {
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  color: hsl(35, 90%, 30%);
+}
+
+/* ── Bảng nhập các khung giờ ── */
+.tariff-bands-table-wrap {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.tariff-bands-table td {
+  padding: var(--space-2) var(--space-3);
+  vertical-align: middle;
+}
+.tariff-bands-table .form-input,
+.tariff-bands-table .form-select {
+  padding: 6px 10px;
+  font-size: var(--font-size-sm);
+  width: 100%;
+}
+.tariff-bands-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+/* ── Nút xóa hàng khung giờ ── */
+.btn-remove-band {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-fault);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.btn-remove-band:hover {
+  background: var(--color-fault-bg);
+  border-color: var(--color-fault);
+}
+
+/* ── Nút lưu biểu giá ── */
+.tariff-submit-row {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Danh sách lịch sử biểu giá của trạm ── */
+.station-tariff-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tariff-history-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  transition: box-shadow 0.2s ease;
+}
+.tariff-history-item:hover {
+  box-shadow: var(--shadow-sm);
+}
+.tariff-history-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.tariff-history-item__title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.tariff-history-item__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+.tariff-history-bands-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.tariff-history-band-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  font-family: monospace;
+}
+.tariff-history-band-tag strong {
+  font-family: 'Inter', sans-serif;
+  color: var(--color-text);
+}

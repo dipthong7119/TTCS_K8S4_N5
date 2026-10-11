@@ -18,79 +18,559 @@
     const path = `/stations/${tariffCard.dataset.stationId}/tariffs`;
     const money = amount => new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
 
+    // ── Quản lý chế độ biểu giá (Cố định vs Nhiều khung giờ) ──
+    let currentTariffMode = 'flat'; // 'flat' | 'time_bands'
+    const typeFlatRadio = document.getElementById('tariff-type-flat');
+    const typeBandsRadio = document.getElementById('tariff-type-bands');
+    const labelFlat = document.getElementById('label-type-flat');
+    const labelBands = document.getElementById('label-type-bands');
+    const flatSection = document.getElementById('tariff-flat-section');
+    const bandsSection = document.getElementById('tariff-bands-section');
+    const tariffPriceInput = document.getElementById('tariff-price');
+
+    // Mẫu 3 khung giờ chuẩn 24h hệ thống CSMS (Thấp điểm, Tiêu chuẩn, Cao điểm)
+    const STANDARD_PRESET_BANDS = [
+      { label: 'Thấp điểm', startTime: '00:00', endTime: '06:00', price: 3000 },
+      { label: 'Tiêu chuẩn', startTime: '06:00', endTime: '17:00', price: 4000 },
+      { label: 'Cao điểm',  startTime: '17:00', endTime: '22:00', price: 5000 },
+      { label: 'Thấp điểm', startTime: '22:00', endTime: '24:00', price: 3000 },
+    ];
+
+    let timeBands = JSON.parse(JSON.stringify(STANDARD_PRESET_BANDS));
+
+    // ── Helper thời gian và phút ──
+    function timeToMinute(str) {
+      if (!str) return null;
+      const s = String(str).trim();
+      if (s === '24:00') return 1440;
+      const parts = s.split(':');
+      if (parts.length < 2) return null;
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (isNaN(h) || isNaN(m)) return null;
+      if (h === 24 && m === 0) return 1440;
+      if (h < 0 || h >= 24 || m < 0 || m >= 60) return null;
+      return h * 60 + m;
+    }
+
+    function minuteToTime(minute) {
+      if (minute == null) return '—';
+      if (minute >= 1440) return '24:00';
+      const h = Math.floor(minute / 60);
+      const m = minute % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // Chuyển đổi giữa 2 chế độ
+    function setTariffMode(mode) {
+      currentTariffMode = mode;
+      if (mode === 'flat') {
+        typeFlatRadio.checked = true;
+        labelFlat?.classList.add('is-active');
+        labelBands?.classList.remove('is-active');
+        flatSection?.classList.remove('is-hidden');
+        bandsSection?.classList.add('is-hidden');
+        if (tariffPriceInput) tariffPriceInput.required = true;
+      } else {
+        typeBandsRadio.checked = true;
+        labelBands?.classList.add('is-active');
+        labelFlat?.classList.remove('is-active');
+        flatSection?.classList.add('is-hidden');
+        bandsSection?.classList.remove('is-hidden');
+        if (tariffPriceInput) tariffPriceInput.required = false;
+        renderBandsTable();
+        validateAndUpdateView();
+      }
+    }
+
+    typeFlatRadio?.addEventListener('change', () => setTariffMode('flat'));
+    typeBandsRadio?.addEventListener('change', () => setTariffMode('time_bands'));
+    labelFlat?.addEventListener('click', () => setTariffMode('flat'));
+    labelBands?.addEventListener('click', () => setTariffMode('time_bands'));
+
+    // ── Thuật toán kiểm tra tính toàn vẹn 24h & không chồng lấn (SCRUM-62) ──
+    function validateDailyBands(bandsList) {
+      const errors = [];
+      if (!bandsList || bandsList.length === 0) {
+        return { valid: false, errors: ['Biểu giá phải có ít nhất một khung giờ'] };
+      }
+
+      // 1. Kiểm tra từng hàng riêng lẻ
+      const parsed = [];
+      for (let i = 0; i < bandsList.length; i++) {
+        const b = bandsList[i];
+        const rowNum = i + 1;
+        const label = String(b.label || '').trim();
+        const start = timeToMinute(b.startTime);
+        const end = timeToMinute(b.endTime);
+        const price = Number(b.price);
+
+        if (!label) {
+          errors.push(`Khung giờ #${rowNum}: Tên khung giờ không được để trống`);
+        }
+        if (start === null) {
+          errors.push(`Khung giờ #${rowNum} ("${label || 'Chưa đặt tên'}"): Giờ bắt đầu không hợp lệ`);
+        }
+        if (end === null) {
+          errors.push(`Khung giờ #${rowNum} ("${label || 'Chưa đặt tên'}"): Giờ kết thúc không hợp lệ`);
+        }
+        if (!Number.isSafeInteger(price) || price < 0) {
+          errors.push(`Khung giờ #${rowNum} ("${label || 'Chưa đặt tên'}"): Đơn giá phải là số nguyên không âm`);
+        }
+        if (start !== null && end !== null && start === end) {
+          errors.push(`Khung giờ #${rowNum} ("${label}"): Giờ bắt đầu và kết thúc không được trùng nhau (${minuteToTime(start)})`);
+        }
+
+        if (start !== null && end !== null && start !== end) {
+          if (end < start) {
+            // Khung giờ qua đêm: tách thành 2 đoạn như chuẩn backend
+            parsed.push({ label, start_minute: start, end_minute: 1440, price, originalIndex: i });
+            parsed.push({ label, start_minute: 0, end_minute: end, price, originalIndex: i });
+          } else {
+            parsed.push({ label, start_minute: start, end_minute: end, price, originalIndex: i });
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        return { valid: false, errors, parsed };
+      }
+
+      // 2. Kiểm tra tính liên tục, không chồng lấn và phủ kín 24h
+      const ordered = [...parsed].sort((a, b) => a.start_minute - b.start_minute);
+      let cursor = 0;
+
+      for (const seg of ordered) {
+        if (seg.start_minute > cursor) {
+          errors.push(`Biểu giá bị hở từ ${minuteToTime(cursor)} đến ${minuteToTime(seg.start_minute)}`);
+        }
+        if (seg.start_minute < cursor) {
+          const overlapEnd = Math.min(cursor, seg.end_minute);
+          errors.push(`Biểu giá bị chồng lấn từ ${minuteToTime(seg.start_minute)} đến ${minuteToTime(overlapEnd)}`);
+        }
+        cursor = Math.max(cursor, seg.end_minute);
+      }
+
+      if (cursor < 1440) {
+        errors.push(`Biểu giá bị hở từ ${minuteToTime(cursor)} đến 24:00`);
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        ordered,
+      };
+    }
+
+    // ── Render bảng nhập các khung giờ ──
+    const tbody = document.getElementById('tariff-bands-tbody');
+    const bandsCountHint = document.getElementById('bands-count-hint');
+
+    function renderBandsTable() {
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      timeBands.forEach((band, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <input class="form-input band-label-input" type="text" value="${escapeHtml(band.label)}"
+                   placeholder="VD: Cao điểm" data-index="${idx}" required maxlength="80">
+          </td>
+          <td>
+            <input class="form-input band-start-input" type="time" value="${band.startTime}"
+                   data-index="${idx}" required step="60">
+          </td>
+          <td>
+            <select class="form-select band-end-select" data-index="${idx}">
+              ${generateEndTimeOptions(band.endTime)}
+            </select>
+          </td>
+          <td>
+            <div class="input-with-suffix">
+              <input class="form-input band-price-input" type="number" value="${band.price}"
+                     min="0" max="1000000000" step="100" placeholder="VD: 4000" data-index="${idx}" required>
+              <span class="input-suffix">đ/kWh</span>
+            </div>
+          </td>
+          <td style="text-align: center;">
+            <button type="button" class="btn-remove-band" data-remove-index="${idx}" title="Xóa khung giờ này"
+                    ${timeBands.length <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>
+              ✕
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      if (bandsCountHint) {
+        bandsCountHint.textContent = `Đang có ${timeBands.length} khung giờ`;
+      }
+
+      // Gắn sự kiện sửa dữ liệu
+      tbody.querySelectorAll('.band-label-input').forEach(input => {
+        input.addEventListener('input', e => {
+          const idx = Number(e.target.dataset.index);
+          timeBands[idx].label = e.target.value;
+          validateAndUpdateView();
+        });
+      });
+      tbody.querySelectorAll('.band-start-input').forEach(input => {
+        input.addEventListener('change', e => {
+          const idx = Number(e.target.dataset.index);
+          timeBands[idx].startTime = e.target.value;
+          validateAndUpdateView();
+        });
+      });
+      tbody.querySelectorAll('.band-end-select').forEach(select => {
+        select.addEventListener('change', e => {
+          const idx = Number(e.target.dataset.index);
+          timeBands[idx].endTime = e.target.value;
+          validateAndUpdateView();
+        });
+      });
+      tbody.querySelectorAll('.band-price-input').forEach(input => {
+        input.addEventListener('input', e => {
+          const idx = Number(e.target.dataset.index);
+          timeBands[idx].price = Number(e.target.value) || 0;
+          validateAndUpdateView();
+        });
+      });
+      tbody.querySelectorAll('[data-remove-index]').forEach(btn => {
+        btn.addEventListener('click', e => {
+          const idx = Number(btn.dataset.removeIndex);
+          if (timeBands.length > 1) {
+            timeBands.splice(idx, 1);
+            renderBandsTable();
+            validateAndUpdateView();
+          }
+        });
+      });
+    }
+
+    function generateEndTimeOptions(selected) {
+      const times = [];
+      for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 30) {
+          const t = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          times.push(t);
+        }
+      }
+      times.push('24:00'); // Mốc kết thúc ngày 24:00
+
+      // Nếu giá trị hiện tại không nằm trong bước 30 phút, vẫn thêm vào
+      if (selected && !times.includes(selected)) {
+        times.push(selected);
+        times.sort();
+      }
+
+      return times.map(t => {
+        const isSel = t === selected ? 'selected' : '';
+        const label = t === '24:00' ? '24:00 (Hết ngày)' : t;
+        return `<option value="${t}" ${isSel}>${label}</option>`;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Nút thêm khung giờ
+    document.getElementById('btn-add-time-band')?.addEventListener('click', () => {
+      // Tìm mốc giờ bắt đầu hợp lý tiếp theo
+      let nextStart = '00:00';
+      if (timeBands.length > 0) {
+        const last = timeBands[timeBands.length - 1];
+        nextStart = last.endTime && last.endTime !== '24:00' ? last.endTime : '18:00';
+      }
+      timeBands.push({
+        label: `Khung ${timeBands.length + 1}`,
+        startTime: nextStart,
+        endTime: '24:00',
+        price: 3500,
+      });
+      renderBandsTable();
+      validateAndUpdateView();
+    });
+
+    // Nút áp dụng mẫu 24h chuẩn
+    document.getElementById('btn-apply-preset-bands')?.addEventListener('click', () => {
+      timeBands = JSON.parse(JSON.stringify(STANDARD_PRESET_BANDS));
+      renderBandsTable();
+      validateAndUpdateView();
+      showToast('Đã áp dụng mẫu biểu giá 24 giờ tiêu chuẩn (3 khung)', 'success');
+    });
+
+    // ── Cập nhật Timeline 24h và Hộp cảnh báo ──
+    const alertBox = document.getElementById('tariff-bands-validation-alert');
+    const track = document.getElementById('timeline-24h-track');
+    const legend = document.getElementById('timeline-24h-legend');
+
+    function validateAndUpdateView() {
+      if (currentTariffMode !== 'time_bands') return;
+      const result = validateDailyBands(timeBands);
+
+      // Cập nhật hộp cảnh báo
+      if (alertBox) {
+        if (result.valid) {
+          alertBox.className = 'tariff-validation-alert tariff-validation-alert--valid';
+          alertBox.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <div>
+              <strong>Cấu hình 24 giờ hợp lệ!</strong>
+              <div style="font-size:var(--font-size-xs);opacity:0.9;">Đã phủ kín toàn bộ 24:00 trong ngày, không phát hiện khoảng hở hoặc chồng lấn.</div>
+            </div>
+          `;
+          submit.disabled = false;
+        } else {
+          alertBox.className = 'tariff-validation-alert tariff-validation-alert--error';
+          alertBox.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div>
+              <strong>Cấu hình chưa hợp lệ (${result.errors.length} cảnh báo):</strong>
+              <ul style="margin:4px 0 0 var(--space-4);padding:0;">
+                ${result.errors.map(err => `<li>${escapeHtml(err)}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+        }
+      }
+
+      // Cập nhật thanh timeline 24 giờ trực quan
+      if (track) {
+        track.innerHTML = '';
+        const parsed = [];
+        timeBands.forEach((b, i) => {
+          const s = timeToMinute(b.startTime);
+          const e = timeToMinute(b.endTime);
+          if (s !== null && e !== null && s !== e) {
+            if (e < s) {
+              parsed.push({ label: b.label, start: s, end: 1440, price: b.price });
+              parsed.push({ label: b.label, start: 0, end: e, price: b.price });
+            } else {
+              parsed.push({ label: b.label, start: s, end: e, price: b.price });
+            }
+          }
+        });
+
+        parsed.sort((a, b) => a.start - b.end);
+
+        // Vẽ các đoạn từ 0 đến 1440 phút
+        let cur = 0;
+        const sorted = [...parsed].sort((a, b) => a.start - b.start);
+        sorted.forEach(seg => {
+          if (seg.start > cur) {
+            // Khoảng hở
+            const gapWidth = ((seg.start - cur) / 1440) * 100;
+            const gapEl = document.createElement('div');
+            gapEl.className = 'timeline-24h__segment timeline-24h__segment--gap';
+            gapEl.style.width = `${gapWidth}%`;
+            gapEl.textContent = 'Hở';
+            gapEl.title = `Chưa có giá: ${minuteToTime(cur)} – ${minuteToTime(seg.start)}`;
+            track.appendChild(gapEl);
+          }
+          const width = ((Math.min(seg.end, 1440) - seg.start) / 1440) * 100;
+          const segEl = document.createElement('div');
+          let colorType = 'timeline-24h__segment--standard';
+          const lbl = seg.label.toLowerCase();
+          if (lbl.includes('thấp') || lbl.includes('đêm')) colorType = 'timeline-24h__segment--low';
+          else if (lbl.includes('cao')) colorType = 'timeline-24h__segment--peak';
+
+          segEl.className = `timeline-24h__segment ${colorType}`;
+          segEl.style.width = `${width}%`;
+          segEl.textContent = `${seg.label} (${money(seg.price)})`;
+          segEl.title = `${seg.label}: ${minuteToTime(seg.start)} – ${minuteToTime(seg.end)} (${money(seg.price)}/kWh)`;
+          track.appendChild(segEl);
+          cur = Math.max(cur, seg.end);
+        });
+
+        if (cur < 1440) {
+          const gapWidth = ((1440 - cur) / 1440) * 100;
+          const gapEl = document.createElement('div');
+          gapEl.className = 'timeline-24h__segment timeline-24h__segment--gap';
+          gapEl.style.width = `${gapWidth}%`;
+          gapEl.textContent = 'Hở';
+          gapEl.title = `Chưa có giá: ${minuteToTime(cur)} – 24:00`;
+          track.appendChild(gapEl);
+        }
+      }
+
+      // Legend
+      if (legend) {
+        legend.innerHTML = `
+          <span class="timeline-24h__legend-item"><span class="timeline-24h__legend-dot" style="background:hsl(150,70%,38%);"></span> Thấp điểm</span>
+          <span class="timeline-24h__legend-item"><span class="timeline-24h__legend-dot" style="background:hsl(210,85%,50%);"></span> Tiêu chuẩn</span>
+          <span class="timeline-24h__legend-item"><span class="timeline-24h__legend-dot" style="background:hsl(28,92%,52%);"></span> Cao điểm</span>
+          <span class="timeline-24h__legend-item"><span class="timeline-24h__legend-dot" style="background:hsl(0,0%,82%);"></span> Khoảng trống (hở giờ)</span>
+        `;
+      }
+    }
+
+    // ── Tải lịch sử biểu giá của trạm ──
     async function loadTariffs() {
       try {
         const tariffs = await ApiClient.get(path);
         history.replaceChildren();
         if (!tariffs.length) {
-          history.textContent = 'Trạm chưa có biểu giá tùy chỉnh.';
+          const emptyNotice = document.createElement('p');
+          emptyNotice.className = 'form-hint';
+          emptyNotice.textContent = 'Trạm chưa có biểu giá tùy chỉnh (đang áp dụng giá mặc định).';
+          history.append(emptyNotice);
           return;
         }
+
         const heading = document.createElement('h3');
         heading.className = 'card__title';
-        heading.textContent = 'Lịch sử biểu giá';
+        heading.style.marginBottom = 'var(--space-3)';
+        heading.textContent = 'Lịch sử biểu giá trạm';
         history.append(heading);
-        const list = document.createElement('ul');
-        list.style.paddingLeft = 'var(--space-5)';
-        tariffs.forEach(tariff => {
-          const item = document.createElement('li');
-          const rate = tariff.price_vnd_per_kwh == null
-            ? 'biểu giá nhiều khung giờ' : `${money(tariff.price_vnd_per_kwh)}/kWh`;
+
+        const listContainer = document.createElement('div');
+        listContainer.className = 'station-tariff-history';
+
+        tariffs.forEach((tariff, index) => {
+          const item = document.createElement('div');
+          item.className = 'tariff-history-item';
+
+          const effectiveDate = new Date(tariff.effective_from);
+          const isCurrent = index === 0 && effectiveDate <= new Date();
           const effectiveAt = new Intl.DateTimeFormat('vi-VN', {
             dateStyle: 'short', timeStyle: 'short', timeZone: tariff.timezone_name,
-          }).format(new Date(tariff.effective_from));
-          item.textContent = `${tariff.name}: ${rate} · ${money(tariff.occupancy_fee_vnd_per_minute)}/phút · ân hạn ${tariff.grace_period_minutes} phút · hiệu lực ${effectiveAt} (${tariff.timezone_name})${tariff.is_demo ? ' (demo)' : ''}`;
-          list.append(item);
+          }).format(effectiveDate);
+
+          const hasBands = Array.isArray(tariff.bands) && tariff.bands.length > 0;
+
+          item.innerHTML = `
+            <div class="tariff-history-item__header">
+              <span class="tariff-history-item__title">
+                ${escapeHtml(tariff.name)}
+                ${isCurrent ? '<span class="badge badge--online" style="font-size:11px;">Hiện hành</span>' : ''}
+                ${tariff.is_demo ? '<span class="badge badge--neutral" style="font-size:11px;">Demo</span>' : ''}
+              </span>
+              <span class="badge ${hasBands && tariff.price_vnd_per_kwh == null ? 'badge--charging' : 'badge--neutral'}">
+                ${hasBands && tariff.price_vnd_per_kwh == null ? 'Nhiều khung giờ (SCRUM-62)' : 'Cố định cả ngày'}
+              </span>
+            </div>
+            <div class="tariff-history-item__meta">
+              ${tariff.price_vnd_per_kwh != null ? `<strong>Đơn giá:</strong> ${money(tariff.price_vnd_per_kwh)}/kWh · ` : ''}
+              <strong>Phí chiếm trụ:</strong> ${money(tariff.occupancy_fee_vnd_per_minute)}/phút ·
+              <strong>Ân hạn:</strong> ${tariff.grace_period_minutes} phút
+              <br>
+              <span style="color:var(--color-text-muted);">Hiệu lực: ${effectiveAt} (${tariff.timezone_name})</span>
+            </div>
+            ${hasBands && tariff.price_vnd_per_kwh == null ? `
+              <div class="tariff-history-bands-list">
+                ${tariff.bands.map(b => `
+                  <span class="tariff-history-band-tag">
+                    <strong>${escapeHtml(b.label)}:</strong> ${minuteToTime(b.start_minute)}–${minuteToTime(b.end_minute)} (${money(b.price_vnd_per_kwh)}/kWh)
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+          `;
+          listContainer.append(item);
         });
-        history.append(list);
+
+        history.append(listContainer);
       } catch (error) {
-        message.textContent = error.message || 'Không tải được biểu giá.';
+        message.textContent = error.message || 'Không tải được lịch sử biểu giá.';
         message.className = 'form-error';
       }
     }
 
+    // Khởi tạo
     loadTariffs();
+    renderBandsTable();
+    validateAndUpdateView();
+
+    // ── Xử lý lưu biểu giá (SCRUM-61 & SCRUM-62) ──
     tariffForm.addEventListener('submit', async event => {
       event.preventDefault();
       message.textContent = '';
       const data = new FormData(tariffForm);
       const name = String(data.get('name') || '').trim();
-      const values = ['price_vnd_per_kwh', 'occupancy_fee_vnd_per_minute', 'grace_period_minutes'];
-      if (!name || values.some(field => String(data.get(field) ?? '') === '')) {
-        message.textContent = 'Vui lòng nhập tên biểu giá và đầy đủ các mức giá, thời gian.';
+
+      if (!name) {
+        message.textContent = 'Vui lòng nhập tên biểu giá.';
         message.className = 'form-error';
         return;
       }
-      const [price, fee, grace] = values.map(field => Number(data.get(field)));
-      if (![price, fee, grace].every(Number.isSafeInteger) || [price, fee, grace].some(value => value < 0)) {
-        message.textContent = 'Đơn giá, phí chiếm trụ và thời gian ân hạn phải là số nguyên không âm.';
+
+      const feeRaw = data.get('occupancy_fee_vnd_per_minute');
+      const graceRaw = data.get('grace_period_minutes');
+      const fee = Number(feeRaw);
+      const grace = Number(graceRaw);
+
+      if (!Number.isSafeInteger(fee) || fee < 0 || !Number.isSafeInteger(grace) || grace < 0) {
+        message.textContent = 'Phí chiếm trụ và thời gian ân hạn phải là số nguyên không âm.';
         message.className = 'form-error';
         return;
       }
+
       const payload = {
         name,
-        price_vnd_per_kwh: price,
         occupancy_fee_vnd_per_minute: fee,
         grace_period_minutes: grace,
         timezone_name: 'Asia/Ho_Chi_Minh',
       };
+
       const effective = data.get('effective_from');
-      // Send station-local wall time; the API resolves it with timezone_name.
       if (effective) payload.effective_from = effective;
+
+      if (currentTariffMode === 'flat') {
+        // Chế độ 1 giá cố định
+        const priceRaw = data.get('price_vnd_per_kwh');
+        const price = Number(priceRaw);
+        if (!Number.isSafeInteger(price) || price < 0) {
+          message.textContent = 'Đơn giá điện cố định phải là số nguyên không âm.';
+          message.className = 'form-error';
+          return;
+        }
+        payload.price_vnd_per_kwh = price;
+      } else {
+        // Chế độ nhiều khung giờ
+        const validation = validateDailyBands(timeBands);
+        if (!validation.valid) {
+          message.textContent = 'Cấu hình khung giờ chưa hợp lệ: ' + validation.errors[0];
+          message.className = 'form-error';
+          alertBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return;
+        }
+
+        payload.bands = timeBands.map(b => ({
+          label: b.label.trim(),
+          start_minute: timeToMinute(b.startTime),
+          end_minute: timeToMinute(b.endTime),
+          price_vnd_per_kwh: Number(b.price),
+        }));
+      }
+
       submit.disabled = true;
       submit.textContent = 'Đang lưu...';
       try {
         await ApiClient.post(path, payload);
-        message.textContent = 'Đã lưu biểu giá mới cho trạm.';
-        message.className = 'form-hint';
-        tariffForm.reset();
+        message.textContent = '✓ Đã lưu biểu giá mới thành công cho trạm!';
+        message.className = 'tariff-validation-alert tariff-validation-alert--valid';
+        showToast('Đã lưu biểu giá mới cho trạm', 'success');
+
+        // Reset về giá trị cơ bản
         document.getElementById('tariff-name').value = 'Biểu giá trạm';
-        document.getElementById('tariff-occupancy').value = '0';
-        document.getElementById('tariff-grace').value = '0';
+        document.getElementById('tariff-effective').value = '';
         await loadTariffs();
       } catch (error) {
         message.textContent = error.message || 'Không lưu được biểu giá.';
         message.className = 'form-error';
+        showToast(error.message || 'Lỗi lưu biểu giá', 'error');
       } finally {
         submit.disabled = false;
         submit.textContent = 'Lưu biểu giá';
