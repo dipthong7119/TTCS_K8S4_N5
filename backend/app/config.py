@@ -57,10 +57,14 @@ class Settings(BaseSettings):
     OCPP_MESSAGE_RETENTION_DAYS: int = 7
     OCPP_JOB_POLL_SECONDS: int = 60
     OCPP_REMOTE_CALL_TIMEOUT_SECONDS: int = 30
+    REMOTE_START_WAIT: int = Field(60, ge=1)
+    REMOTE_START_CALL_TIMEOUT: int = Field(30, ge=1)
+    REMOTE_START_LATE_GRACE: int = Field(300, ge=0)
+    REMOTE_START_ALLOWED_STATUSES: tuple[str, ...] = ("Available", "Preparing")
     SESSION_OFFLINE_GRACE_SECONDS: int = 21600
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
-    
+
     # Giới hạn nạp tiền thủ công
     MANUAL_TOPUP_MIN: int = Field(1000, ge=1)
     MANUAL_TOPUP_MAX: int = Field(20_000_000, ge=1)
