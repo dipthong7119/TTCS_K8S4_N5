@@ -49,6 +49,7 @@
 ### 2.2. Webhook nhận kết quả từ Cổng Sandbox
 * **Endpoint:** `POST /api/wallet/topups/sandbox/webhook`
 * **Tính chất:** Hỗ trợ xử lý lặp lại an toàn (Idempotent) — gọi nhiều lần cùng `order_code` không bị cộng tiền trùng.
+* **Xác thực:** Cấu hình `SANDBOX_WEBHOOK_SECRET` giống nhau ở ứng dụng và cổng sandbox. Trường `signature` là HMAC-SHA256 dạng hex của JSON UTF-8 chuẩn hóa gồm `failure_reason`, `order_code`, `status` (sắp xếp khóa, không có khoảng trắng; `failure_reason` dùng `null` nếu không có). Chữ ký thiếu/sai bị từ chối; nếu chưa cấu hình khóa, API trả HTTP 503 và không xử lý giao dịch.
 * **Request Body:**
   ```json
   {
@@ -58,6 +59,11 @@
     "signature": "hmac_sha256_hash_here"
   }
   ```
+
+Ví dụ chuỗi được ký khi `failure_reason` là `null`:
+`{"failure_reason":null,"order_code":"TOPUP-20261009163000-A1B2C3","status":"success"}`
+
+`signature` không nằm trong chuỗi được ký. Gửi lại callback phải ký đúng lại các trường dữ liệu đó.
 * **Response (HTTP 200 OK):**
   ```json
   {
