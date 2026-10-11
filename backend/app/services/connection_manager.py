@@ -14,6 +14,8 @@ class ConnectionManager:
     def __init__(self):
         # charge_point_code -> WebSocket
         self.active_connections: dict[str, WebSocket] = {}
+        # Trụ đã được chấp nhận Boot trong tiến trình hiện tại.
+        self.boot_accepted_codes: set[str] = set()
         self.pending_calls: dict[tuple[str, str], asyncio.Future] = {}
         self._pending_websockets: dict[tuple[str, str], WebSocket] = {}
         self._lock = asyncio.Lock()

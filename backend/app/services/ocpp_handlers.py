@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.charge_point import ChargePoint
@@ -19,6 +19,7 @@ from app.models.station import Station
 from app.ocpp.session_reconciliation import (
     ReconciliationContext,
     begin_reconciliation,
+    forget_reconciled_transaction,
 )
 from app.services.ocpp_parser import (
     OCPPError,
@@ -116,10 +117,14 @@ def handle_ocpp_message(
     if existing:
         if existing.request_hash and existing.request_hash != request_hash:
             logger.warning("OCPP message ID reused with different content from %s", charge_point_code)
+            if action == "StopTransaction":
+                _warn_stop_replay_mismatch(point, db, payload)
         touch_last_seen(db, charge_point_code)
         if action != "BootNotification" or _boot_was_accepted(existing.response_payload):
             point.status = "online"
         db.commit()
+        if action == "StopTransaction":
+            _forget_stopped_transaction(payload, existing.response_payload, connection_ctx)
         if action in {"BootNotification", "Heartbeat", "StatusNotification", "StartTransaction", "StopTransaction"}:
             publish_charge_point_status(db, point.id)
         if action in {"StartTransaction", "MeterValues", "StopTransaction"}:
@@ -148,6 +153,8 @@ def handle_ocpp_message(
         )
         db.add(record)
         db.commit()
+        if action == "StopTransaction":
+            _forget_stopped_transaction(payload, response, connection_ctx)
     except IntegrityError:
         # Concurrent delivery of the same CALL: the composite DB index is the
         # source of truth, and the losing transaction must not retain side effects.
@@ -161,7 +168,8 @@ def handle_ocpp_message(
             return existing.response_payload
         logger.exception("Could not persist OCPP message for %s", charge_point_code)
         return pack_call_error(msg_id, "InternalError", "Could not persist message")
-    except (SQLAlchemyError, ValueError, TypeError):
+    except Exception:
+        # Lỗi nghiệp vụ được rollback và trả CALLERROR, không đóng WebSocket.
         db.rollback()
         logger.exception("OCPP handler failed for %s action %s", charge_point_code, action)
         return pack_call_error(msg_id, "InternalError", "Message processing failed")
@@ -241,6 +249,47 @@ def _dispatch(
         )
         return new_handle_stop_transaction(db, point, msg_id, payload)
     return pack_call_error(msg_id, "NotImplemented", f"Action {action} is not implemented")
+
+
+def _forget_stopped_transaction(
+    payload: dict[str, Any],
+    response: str,
+    connection_ctx: ReconciliationContext,
+) -> None:
+    """Cập nhật danh sách kết nối sau khi CALLRESULT đã commit."""
+    transaction_id = payload.get("transactionId")
+    if type(transaction_id) is not int:
+        return
+    try:
+        response_type = parse_message(response)[0]
+    except OCPPError:
+        return
+    if response_type == 3:
+        forget_reconciled_transaction(connection_ctx, transaction_id)
+
+
+def _warn_stop_replay_mismatch(
+    point: ChargePoint, db: Session, payload: dict[str, Any]
+) -> None:
+    """Cảnh báo meterStop khác khi khung đã dùng lại messageId."""
+    transaction_id = payload.get("transactionId")
+    meter_stop = payload.get("meterStop")
+    if type(transaction_id) is not int or type(meter_stop) is not int:
+        return
+    session = (
+        db.query(ChargingSession)
+        .filter_by(id=transaction_id, charge_point_id=point.id)
+        .first()
+    )
+    if session is not None and session.ended_at is not None and session.meter_stop_wh != meter_stop:
+        logger.warning(
+            "StopTransaction replay differs: cp=%s connector=%s transaction=%s old_meter_stop=%s new_meter_stop=%s",
+            point.code,
+            session.connector_number,
+            transaction_id,
+            session.meter_stop_wh,
+            meter_stop,
+        )
 
 
 
