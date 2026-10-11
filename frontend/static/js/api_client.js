@@ -69,6 +69,12 @@ const ApiClient = (() => {
 
     remoteStartChargePoint: (code, connectorId, idTag, opts) => _request('POST', `/charge_points/${encodeURIComponent(code)}/remote-start`, { connector_id: connectorId, id_tag: idTag }, opts),
     // --- Cấu hình trụ (SCRUM-60) ---
+    // --- Bắt đầu sạc theo tài khoản tài xế (SCRUM-95) ---
+    createDriverRemoteStart: (connectorId, opts) =>
+      _request('POST', `/connectors/${encodeURIComponent(connectorId)}/remote-start`, null, opts),
+
+    getDriverRemoteStart: (requestId, opts) =>
+      _request('GET', `/remote-starts/${encodeURIComponent(requestId)}`, null, opts),
     getChargePointConfiguration: (code) =>
       _request('GET', `/charge-points/${encodeURIComponent(code)}/configuration`),
 
