@@ -21,6 +21,7 @@
   let _stopCountdownTimer = null;
   let _stopRemainingSec = 0;
   let _activeStopButton = null;
+  let _stoppingSessionId = null;
 
   const _pageRoot = document.getElementById('sessions-page');
   const _isGlobal = _pageRoot?.dataset.scope === 'all';
@@ -171,6 +172,7 @@
 
   // ── T-50: Luồng Dừng Phiên Sạc Từ Xa (Story S-23) ────────────────────────
   function showStopConfirmation(sessionId, buttonEl) {
+    if (!_canRemoteStop || _stoppingSessionId !== null) return;
     _pendingStopSessionId = sessionId;
     _activeStopButton = buttonEl;
 
@@ -222,6 +224,7 @@
     closeStopConfirmation();
 
     if (!sessionId) return;
+    _stoppingSessionId = sessionId;
 
     // Khởi động đồng hồ đếm ngược 120s (2 phút theo S-23 AC4)
     _stopRemainingSec = REMOTE_STOP_TIMEOUT_SEC;
@@ -236,9 +239,10 @@
         // Hết thời gian chờ 2 phút (Ca 3: S-23 AC4 & T-50)
         clearInterval(_stopCountdownTimer);
         _stopCountdownTimer = null;
+        _stoppingSessionId = null;
         setStoppingUI(buttonEl, false, 0);
         showToast(
-          'Đã quá 2 phút trụ không gửi xác nhận kết thúc phiên. Phiên sạc đã được đánh dấu cần xem xét.',
+          'Đã quá 2 phút chưa nhận được xác nhận kết thúc phiên. Đang tải lại trạng thái từ máy chủ.',
           'warning'
         );
         loadSessions();
@@ -247,15 +251,18 @@
 
     try {
       const result = await ApiClient.remoteStop(sessionId);
+      if (_stoppingSessionId !== sessionId) return;
       // Khi server trả status Accepted
       showToast(
         result.message || 'Đã gửi lệnh dừng tới trụ; đang chờ trụ gửi StopTransaction xác nhận.',
         'info'
       );
     } catch (err) {
+      if (_stoppingSessionId !== sessionId) return;
       // Hủy đồng hồ đếm ngược ngay khi có lỗi
       clearInterval(_stopCountdownTimer);
       _stopCountdownTimer = null;
+      _stoppingSessionId = null;
       setStoppingUI(buttonEl, false, 0);
 
       const status = err.status || 0;
@@ -495,6 +502,13 @@
       });
       SseClient.connect('/api/monitoring/sse');
       SseClient.on('session_update', payload => {
+
+        if (payload?.session_id == _stoppingSessionId && payload.status === 'completed') {
+          clearInterval(_stopCountdownTimer);
+          _stopCountdownTimer = null;
+          _stoppingSessionId = null;
+          setStoppingUI(_activeStopButton, false, 0);
+        }
 
         // Cập nhật live kWh tức thì (< 2s) nếu phiên đang hiển thị nhận được số đo mới
         if (_activeSession && payload?.session_id == _activeSession.id) {
