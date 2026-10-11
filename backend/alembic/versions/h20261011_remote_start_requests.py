@@ -118,5 +118,5 @@ def downgrade() -> None:
     op.drop_index("uq_remote_start_active_connector", table_name="remote_start_requests")
     op.drop_table("remote_start_requests")
     op.drop_index("uq_virtual_id_tag_per_user", table_name="id_tags")
-    op.execute(sa.text("DELETE FROM id_tags WHERE is_virtual = 1"))
+    op.execute(sa.text("DELETE FROM id_tags WHERE is_virtual IS TRUE"))
     op.drop_column("id_tags", "is_virtual")
