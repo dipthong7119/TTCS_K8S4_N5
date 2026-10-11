@@ -620,3 +620,78 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* SCRUM-74: Advanced Ledger Toolbar & Transaction Details */
+.ledger-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .ledger-toolbar {
+    width: 100%;
+    margin-top: var(--space-2);
+  }
+  .ledger-toolbar input[type="search"] {
+    width: 100% !important;
+  }
+}
+
+.ledger-detail-hero {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+
+.ledger-detail-amount {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  margin-bottom: var(--space-2);
+}
+
+.ledger-detail-type {
+  display: inline-block;
+}
+
+.btn-ledger-detail {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.btn-ledger-detail:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.clickable-row:hover {
+  background-color: hsla(210, 90%, 54%, 0.04);
+}
+
+.link-session-detail {
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.link-session-detail:hover {
+  color: var(--color-primary-light);
+}
+

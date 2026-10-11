@@ -1,14 +1,21 @@
 /**
- * pages/wallet.js — Quản lý ví, Nạp tiền Sandbox (SCRUM-195) & Trạng thái giao dịch (SCRUM-200)
+ * pages/wallet.js — Quản lý ví, Nạp tiền Sandbox (SCRUM-195), Theo dõi đơn nạp (SCRUM-200) & Xem lịch sử giao dịch (SCRUM-74)
  */
 (function () {
   'use strict';
 
-  const LEDGER_PAGE_SIZE = 50;
+  const LEDGER_PAGE_SIZE = 20;
   const TOPUP_PAGE_SIZE = 10;
   let _pageLedger = 1;
   let _pageTopups = 1;
   let _currentCreatedOrder = null;
+  let _currentWalletTotals = null;
+
+  // Cache for SCRUM-74 filtering
+  let _rawLedgerItems = [];
+  let _filteredLedgerItems = [];
+  let _ledgerTypeFilter = 'all';
+  let _ledgerSearchQuery = '';
 
   function fmtVND(amountInt) {
     if (amountInt == null) return '—';
@@ -34,10 +41,12 @@
       .replace(/"/g, '&quot;');
   }
 
-  // --- Load Wallet Totals & Balance Check ---
+  // --- Load Wallet Totals & Balance Check (SCRUM-74 & SCRUM-199/72) ---
   async function loadWallet() {
     try {
       const w = await ApiClient.getWallet();
+      _currentWalletTotals = w;
+
       const amountEl = document.getElementById('wallet-amount');
       if (amountEl) {
         amountEl.textContent = fmtVND(w.balance_vnd);
@@ -91,7 +100,259 @@
     }
   }
 
-  // --- SCRUM-200: Lịch sử đơn nạp tiền Sandbox (Payment Transactions) ---
+  // =========================================================================
+  // SCRUM-74: Sổ cái giao dịch & Chi tiết lịch sử ví của Tài xế
+  // =========================================================================
+  async function loadLedger() {
+    const period = document.getElementById('ledger-period')?.value || '30';
+    const tbody = document.getElementById('ledger-tbody');
+    try {
+      // Load ledger items (max 50 per page request from backend)
+      const data = await ApiClient.listLedger({ days: period, page: 1, page_size: 50 });
+      _rawLedgerItems = data.items || data || [];
+
+      // Update badge count
+      const badgeEl = document.getElementById('badge-ledger-count');
+      if (badgeEl) badgeEl.textContent = data.total || _rawLedgerItems.length;
+
+      applyLedgerFilters();
+    } catch (err) {
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--color-fault);">Lỗi tải sổ cái: ${escHtml(err.message || 'Lỗi kết nối')}</td></tr>`;
+      }
+      if (typeof showToast === 'function') {
+        showToast(err.message || 'Không tải được lịch sử sổ cái', 'error');
+      }
+    }
+  }
+
+  function applyLedgerFilters() {
+    _ledgerTypeFilter = document.getElementById('ledger-type-filter')?.value || 'all';
+    _ledgerSearchQuery = (document.getElementById('ledger-search-input')?.value || '').trim().toLowerCase();
+
+    _filteredLedgerItems = _rawLedgerItems.filter((item) => {
+      // Filter by type
+      const isCredit = item.amount_vnd > 0;
+      const entryType = item.entry_type || item.type;
+
+      if (_ledgerTypeFilter === 'credit' && !isCredit) return false;
+      if (_ledgerTypeFilter === 'debit' && isCredit) return false;
+      if (_ledgerTypeFilter === 'session_charge' && entryType !== 'session_charge') return false;
+      if (_ledgerTypeFilter === 'sandbox_topup' && entryType !== 'sandbox_topup') return false;
+      if (_ledgerTypeFilter === 'manual_topup' && entryType !== 'manual_topup') return false;
+
+      // Filter by search text
+      if (_ledgerSearchQuery) {
+        const desc = (item.description || '').toLowerCase();
+        const ref = String(item.session_id || item.reference_code || item.reference_id || '').toLowerCase();
+        const typeStr = String(entryType).toLowerCase();
+        if (!desc.includes(_ledgerSearchQuery) && !ref.includes(_ledgerSearchQuery) && !typeStr.includes(_ledgerSearchQuery)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Update summary note
+    updateLedgerSummaryNote(_filteredLedgerItems);
+
+    // Reset pagination to page 1
+    _pageLedger = 1;
+    renderLedgerSlice();
+  }
+
+  function updateLedgerSummaryNote(items) {
+    const noteEl = document.getElementById('ledger-summary-note');
+    if (!noteEl) return;
+
+    let totalIn = 0;
+    let totalOut = 0;
+    items.forEach((it) => {
+      if (it.amount_vnd > 0) totalIn += it.amount_vnd;
+      else totalOut += Math.abs(it.amount_vnd);
+    });
+
+    noteEl.innerHTML = `Hiển thị <strong>${items.length}</strong> giao dịch | Tiền vào: <span class="ledger-credit">+${fmtVND(totalIn)}</span> | Tiền ra: <span class="ledger-debit">-${fmtVND(totalOut)}</span>`;
+  }
+
+  function renderLedgerSlice() {
+    const tbody = document.getElementById('ledger-tbody');
+    if (!tbody) return;
+
+    if (!_filteredLedgerItems.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:32px 16px;text-align:center;"><div style="font-size:32px;margin-bottom:8px;">📒</div><div style="font-weight:600;">Không tìm thấy giao dịch phù hợp</div><div style="font-size:var(--font-size-xs);color:var(--color-text-muted);">Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm.</div></div></td></tr>`;
+      renderPagination(0, LEDGER_PAGE_SIZE, _pageLedger, 'ledger-pagination', () => {});
+      return;
+    }
+
+    const start = (_pageLedger - 1) * LEDGER_PAGE_SIZE;
+    const pageItems = _filteredLedgerItems.slice(start, start + LEDGER_PAGE_SIZE);
+
+    tbody.innerHTML = pageItems.map((e, index) => {
+      const isCredit = e.amount_vnd > 0;
+      const entryType = e.entry_type || e.type;
+      let typeLabel = 'Điều chỉnh';
+      if (entryType === 'sandbox_topup') typeLabel = 'Nạp Sandbox';
+      else if (entryType === 'manual_topup') typeLabel = 'Nạp thủ công';
+      else if (entryType === 'demo_topup') typeLabel = 'Nạp demo';
+      else if (entryType === 'session_charge') typeLabel = 'Phiên sạc';
+      else if (entryType === 'subscription_charge') typeLabel = 'Phí gói tháng';
+      else if (entryType === 'refund') typeLabel = 'Hoàn tiền';
+
+      let refLink = '';
+      if (e.session_id) {
+        refLink = `<div style="font-size:11px;margin-top:2px;"><a href="/sessions/mine" class="link-session-detail" title="Xem danh sách phiên sạc">⚡ Phiên #${escHtml(e.session_id)}</a></div>`;
+      } else if (e.reference_code) {
+        refLink = `<div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Mã: ${escHtml(e.reference_code)}</div>`;
+      }
+
+      return `<tr class="clickable-row" data-index="${start + index}">
+        <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(e.created_at)}</td>
+        <td><span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${typeLabel}</span></td>
+        <td style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">
+          <div>${escHtml(e.description || '—')}</div>
+          ${refLink}
+        </td>
+        <td class="text-right ${isCredit ? 'ledger-credit' : 'ledger-debit'}" style="font-weight:700;">
+          ${isCredit ? '+' : ''}${fmtVND(e.amount_vnd)}
+        </td>
+        <td class="text-right" style="color:var(--color-text-secondary);font-weight:600;">
+          ${fmtVND(e.balance_after_vnd)}
+        </td>
+        <td class="text-center">
+          <button type="button" class="btn-ledger-detail" data-index="${start + index}" aria-label="Xem chi tiết bút toán">
+            Chi tiết
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Attach row click events
+    tbody.querySelectorAll('.clickable-row, .btn-ledger-detail').forEach((el) => {
+      el.addEventListener('click', (ev) => {
+        // Do not intercept if clicked directly on an anchor link
+        if (ev.target.tagName === 'A') return;
+        const idx = parseInt(el.getAttribute('data-index'), 10);
+        if (!isNaN(idx) && _filteredLedgerItems[idx]) {
+          openLedgerDetailModal(_filteredLedgerItems[idx]);
+        }
+      });
+    });
+
+    renderPagination(_filteredLedgerItems.length, LEDGER_PAGE_SIZE, _pageLedger, 'ledger-pagination', (p) => {
+      _pageLedger = p;
+      renderLedgerSlice();
+    });
+  }
+
+  // --- Modal Chi tiết Giao dịch Sổ cái (SCRUM-74) ---
+  const modalLedgerDetail = document.getElementById('ledger-detail-modal');
+
+  function openLedgerDetailModal(item) {
+    if (!modalLedgerDetail) return;
+
+    const isCredit = item.amount_vnd > 0;
+    const amountEl = document.getElementById('detail-amount');
+    if (amountEl) {
+      amountEl.textContent = (isCredit ? '+' : '') + fmtVND(item.amount_vnd);
+      amountEl.style.color = isCredit ? 'var(--color-online)' : 'var(--color-fault)';
+    }
+
+    const typeBadgeEl = document.getElementById('detail-type-badge');
+    const entryType = item.entry_type || item.type;
+    let typeName = 'Bút toán điều chỉnh';
+    if (entryType === 'sandbox_topup') typeName = 'Nạp tiền qua Cổng Sandbox';
+    else if (entryType === 'manual_topup') typeName = 'Nạp tiền thủ công qua quản trị';
+    else if (entryType === 'demo_topup') typeName = 'Nạp tiền thử nghiệm demo';
+    else if (entryType === 'session_charge') typeName = 'Trừ chi phí phiên sạc';
+    else if (entryType === 'subscription_charge') typeName = 'Trừ phí gói thuê bao tháng';
+    else if (entryType === 'refund') typeName = 'Hoàn trả tiền';
+
+    if (typeBadgeEl) {
+      typeBadgeEl.innerHTML = `<span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${typeName}</span>`;
+    }
+
+    document.getElementById('detail-entry-id').textContent = item.entry_id ? `#LEDGER-${item.entry_id}` : '—';
+    document.getElementById('detail-created-at').textContent = fmtDatetime(item.created_at);
+    document.getElementById('detail-balance-after').textContent = fmtVND(item.balance_after_vnd);
+
+    let refText = 'Không có';
+    if (item.session_id) {
+      refText = `Phiên sạc #${item.session_id} (${item.reference_type || 'charging_session'})`;
+    } else if (item.reference_code) {
+      refText = `Mã đối soát / Phiếu: ${item.reference_code}`;
+    } else if (item.reference_id) {
+      refText = `${item.reference_type || 'tham_chieu'}: #${item.reference_id}`;
+    }
+    document.getElementById('detail-reference').textContent = refText;
+    document.getElementById('detail-description').textContent = item.description || 'Không có mô tả bổ sung.';
+
+    modalLedgerDetail.classList.add('is-open');
+    modalLedgerDetail.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeLedgerDetailModal() {
+    if (!modalLedgerDetail) return;
+    modalLedgerDetail.classList.remove('is-open');
+    modalLedgerDetail.setAttribute('aria-hidden', 'true');
+  }
+
+  // --- Xuất Sao kê Giao dịch CSV (SCRUM-74) ---
+  function exportLedgerCsv() {
+    if (!_filteredLedgerItems.length) {
+      if (typeof showToast === 'function') {
+        showToast('Không có giao dịch nào để xuất sao kê', 'error');
+      }
+      return;
+    }
+
+    const headers = [
+      'Mã bút toán',
+      'Thời gian',
+      'Loại giao dịch',
+      'Mô tả',
+      'Số tiền (VND)',
+      'Số dư sau (VND)',
+      'Mã phiên sạc',
+      'Mã phiếu thu/đối soát',
+    ];
+
+    const rows = _filteredLedgerItems.map((e) => {
+      const entryType = e.entry_type || e.type || '';
+      return [
+        `LEDGER-${e.entry_id || ''}`,
+        `"${fmtDatetime(e.created_at)}"`,
+        `"${entryType}"`,
+        `"${(e.description || '').replace(/"/g, '""')}"`,
+        e.amount_vnd || 0,
+        e.balance_after_vnd || 0,
+        e.session_id || '',
+        `"${(e.reference_code || '').replace(/"/g, '""')}"`,
+      ].join(',');
+    });
+
+    // UTF-8 BOM \uFEFF to preserve Vietnamese characters in Excel
+    const csvContent = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const accountStr = _currentWalletTotals?.account_id || 'driver';
+    a.href = url;
+    a.download = `sao_ke_vi_${accountStr}_${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (typeof showToast === 'function') {
+      showToast('Đã xuất thành công file sao kê CSV!', 'success');
+    }
+  }
+
+  // =========================================================================
+  // SCRUM-200: Lịch sử đơn nạp tiền Sandbox (Payment Transactions)
+  // =========================================================================
   async function loadTopupHistory() {
     const tbody = document.getElementById('topups-tbody');
     try {
@@ -197,54 +458,6 @@
     });
   }
 
-  // --- Sổ cái giao dịch (Ledger) ---
-  async function loadLedger() {
-    const period = document.getElementById('ledger-period')?.value || '30';
-    try {
-      const data = await ApiClient.listLedger({ days: period, page: _pageLedger, page_size: LEDGER_PAGE_SIZE });
-      const items = data.items || data || [];
-      renderLedger(items);
-      renderPagination(data.total || items.length, LEDGER_PAGE_SIZE, _pageLedger, 'ledger-pagination', (p) => {
-        _pageLedger = p;
-        loadLedger();
-      });
-    } catch (err) {
-      if (typeof showToast === 'function') {
-        showToast(err.message || 'Không tải được lịch sử sổ cái', 'error');
-      }
-    }
-  }
-
-  function renderLedger(items) {
-    const tbody = document.getElementById('ledger-tbody');
-    if (!tbody) return;
-
-    if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state" style="padding:32px 16px;text-align:center;"><div style="font-size:32px;margin-bottom:8px;">📒</div><div style="font-weight:600;">Chưa có giao dịch sổ cái</div></div></td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = items.map((e) => {
-      const isCredit = e.amount_vnd > 0;
-      const entryType = e.entry_type || e.type;
-      let typeLabel = 'Điều chỉnh';
-      if (entryType === 'sandbox_topup') typeLabel = 'Nạp Sandbox';
-      else if (entryType === 'manual_topup') typeLabel = 'Nạp thủ công';
-      else if (entryType === 'demo_topup') typeLabel = 'Nạp demo';
-      else if (entryType === 'session_charge') typeLabel = 'Phiên sạc';
-      else if (entryType === 'subscription_charge') typeLabel = 'Phí gói tháng';
-      else if (entryType === 'refund') typeLabel = 'Hoàn tiền';
-
-      return `<tr>
-        <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(e.created_at)}</td>
-        <td><span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${typeLabel}</span></td>
-        <td style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">${escHtml(e.description || '—')}</td>
-        <td class="text-right ${isCredit ? 'ledger-credit' : 'ledger-debit'}">${isCredit ? '+' : ''}${fmtVND(e.amount_vnd)}</td>
-        <td class="text-right" style="color:var(--color-text-secondary);">${fmtVND(e.balance_after_vnd)}</td>
-      </tr>`;
-    }).join('');
-  }
-
   // --- Phân trang dùng chung ---
   function renderPagination(total, pageSize, currentPage, targetElId, onPageClick) {
     const pages = Math.ceil(total / pageSize);
@@ -264,7 +477,9 @@
     }
   }
 
-  // --- SCRUM-195: Modal Nạp Tiền Sandbox ---
+  // =========================================================================
+  // SCRUM-195: Modal Nạp Tiền Sandbox
+  // =========================================================================
   const modalTopup = document.getElementById('topup-modal');
   const amountInput = document.getElementById('topup-amount-input');
   const previewText = document.getElementById('topup-formatted-preview');
@@ -432,7 +647,7 @@
 
       paneLedger.style.display = 'block';
       paneTopups.style.display = 'none';
-      if (ledgerFilter) ledgerFilter.style.display = 'block';
+      if (ledgerFilter) ledgerFilter.style.display = 'flex';
       if (topupsActions) topupsActions.style.display = 'none';
     });
   }
@@ -441,8 +656,8 @@
   document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     loadWallet();
-    loadTopupHistory();
     loadLedger();
+    loadTopupHistory();
 
     // Check URL params for topup_success
     const urlParams = new URLSearchParams(window.location.search);
@@ -450,7 +665,6 @@
       if (typeof showToast === 'function') {
         showToast('Nạp tiền vào ví thành công qua Cổng Sandbox!', 'success');
       }
-      // Remove params from URL cleanly
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
     }
@@ -464,12 +678,27 @@
     document.getElementById('btn-refresh-topups')?.addEventListener('click', () => {
       loadTopupHistory();
     });
+
+    // Ledger toolbar filters (SCRUM-74)
     document.getElementById('ledger-period')?.addEventListener('change', () => {
-      _pageLedger = 1;
       loadLedger();
     });
+    document.getElementById('ledger-type-filter')?.addEventListener('change', () => {
+      applyLedgerFilters();
+    });
+    document.getElementById('ledger-search-input')?.addEventListener('input', () => {
+      applyLedgerFilters();
+    });
+    document.getElementById('btn-export-ledger-csv')?.addEventListener('click', exportLedgerCsv);
 
-    // Modal triggers
+    // Ledger detail modal events
+    document.getElementById('btn-close-ledger-detail')?.addEventListener('click', closeLedgerDetailModal);
+    document.getElementById('btn-done-ledger-detail')?.addEventListener('click', closeLedgerDetailModal);
+    modalLedgerDetail?.addEventListener('click', (e) => {
+      if (e.target === modalLedgerDetail) closeLedgerDetailModal();
+    });
+
+    // Topup modal triggers
     document.getElementById('btn-open-topup')?.addEventListener('click', openTopupModal);
     document.getElementById('btn-open-topup-header')?.addEventListener('click', openTopupModal);
     document.getElementById('btn-close-topup-modal')?.addEventListener('click', closeTopupModal);
