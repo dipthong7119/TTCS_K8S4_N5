@@ -101,6 +101,10 @@ const ApiClient = (() => {
     listLedger: (params = {}) => _request('GET', '/wallet/ledger?' + new URLSearchParams(params)),
     listDriverWallets: (params = {}) => _request('GET', '/wallet/drivers?' + new URLSearchParams(params)),
     manualTopUp: (driverId, body) => _request('POST', `/wallet/drivers/${driverId}/topups`, body),
+    createSandboxTopup: (amountVnd) => _request('POST', '/wallet/topups/sandbox', { amount_vnd: amountVnd }),
+    simulateSandboxPay: (orderCode, status = 'success') => _request('POST', '/wallet/topups/sandbox/simulate-pay', { order_code: orderCode, status }),
+    listTopupHistory: (params = {}) => _request('GET', '/wallet/topups?' + new URLSearchParams(params)),
+    checkWalletBalance: (minAmountVnd = 50000) => _request('GET', `/wallet/check-balance?min_amount_vnd=${encodeURIComponent(minAmountVnd)}`),
   };
 })();
 
