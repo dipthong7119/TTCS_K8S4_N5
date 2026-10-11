@@ -53,9 +53,11 @@
     }
     tbody.innerHTML = items.map(e => {
       const isCredit = e.amount_vnd > 0;
-      const typeLabel = e.type === 'demo_topup' ? 'Nạp demo'
-        : e.type === 'manual_topup' ? 'Nạp thủ công'
-        : e.type === 'session_charge' ? 'Phiên sạc' : 'Điều chỉnh';
+      const entryType = e.entry_type || e.type;
+      const typeLabel = entryType === 'demo_topup' ? 'Nạp demo'
+        : entryType === 'manual_topup' ? 'Nạp thủ công'
+        : entryType === 'session_charge' ? 'Phiên sạc'
+        : entryType === 'subscription_charge' ? 'Phí gói tháng' : 'Điều chỉnh';
       return `<tr>
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(e.created_at)}</td>
         <td><span class="badge ${isCredit ? 'badge--available' : 'badge--fault'}">${typeLabel}</span></td>

@@ -91,6 +91,8 @@ def _serialize_session(
         "cost_vnd": item.invoice.total_vnd if item.invoice else None,
         "invoice_segments": item.invoice.segments if item.invoice else None,
         "invoice_rounding_rule": item.invoice.rounding_rule if item.invoice else None,
+        "invoice_subscription_id": item.invoice.subscription_id if item.invoice else None,
+        "invoice_package_name": item.invoice.package_name if item.invoice else None,
         "status": item.status,
         "stop_reason": item.stop_reason,
         "remote_stop_requested_at": item.remote_stop_requested_at.isoformat() + "Z"

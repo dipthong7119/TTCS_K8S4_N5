@@ -337,3 +337,92 @@ def test_fleet_fails_if_one_connection_ends_and_cancels_the_rest(monkeypatch):
         assert stopped == {"SIM-01", "SIM-02"}
 
     asyncio.run(scenario())
+@pytest.mark.parametrize("key,value,status", [
+    ("HeartbeatInterval", "60", "Accepted"),
+    ("MeterValueSampleInterval", "5", "Accepted"),
+    ("HeartbeatInterval", "29", "Rejected"),
+    ("MeterValueSampleInterval", "901", "Rejected"),
+    ("MeterValueSampleInterval", "5.5", "Rejected"),
+    ("UnknownSetting", "60", "NotSupported"),
+])
+def test_configuration_change_and_readback(key, value, status):
+    async def scenario():
+        sim = SimpleSimulator(code="SIM-01")
+        original = dict(sim.configuration)
+        replies = []
+
+        class FakeWebSocket:
+            def __aiter__(self):
+                async def messages():
+                    yield json.dumps([2, "change", "ChangeConfiguration", {
+                        "key": key, "value": value,
+                    }])
+                    yield json.dumps([2, "read", "GetConfiguration", {
+                        "key": [key],
+                    }])
+                return messages()
+
+            async def send(self, message):
+                replies.append(json.loads(message))
+
+        sim.ws = FakeWebSocket()
+        await sim._receive_loop()
+
+        assert replies[0] == [3, "change", {"status": status}]
+        if status == "Accepted":
+            assert sim.configuration[key] == int(value)
+            assert replies[1][2]["configurationKey"] == [{
+                "key": key, "readonly": False, "value": value,
+            }]
+            assert replies[1][2]["unknownKey"] == []
+        else:
+            assert sim.configuration == original
+            if key not in original:
+                assert replies[1][2]["unknownKey"] == [key]
+
+    asyncio.run(scenario())
+def test_meter_interval_and_stop(monkeypatch):
+    from app.dev_tools.ocpp_simulator import simulator as module
+
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    async def scenario():
+        sim = SimpleSimulator(code="SIM-01")
+        sim.connected = True
+        calls = []
+
+        async def fake_call(action, payload=None):
+            calls.append((action, payload))
+            if action == "StartTransaction":
+                return {
+                    "transactionId": 73,
+                    "idTagInfo": {"status": "Accepted"},
+                }
+            return {}
+
+        sim._call = fake_call
+        await sim._trigger_remote_start(2, "TEST")
+        assert sim._active_transactions[2]["transaction_id"] == 73
+
+        clock[0] = 29
+        await sim.send_meter_values()
+        assert not any(action == "MeterValues" for action, _ in calls)
+
+        sim.configuration["MeterValueSampleInterval"] = 5
+        await sim.send_meter_values()
+        meters = [payload for action, payload in calls if action == "MeterValues"]
+        assert len(meters) == 1
+        assert meters[0]["connectorId"] == 2
+        assert meters[0]["transactionId"] == 73
+        sample = meters[0]["meterValue"][0]["sampledValue"][0]
+        assert sample["value"] == "1100"
+        assert sample["unit"] == "Wh"
+
+        await sim._trigger_remote_stop(73)
+        assert sim._active_transactions == {}
+        clock[0] = 60
+        await sim.send_meter_values()
+        assert sum(action == "MeterValues" for action, _ in calls) == 1
+
+    asyncio.run(scenario())

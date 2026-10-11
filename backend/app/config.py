@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     SESSION_OFFLINE_GRACE_SECONDS: int = 21600
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
+    
+    # Giới hạn nạp tiền thủ công
+    MANUAL_TOPUP_MIN: int = Field(1000, ge=1)
+    MANUAL_TOPUP_MAX: int = Field(20_000_000, ge=1)
 
     @property
     def HEARTBEAT_INTERVAL(self) -> int:

@@ -33,13 +33,73 @@ def validate_daily_bands(bands) -> None:
         start = int(_band_value(band, "start_minute"))
         end = int(_band_value(band, "end_minute"))
         price = int(_band_value(band, "price_vnd_per_kwh"))
-        if start != cursor:
-            raise ValueError("Các khung giá phải liền nhau, không chồng lấn và phủ đủ 24 giờ")
         if not 0 <= start < end <= 1440 or price < 0:
             raise ValueError("Khung giờ hoặc đơn giá không hợp lệ")
+        if start > cursor:
+            raise ValueError(
+                f"Biểu giá bị hở từ {_minute_label(cursor)} đến {_minute_label(start)}"
+            )
+        if start < cursor:
+            overlap_end = min(cursor, end)
+            raise ValueError(
+                f"Biểu giá bị chồng lấn từ {_minute_label(start)} đến "
+                f"{_minute_label(overlap_end)}"
+            )
         cursor = end
     if cursor != 1440:
-        raise ValueError("Biểu giá phải kết thúc lúc 24:00")
+        raise ValueError(
+            f"Biểu giá bị hở từ {_minute_label(cursor)} đến 24:00"
+        )
+
+
+def normalize_daily_bands(bands) -> list[dict]:
+    """Split overnight entries into day-bounded bands and validate full coverage."""
+    normalized = []
+    for band in bands:
+        label = str(_band_value(band, "label")).strip()
+        start = int(_band_value(band, "start_minute"))
+        end = int(_band_value(band, "end_minute"))
+        price = int(_band_value(band, "price_vnd_per_kwh"))
+        if not label or not 0 <= start < 1440 or not 0 <= end <= 1440 or price < 0:
+            raise ValueError("Khung giờ, tên khung hoặc đơn giá không hợp lệ")
+        if start == end:
+            raise ValueError("Khung giờ bắt đầu và kết thúc không được trùng nhau")
+
+        if end < start:
+            normalized.extend(
+                [
+                    {
+                        "label": label,
+                        "start_minute": start,
+                        "end_minute": 1440,
+                        "price_vnd_per_kwh": price,
+                    },
+                    {
+                        "label": label,
+                        "start_minute": 0,
+                        "end_minute": end,
+                        "price_vnd_per_kwh": price,
+                    },
+                ]
+            )
+        else:
+            normalized.append(
+                {
+                    "label": label,
+                    "start_minute": start,
+                    "end_minute": end,
+                    "price_vnd_per_kwh": price,
+                }
+            )
+
+    validate_daily_bands(normalized)
+    return sorted(normalized, key=lambda band: band["start_minute"])
+
+
+def _minute_label(minute: int) -> str:
+    if minute == 1440:
+        return "24:00"
+    return f"{minute // 60:02d}:{minute % 60:02d}"
 
 
 def calculate_session_price(

@@ -30,7 +30,9 @@ from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
+from app.routers.subscriptions import router as subscriptions_router
 from app.routers.wallet import router as wallet_router
+from app.routers.wallet import wallets_router
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,8 @@ app.include_router(sessions_router, prefix="/api")
 app.include_router(reconciliation_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")
+app.include_router(wallets_router, prefix="/api")
+app.include_router(subscriptions_router, prefix="/api")
 
 app.include_router(pages_router)
 

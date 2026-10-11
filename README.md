@@ -260,8 +260,17 @@ Pop-Location
 > gắn với năm vai trò cho môi trường phát triển/demo. Không dùng tài khoản demo
 > trên production.
 
-Tài khoản tài xế demo được cấp thẻ giả lập `DEMO-DRIVER-<ID người dùng>` khi chạy
-seed; ví dụ tài khoản seed đầu tiên thường có mã `DEMO-DRIVER-0005`.
+### Thẻ RFID demo
+
+Thẻ RFID demo là **mã giả lập**, không phải thẻ vật lý. Với dữ liệu seed mặc
+định, tài khoản `driver@csms.local` dùng mã **`DEMO-DRIVER-0005`**. Nhập nguyên
+mã này vào ô **Mã thẻ RFID** trên form Bắt đầu sạc.
+
+Mã được tạo theo ID tài xế trong database (`DEMO-DRIVER-` + ID có đệm số 0
+đến 4 chữ số), nên có thể khác `0005` nếu database đã có dữ liệu riêng. Tra
+mã đang hoạt động trong bảng `id_tags` nếu mã mặc định không được chấp nhận.
+Simulator OCPP demo hiện chưa xử lý lệnh RemoteStartTransaction; mã thẻ chỉ
+xác định tài xế để phân quyền/ủy quyền, không làm trụ giả lập bắt đầu sạc.
 
 Khi `APP_ENV=development`, lần khởi động đầu sẽ tự thêm các trạm/trụ/đầu nối còn
 thiếu, phiên sạc, biểu giá, hóa đơn và giao dịch ví mẫu cho tài xế. Biểu giá demo

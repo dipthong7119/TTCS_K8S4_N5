@@ -239,6 +239,7 @@
 
     return `
       <div class="start-charging-controls">
+      <p class="muted-text">Cắm súng sạc vào xe, chọn đúng đầu nối và nhập mã RFID được cấp để bắt đầu sạc từ ứng dụng.</p>
         <label>
           Chọn đầu nối
           <select class="form-select" data-start-connector>
@@ -261,17 +262,49 @@
   }
   function renderDetailBody(station, body = document.getElementById('detail-body')) {
     if (!body) return;
+
+    let canConfigure = false;
+    try {
+      const user = JSON.parse(document.getElementById('auth-context')?.textContent || '{}');
+      canConfigure = user.roles?.some(role => ['operator', 'admin'].includes(role)) || false;
+    } catch {
+      canConfigure = false;
+    }
+
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
       const lastSeen = point.last_seen_at
-        ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>` : '';
+        ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>`
+        : '';
       const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
-      return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(pointDisplayStatus(point))}</div>
-          <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
-          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connector => connectorMarkup(connector, point.status === 'offline')).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${startChargingMarkup(point)}${restartMarkup}</section>`;
+      const configurationMarkup = canConfigure
+        ? ChargePointConfiguration.createMarkup(point.code)
+        : '';
+
+      return `<section class="detail-point">
+          <div class="detail-point__heading">
+            <strong>${escapeHtml(point.code)}</strong>
+            ${statusBadge(pointDisplayStatus(point))}
+          </div>
+          <p class="detail-point__meta">
+            ${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}
+            ${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}
+          </p>
+          ${lastSeen}
+          <div class="connector-list">
+            ${(point.connectors || []).map(connector =>
+        connectorMarkup(connector, point.status === 'offline')
+      ).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}
+          </div>
+          ${startChargingMarkup(point)}
+          ${configurationMarkup}
+          ${restartMarkup}
+        </section>`;
     }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
+
     RestartButton.bindEvents(body);
     body.querySelectorAll('.start-charging-controls').forEach(bindStartControls);
+    if (canConfigure) ChargePointConfiguration.bindEvents(body);
   }
 
   function startState(code) {

@@ -159,11 +159,14 @@
     const durationEl = document.getElementById('active-duration');
     if (!durationEl) return;
 
-    _activeTimer = setInterval(() => {
+    const updateDuration = () => {
       if (!_activeStart) return;
       const seconds = Math.floor((Date.now() - _activeStart.getTime()) / 1000);
       durationEl.textContent = fmtDuration(seconds);
-    }, 1000);
+    };
+
+    updateDuration();
+    _activeTimer = setInterval(updateDuration, 1000);
   }
 
   // ── T-50: Luồng Dừng Phiên Sạc Từ Xa (Story S-23) ────────────────────────
@@ -428,11 +431,11 @@
         <p class="form-hint">${escHtml(session.invoice_rounding_rule || 'Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu sau ân hạn.')}</p>
         <ol style="padding-left:var(--space-5);display:grid;gap:var(--space-2);">
           ${invoiceSegments.map(segment => {
-            const detail = segment.kind === 'occupancy_fee'
-              ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
-              : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
-            return `<li><strong>${escHtml(segment.band || 'Khung giá')}</strong> (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
-          }).join('')}
+      const detail = segment.kind === 'occupancy_fee'
+        ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
+        : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
+      return `<li><strong>${escHtml(segment.band || 'Khung giá')}</strong> (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
+    }).join('')}
         </ol>
       </section>` : '';
 
@@ -487,6 +490,9 @@
 
     // Kênh realtime SSE (T-48 & T-50)
     if (_pageRoot?.dataset.liveUpdates === 'true' && window.SseClient) {
+      SseClient.on('_connected', () => {
+        loadSessions();
+      });
       SseClient.connect('/api/monitoring/sse');
       SseClient.on('session_update', payload => {
 

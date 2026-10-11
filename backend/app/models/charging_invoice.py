@@ -22,7 +22,12 @@ class ChargingInvoice(Base):
     __tablename__ = "charging_invoices"
     __table_args__ = (
         CheckConstraint("total_vnd >= 0", name="ck_charging_invoice_total_nonnegative"),
+        CheckConstraint(
+            "tariff_id IS NOT NULL OR subscription_id IS NOT NULL",
+            name="ck_charging_invoice_has_pricing_source",
+        ),
         Index("ix_charging_invoices_tariff", "tariff_id"),
+        Index("ix_charging_invoices_subscription", "subscription_id"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -33,8 +38,18 @@ class ChargingInvoice(Base):
         unique=True,
     )
     tariff_id = Column(
-        Integer, ForeignKey("station_tariffs.id", ondelete="RESTRICT"), nullable=False
+        Integer, ForeignKey("station_tariffs.id", ondelete="RESTRICT"), nullable=True
     )
+    subscription_id = Column(
+        Integer,
+        ForeignKey(
+            "driver_subscriptions.id",
+            ondelete="RESTRICT",
+            name="fk_charging_invoices_subscription",
+        ),
+        nullable=True,
+    )
+    package_name = Column(String(120), nullable=True)
     total_vnd = Column(Integer, nullable=False)
     segments = Column(JSON, nullable=False, default=list)
     rounding_rule = Column(
