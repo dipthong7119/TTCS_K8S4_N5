@@ -208,6 +208,11 @@ nếu không muốn 5 trụ mẫu, hoặc `-SkipSimulator` để chỉ chạy we
 .\run.ps1 -SimulatorCount 5 -SkipDemoStations
 ```
 
+Nếu một trạm mẫu đang bị khóa, server sẽ từ chối `BootNotification` của các trụ
+thuộc trạm đó. Fleet local chỉ chờ khoảng `interval` server trả về rồi thử lại
+các trụ bị từ chối; các trụ còn lại vẫn chạy. Dùng `-SkipDemoStations` để chỉ
+chạy nhóm `SIM-*`.
+
 Tắt bằng `Ctrl+C`; ứng dụng dừng cả web server và fleet simulator.
 SQLite local nằm trong `backend/csms.db` và độc lập với dữ liệu Docker.
 

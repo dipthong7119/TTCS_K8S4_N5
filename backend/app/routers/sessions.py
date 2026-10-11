@@ -16,7 +16,7 @@ from app.models.charging_session import ChargingSession
 from app.models.meter_value import MeterValue
 from app.models.station import Station
 from app.models.user import User
-from app.services.audit import ghi_nhat_ky
+from app.services.audit import record_remote_command
 from app.services.connection_manager import manager
 from app.services.ocpp_parser import OCPPError
 from app.services.ocpp_status import is_charge_point_stale
@@ -333,16 +333,16 @@ async def remote_stop_session(
             timeout=settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
-        ghi_nhat_ky(
+        record_remote_command(
             db,
             action="remote_stop.failed",
+            command="RemoteStopTransaction",
             object_type="charging_session",
             object_id=item.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
+            actor=current_user,
             charge_point_code=point.code,
-            details={"outcome": "timeout"},
+            outcome="timeout",
+            details={"transaction_id": item.id},
         )
         db.commit()
         raise HTTPException(
@@ -350,16 +350,16 @@ async def remote_stop_session(
             detail="Trụ không phản hồi lệnh dừng từ xa trong thời gian chờ.",
         ) from exc
     except ConnectionError as exc:
-        ghi_nhat_ky(
+        record_remote_command(
             db,
             action="remote_stop.failed",
+            command="RemoteStopTransaction",
             object_type="charging_session",
             object_id=item.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
+            actor=current_user,
             charge_point_code=point.code,
-            details={"outcome": "disconnected"},
+            outcome="disconnected",
+            details={"transaction_id": item.id},
         )
         db.commit()
         raise HTTPException(
@@ -367,16 +367,16 @@ async def remote_stop_session(
             detail="Trụ sạc đã ngắt kết nối trước khi nhận lệnh dừng.",
         ) from exc
     except OCPPError as exc:
-        ghi_nhat_ky(
+        record_remote_command(
             db,
             action="remote_stop.failed",
+            command="RemoteStopTransaction",
             object_type="charging_session",
             object_id=item.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
+            actor=current_user,
             charge_point_code=point.code,
-            details={"outcome": "call_error"},
+            outcome="call_error",
+            details={"transaction_id": item.id},
         )
         db.commit()
         raise HTTPException(
@@ -389,16 +389,16 @@ async def remote_stop_session(
         db.refresh(item)
         if item.ended_at is None:
             item.remote_stop_requested_at = datetime.now(UTC).replace(tzinfo=None)
-    ghi_nhat_ky(
+    record_remote_command(
         db,
         action="remote_stop.accepted" if accepted else "remote_stop.rejected",
+        command="RemoteStopTransaction",
         object_type="charging_session",
         object_id=item.id,
-        actor_id=current_user.id,
-        actor_email=current_user.email,
-        actor_name=current_user.full_name,
+        actor=current_user,
         charge_point_code=point.code,
-        details={"outcome": result.get("status", "unknown")},
+        outcome=result.get("status", "unknown"),
+        details={"transaction_id": item.id},
     )
     db.commit()
     if not accepted:

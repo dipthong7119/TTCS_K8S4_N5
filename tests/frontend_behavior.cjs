@@ -1,4 +1,4 @@
-/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
+﻿/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
  * These tests check behavior, not browser layout or rendering performance.
  */
 const assert = require('node:assert/strict');
@@ -54,6 +54,7 @@ function monitoring(getTree, clock = Date, options = {}) {
       remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
       listAllSessions: options.listSessions || (async () => ({ items: [] })),
       getCurrentSession: options.currentSession || (async () => null),
+    remoteStop: options.stop,
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
@@ -1117,12 +1118,12 @@ function sessionPage(getSessions, options = {}) {
   };
   document.getElementById('sessions-page').dataset = {
     scope: 'mine',
-    canRemoteStop: 'false',
-    liveUpdates: options.liveUpdates ? 'true' : 'false',
+    canRemoteStop: options.stop ? 'true' : 'false',
+    liveUpdates: options.liveUpdates || options.stop ? 'true' : 'false',
   };
 
   const calls = [], timers = [], toasts = [];
-  const callbacks = {};
+  const callbacks = {}, cleared = [];
   const sse = {
     connect() { },
     on(name, fn) { callbacks[name] = fn; },
@@ -1133,16 +1134,17 @@ function sessionPage(getSessions, options = {}) {
       return getSessions();
     },
     getCurrentSession: options.currentSession || (async () => null),
+    remoteStop: options.stop,
   };
   vm.runInContext(read('pages/my_session.js'), vm.createContext({
     document, window: { SseClient: sse }, SseClient: sse, ApiClient: api,
     Date: options.clock || Date,
-    Intl, console, setTimeout, clearTimeout, clearInterval() { },
+    Intl, console, setTimeout, clearTimeout, clearInterval(id) { cleared.push(id); },
     setInterval: fn => { timers.push(fn); return timers.length; },
     showToast: message => toasts.push(message),
   }));
   document.handlers.DOMContentLoaded();
-  return { document, calls, timers, toasts, callbacks };
+  return { document, calls, timers, toasts, callbacks, cleared };
 }
 
 test('driver session page uses the API and stays empty without fabricated sessions', async () => {
@@ -1418,4 +1420,26 @@ test('SCRUM-94: duration displays immediately and advances each second', async (
   now += 1000;
   page.timers[0]();
   assert.notEqual(duration.textContent, initial);
+});
+
+
+test('SCRUM-58: completion cancels countdown and ignores late command response', async () => {
+  let resolve;
+  const response = new Promise(done => { resolve = done; });
+  let session = { id: 123, status: 'active', live_kwh: 0 };
+  const page = sessionPage(async () => ({ items: [session], total: 1 }), { stop: () => response });
+  await flush();
+  page.document.getElementById('active-stop-btn').onclick();
+  const pending = page.document.getElementById('remote-stop-modal-confirm').handlers.click();
+  const countdownId = page.timers.length;
+  page.callbacks.session_update({ session_id: 999, status: 'completed' });
+  assert.ok(!page.cleared.includes(countdownId));
+  session = { ...session, status: 'completed' };
+  page.callbacks.session_update({ session_id: 123, status: 'completed' });
+  assert.ok(page.cleared.includes(countdownId));
+  resolve({ status: 'Accepted', message: 'Still waiting' });
+  await pending;
+  await flush();
+  assert.ok(!page.toasts.includes('Still waiting'));
+  assert.ok(!page.toasts.some(message => message.includes('quá 2 phút')));
 });

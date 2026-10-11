@@ -20,7 +20,7 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     meter_start = payload.get("meterStart")
     id_tag_value = payload.get("idTag")
     started_at = _parse_timestamp(payload.get("timestamp"))
-    
+
     if type(connector_number) is not int or connector_number <= 0:
         return pack_call_error(msg_id, "FormationViolation", "connectorId must be a positive integer")
     if type(meter_start) is not int or meter_start < 0:
@@ -31,7 +31,7 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     connector = db.query(Connector).filter_by(
         charge_point_id=point.id, connector_id=connector_number
     ).first()
-    
+
     tag, user, auth_status = authorize_tag(db, point, id_tag_value)
     station = db.query(Station).filter(Station.id == point.station_id).first()
     effective_status = auth_status if connector is not None else "Invalid"
@@ -80,10 +80,30 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     )
     db.add(session)
     db.flush()
-    
+
+    # Giữ phiên nếu riêng thao tác đối chiếu yêu cầu lỗi.
+    try:
+        from app.services.remote_start import resolve_pending_start
+
+        with db.begin_nested():
+            resolve_pending_start(
+                db,
+                point.id,
+                connector_number,
+                id_tag_value,
+                session.id,
+            )
+    except Exception:
+        logger.warning(
+            "Remote start request resolution failed: cp=%s connector=%s session=%s",
+            point.code,
+            connector_number,
+            session.id,
+        )
+
     if accepted and connector is not None:
         connector.status = "charging"
-        
+
     return pack_call_result(
         msg_id,
         {"transactionId": session.id, "idTagInfo": {"status": effective_status}},

@@ -133,6 +133,10 @@ def test_remote_stop_accepted(monkeypatch):
     )
     assert audit is not None
     assert audit.details.get("outcome") == "Accepted"
+    assert audit.details.get("command") == "RemoteStopTransaction"
+    assert audit.actor_id == 1
+    assert audit.actor_email == "operator@test.com"
+    assert audit.charge_point_code == "CP01"
     db.close()
 
 

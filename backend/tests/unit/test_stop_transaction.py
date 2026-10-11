@@ -1,10 +1,13 @@
 """Test cases cho handler StopTransaction (SCRUM-163 / T-38)."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from threading import Barrier
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -359,3 +362,285 @@ def test_stop_transaction_validation_errors(db_session):
     payload = {"transactionId": 1, "meterStop": 2000, "timestamp": datetime.now(UTC).isoformat(), "transactionData": {}}
     resp = handle_ocpp_message(db_session, "CP001", pack_call("m4", "StopTransaction", payload))
     assert parse_message(resp)[3] == "FormationViolation"
+
+
+@pytest.mark.parametrize("status", ["active", "needs_review", "anomaly"])
+def test_late_stop_closes_every_open_status(db_session, status):
+    session = db_session.get(ChargingSession, 1)
+    session.started_at = datetime(2026, 10, 1, 8, tzinfo=UTC).replace(tzinfo=None)
+    session.status = status
+    session.review_reason = "connector_available_after_reconnect" if status == "needs_review" else None
+    session.anomaly_reason = "offline" if status == "anomaly" else None
+    point = db_session.get(ChargePoint, 1)
+    point.status = "offline"
+    db_session.commit()
+
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("late-stop", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 2345,
+            "timestamp": "2026-10-01T08:03:04Z",
+            "reason": "EVDisconnected",
+        }),
+    )
+
+    assert parse_message(response)[0] == 3
+    db_session.refresh(session)
+    assert session.status == "completed"
+    assert session.meter_stop_wh == 2345
+    assert session.energy_kwh == Decimal("1.345")
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4, tzinfo=UTC).replace(tzinfo=None)
+    assert session.review_reason is None
+
+
+def test_stop_timestamp_before_start_closes_for_review_using_message_time(db_session, caplog):
+    session = db_session.get(ChargingSession, 1)
+    session.started_at = datetime(2026, 10, 2, 8, tzinfo=UTC).replace(tzinfo=None)
+    db_session.commit()
+    point = db_session.get(ChargePoint, 1)
+
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("early-stop", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 2345,
+            "timestamp": "2026-10-01T08:03:04Z",
+        }),
+    )
+
+    assert parse_message(response)[0] == 3
+    db_session.refresh(session)
+    assert session.meter_stop_wh == 2345
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, 4, tzinfo=UTC).replace(tzinfo=None)
+    assert session.energy_kwh == Decimal("1.345")
+    assert session.status == "needs_review"
+    assert session.review_reason == "stop_timestamp_before_start"
+    assert any("timestamp precedes session start" in record.message for record in caplog.records)
+
+
+def test_stop_transaction_data_is_sorted_before_shared_meter_filter(db_session):
+    session = db_session.get(ChargingSession, 1)
+    session.started_at = datetime(2026, 10, 1, 8, tzinfo=UTC).replace(tzinfo=None)
+    db_session.commit()
+    point = db_session.get(ChargePoint, 1)
+
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("sorted-transaction-data", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 1400,
+            "timestamp": "2026-10-01T08:04:00Z",
+            "transactionData": [
+                {"timestamp": "2026-10-01T08:03:00Z", "sampledValue": [{"value": "1300"}]},
+                {"timestamp": "2026-10-01T08:01:00Z", "sampledValue": [{"value": "1100"}]},
+                {"timestamp": "2026-10-01T08:02:00Z", "sampledValue": [{"value": "1200"}]},
+            ],
+        }),
+    )
+
+    assert parse_message(response)[0] == 3
+    stored = db_session.query(MeterValue).filter_by(session_id=session.id).order_by(
+        MeterValue.measured_at, MeterValue.id
+    ).all()
+    assert [row.measured_at for row in stored] == [
+        datetime(2026, 10, 1, 8, minute, tzinfo=UTC).replace(tzinfo=None)
+        for minute in (1, 2, 3)
+    ]
+    assert [int(row.value) for row in stored] == [1100, 1200, 1300]
+
+
+def test_invalid_stop_timestamp_does_not_change_session(db_session):
+    session = db_session.get(ChargingSession, 1)
+    original_start = session.started_at
+    point = db_session.get(ChargePoint, 1)
+
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("invalid-stop-time", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 2000,
+            "timestamp": "not-an-iso-timestamp",
+        }),
+    )
+
+    assert parse_message(response)[0] == 4
+    assert parse_message(response)[3] == "FormationViolation"
+    db_session.refresh(session)
+    assert session.started_at == original_start
+    assert session.status == "active"
+    assert session.ended_at is None
+    assert session.meter_stop_wh is None
+
+
+def test_ended_stop_replay_with_different_meter_stop_warns_without_changes(db_session, caplog):
+    session = db_session.get(ChargingSession, 1)
+    session.status = "completed"
+    session.meter_stop_wh = 2000
+    session.ended_at = datetime(2026, 10, 1, 8, 3, tzinfo=UTC).replace(tzinfo=None)
+    db_session.commit()
+    point = db_session.get(ChargePoint, 1)
+
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("different-replay", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 9999,
+            "timestamp": "2026-10-02T08:00:00Z",
+        }),
+    )
+
+    assert parse_message(response)[3]["idTagInfo"]["status"] == "Accepted"
+    db_session.refresh(session)
+    assert session.meter_stop_wh == 2000
+    assert session.ended_at == datetime(2026, 10, 1, 8, 3, tzinfo=UTC).replace(tzinfo=None)
+    assert any("StopTransaction replay differs" in record.message for record in caplog.records)
+
+
+def test_reused_message_id_with_changed_stop_meter_still_warns(db_session, caplog):
+    point = db_session.get(ChargePoint, 1)
+    first = pack_call("same-stop-id", "StopTransaction", {
+        "transactionId": 1,
+        "meterStop": 2000,
+        "timestamp": "2026-10-01T09:00:00Z",
+    })
+    assert parse_message(handle_ocpp_message(db_session, point.code, first))[0] == 3
+
+    changed = pack_call("same-stop-id", "StopTransaction", {
+        "transactionId": 1,
+        "meterStop": 3000,
+        "timestamp": "2026-10-01T09:00:00Z",
+    })
+    response = handle_ocpp_message(db_session, point.code, changed)
+
+    assert parse_message(response)[0] == 3
+    session = db_session.get(ChargingSession, 1)
+    assert session.meter_stop_wh == 2000
+    assert any("StopTransaction replay differs" in record.message for record in caplog.records)
+
+
+@pytest.mark.parametrize("transaction_id", [999, 1])
+def test_unknown_or_foreign_stop_is_orphaned_without_closing_session(db_session, transaction_id):
+    session = db_session.get(ChargingSession, 1)
+    station = db_session.get(Station, 1)
+    other_point = ChargePoint(id=2, code="CP002", station_id=station.id, status="online")
+    db_session.add(other_point)
+    db_session.flush()
+    db_session.add(Connector(charge_point_id=other_point.id, connector_id=1))
+    db_session.commit()
+
+    response = handle_ocpp_message(
+        db_session,
+        other_point.code,
+        pack_call(f"orphan-{transaction_id}", "StopTransaction", {
+            "transactionId": transaction_id,
+            "meterStop": 2345,
+            "timestamp": "2026-10-01T09:00:00Z",
+        }),
+    )
+
+    assert parse_message(response)[0] == 3
+    db_session.refresh(session)
+    assert session.status == "active"
+    assert session.ended_at is None
+    assert db_session.query(OrphanMessage).filter_by(
+        charge_point_code=other_point.code,
+        transaction_id=transaction_id,
+        action="StopTransaction",
+    ).count() == 1
+
+
+def test_transaction_data_failure_rolls_back_stop_and_measurements(db_session, monkeypatch):
+    from app.ocpp.handlers import stop_transaction
+
+    session = db_session.get(ChargingSession, 1)
+    point = db_session.get(ChargePoint, 1)
+
+    def fail_storage(*_args, **_kwargs):
+        raise SQLAlchemyError("injected transactionData failure")
+
+    monkeypatch.setattr(stop_transaction, "_store_meter_values", fail_storage)
+    response = handle_ocpp_message(
+        db_session,
+        point.code,
+        pack_call("rollback-stop", "StopTransaction", {
+            "transactionId": session.id,
+            "meterStop": 2345,
+            "timestamp": "2026-10-01T09:00:00Z",
+            "transactionData": [{
+                "timestamp": "2026-10-01T08:59:00Z",
+                "sampledValue": [{"value": "2300", "unit": "Wh"}],
+            }],
+        }),
+    )
+
+    assert parse_message(response)[0] == 4
+    db_session.refresh(session)
+    assert session.status == "active"
+    assert session.ended_at is None
+    assert session.meter_stop_wh is None
+    assert db_session.query(MeterValue).filter_by(session_id=session.id).count() == 0
+
+
+def test_two_concurrent_stop_calls_close_session_once(tmp_path):
+    database = tmp_path / "concurrent-stop.db"
+    engine = create_engine(
+        f"sqlite:///{database.as_posix()}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as seed_db:
+        user = User(email="parallel@test.com", password_hash="x", full_name="Test")
+        seed_db.add(user)
+        seed_db.flush()
+        station = Station(name="Parallel", owner_id=user.id, status="active")
+        seed_db.add(station)
+        seed_db.flush()
+        point = ChargePoint(code="CP-PARALLEL", station_id=station.id, status="online")
+        seed_db.add(point)
+        seed_db.flush()
+        seed_db.add(Connector(charge_point_id=point.id, connector_id=1))
+        seed_db.add(ChargingSession(
+            id=1,
+            charge_point_id=point.id,
+            charge_point_code=point.code,
+            station_id=station.id,
+            station_name=station.name,
+            connector_number=1,
+            meter_start_wh=1000,
+            started_at=datetime(2026, 10, 1, 8, tzinfo=UTC).replace(tzinfo=None),
+            status="active",
+        ))
+        seed_db.commit()
+
+    barrier = Barrier(2)
+
+    def stop(index: int) -> str:
+        with factory() as db:
+            barrier.wait(timeout=5)
+            return handle_ocpp_message(
+                db,
+                "CP-PARALLEL",
+                pack_call(f"parallel-{index}", "StopTransaction", {
+                    "transactionId": 1,
+                    "meterStop": 2000,
+                    "timestamp": "2026-10-01T09:00:00Z",
+                }),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(stop, (1, 2)))
+
+    assert all(parse_message(response)[0] == 3 for response in responses)
+    with factory() as db:
+        session = db.get(ChargingSession, 1)
+        assert session.status == "completed"
+        assert session.ended_at == datetime(2026, 10, 1, 9, tzinfo=UTC).replace(tzinfo=None)
+        assert session.meter_stop_wh == 2000
+    engine.dispose()

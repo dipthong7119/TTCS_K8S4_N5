@@ -51,6 +51,17 @@ DEMO_POINT_PROFILES = {
 }
 
 
+class BootNotificationRejected(RuntimeError):
+    """A server declined this device and specified when it may retry."""
+
+    def __init__(self, code: str, result: dict[str, Any]) -> None:
+        try:
+            self.retry_after = max(1, int(result.get("interval", 10)))
+        except (TypeError, ValueError):
+            self.retry_after = 10
+        super().__init__(f"{code}: BootNotification rejected: {result}")
+
+
 def simulator_codes(
     count: int, codes_file: Path = SEED_CODES_FILE, *, include_demo_stations: bool = False,
 ) -> tuple[str, ...]:
@@ -317,7 +328,7 @@ class SimpleSimulator:
             "firmwareVersion": FIRMWARE,
         })
         if boot_result.get("status") != "Accepted":
-            raise RuntimeError(f"BootNotification rejected: {boot_result}")
+            raise BootNotificationRejected(self.code, boot_result)
         heartbeat_interval = max(1, int(boot_result.get("interval", 10)))
         self.configuration["HeartbeatInterval"] = heartbeat_interval
         # 0 describes the whole device; positive IDs describe every seeded connector.
@@ -434,15 +445,28 @@ async def run_simulator(
     await sim.connect()
 
 
-async def run_fleet(codes: tuple[str, ...], server_url: str) -> None:
-    """Run independent sockets concurrently; stop the fleet if a device fails."""
+async def run_fleet(
+    codes: tuple[str, ...], server_url: str, *, isolate_boot_rejections: bool = False,
+) -> None:
+    """Run sockets concurrently, optionally isolating BootNotification rejections."""
     simulators = [SimpleSimulator(code=code, server_url=server_url) for code in codes]
     if not simulators or len(set(codes)) != len(codes):
         raise ValueError("fleet requires at least one charge point and unique codes")
 
     async def connect(simulator: SimpleSimulator) -> None:
-        await simulator.connect()
-        raise RuntimeError(f"{simulator.code}: connection ended unexpectedly")
+        while True:
+            try:
+                await simulator.connect()
+                raise RuntimeError(f"{simulator.code}: connection ended unexpectedly")
+            except BootNotificationRejected as exc:
+                if not isolate_boot_rejections:
+                    raise
+                print(
+                    f"[Simulator {simulator.code}] BootNotification rejected; "
+                    f"retrying in {exc.retry_after}s",
+                    flush=True,
+                )
+                await asyncio.sleep(exc.retry_after)
 
     tasks = [asyncio.create_task(connect(simulator), name=simulator.code) for simulator in simulators]
     try:

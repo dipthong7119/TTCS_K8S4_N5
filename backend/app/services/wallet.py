@@ -323,9 +323,15 @@ def deduct_session_charge(
     session_id: int,
     amount_vnd: int,
     *,
+    description: str | None = None,
+    created_at: datetime | None = None,
+    reference_type: str = "session",
     actor_id: int | None = None,
 ) -> WalletLedgerEntry:
-    """Trừ tiền tự động từ ví khi phiên sạc kết thúc (SCRUM-199, SCRUM-71)."""
+    """Trừ tiền tự động từ ví khi phiên sạc kết thúc (SCRUM-199, SCRUM-71 / S-37)."""
+    if amount_vnd <= 0:
+        raise ValueError("Số tiền trừ ví phiên sạc phải lớn hơn 0 đồng")
+
     idempotency_key = f"session-charge:{session_id}"
     existing = (
         db.query(WalletLedgerEntry).filter_by(idempotency_key=idempotency_key).first()
@@ -334,17 +340,21 @@ def deduct_session_charge(
         return existing
 
     amount_to_deduct = -abs(amount_vnd)
+    desc = description or f"Thanh toán phiên sạc #{session_id}"
     entry = WalletLedgerEntry(
         user_id=user_id,
         entry_type="session_charge",
         amount_vnd=amount_to_deduct,
         idempotency_key=idempotency_key,
         receipt_code=f"CHARGE-{session_id}",
-        reference_type="charging_session",
+        reference_type=reference_type,
         reference_id=session_id,
-        description=f"Thanh toán phiên sạc #{session_id}",
+        description=desc,
         actor_id=actor_id,
     )
+    if created_at is not None:
+        entry.created_at = created_at
+
     db.add(entry)
     db.flush()
     return entry
