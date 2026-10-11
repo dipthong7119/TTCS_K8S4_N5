@@ -239,3 +239,14 @@ async def wallet_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request, template_name, _page_context(request, current_user)
     )
+
+
+@router.get("/wallet/sandbox-checkout", dependencies=[Depends(require_role("driver"))])
+async def sandbox_checkout_page(request: Request, current_user: CurrentUser, order_code: str = ""):
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "wallet/sandbox_checkout.html",
+        _page_context(request, current_user, order_code=order_code),
+    )
+
