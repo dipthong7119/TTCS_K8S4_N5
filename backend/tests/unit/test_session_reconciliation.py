@@ -367,6 +367,41 @@ def test_websocket_reconnect_reconciles_the_persisted_session(
         client.close()
 
 
+def test_reconnect_can_reconcile_without_second_boot_notification(db_session, monkeypatch):
+    db, point = db_session
+    session = _add_session(db_session, point, 1)
+    session_id = session.id
+    point_code = point.code
+    session_factory = sessionmaker(bind=db.bind)
+    db.close()
+    manager = ConnectionManager()
+    monkeypatch.setattr(ocpp_router, "SessionLocal", session_factory)
+    monkeypatch.setattr(ocpp_router, "manager", manager)
+    monkeypatch.setattr(
+        "app.services.ocpp_handlers.publish_charge_point_status", lambda *_args: None
+    )
+    client = TestClient(main_app)
+
+    try:
+        with client.websocket_connect(f"/ocpp/{point_code}", subprotocols=["ocpp1.6"]) as websocket:
+            websocket.send_text(pack_call("boot-once", "BootNotification", {}))
+            assert websocket.receive_json()[2]["status"] == "Accepted"
+        with client.websocket_connect(f"/ocpp/{point_code}", subprotocols=["ocpp1.6"]) as websocket:
+            websocket.send_text(pack_call("resume-no-boot", "StatusNotification", {
+                "connectorId": 1,
+                "status": "Charging",
+                "errorCode": "NoError",
+            }))
+            assert websocket.receive_json() == [3, "resume-no-boot", {}]
+        with session_factory() as check_db:
+            persisted = check_db.get(ChargingSession, session_id)
+            assert persisted.status == "active"
+            assert persisted.ended_at is None
+            assert check_db.query(ChargingSession).count() == 1
+    finally:
+        client.close()
+
+
 def test_offline_message_rebuilds_and_late_meter_stop_use_same_transaction(db_session, monkeypatch):
     db, point = db_session
     session = _add_session(db_session, point, 1)
@@ -416,6 +451,47 @@ def test_offline_message_rebuilds_and_late_meter_stop_use_same_transaction(db_se
     assert db.query(MeterValue).filter_by(session_id=session.id).count() == 1
     assert session.status == "completed"
     assert session.ended_at is not None
+
+
+@pytest.mark.parametrize("available_first", [True, False])
+def test_available_and_late_stop_order_have_same_final_session(
+    db_session, monkeypatch, available_first
+):
+    db, point = db_session
+    session = _add_session(db_session, point, 1)
+    context = ReconciliationContext()
+    begin_reconciliation(db, point, context)
+    monkeypatch.setattr(
+        "app.ocpp.handlers.stop_transaction.finalize_session_billing",
+        lambda *_args: None,
+    )
+
+    def send_stop():
+        response = handle_ocpp_message(
+            db,
+            point.code,
+            pack_call("late-stop-order", "StopTransaction", {
+                "transactionId": session.id,
+                "meterStop": 2000,
+                "timestamp": "2026-10-07T10:02:00Z",
+            }),
+            context,
+        )
+        assert parse_message(response)[0] == 3
+
+    if available_first:
+        _send_status(db, point, context, 1, "Available", "available-first")
+        send_stop()
+    else:
+        send_stop()
+        _send_status(db, point, context, 1, "Available", "available-after-stop")
+
+    db.refresh(session)
+    assert session.status == "completed"
+    assert session.ended_at == datetime(2026, 10, 7, 10, 2)
+    assert session.energy_kwh == 1
+    assert session.review_reason is None
+    assert context.waiting == {}
 
 
 def test_reconciliation_failure_keeps_connector_response_and_context(db_session, monkeypatch):

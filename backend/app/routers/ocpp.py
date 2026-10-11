@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint
+from app.models.station import Station
+from app.ocpp.handlers.boot_notification import decide_boot_status
 from app.ocpp.session_reconciliation import (
     ReconciliationContext,
     begin_reconciliation,
@@ -38,11 +40,21 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
         return
 
     with SessionLocal() as db:
-        charge_point_exists = (
-            db.query(ChargePoint.id).filter(ChargePoint.code == charge_point_code).first()
-            is not None
+        charge_point = (
+            db.query(ChargePoint).filter(ChargePoint.code == charge_point_code).first()
         )
-    if not charge_point_exists:
+        station = (
+            db.query(Station).filter(Station.id == charge_point.station_id).first()
+            if charge_point is not None
+            else None
+        )
+        may_resume_without_boot = (
+            charge_point_code in manager.boot_accepted_codes
+            and decide_boot_status(charge_point, station) == "Accepted"
+            if charge_point is not None
+            else False
+        )
+    if charge_point is None:
         logger.warning(
             "Rejected unknown charge point: code=%s ip=%s",
             charge_point_code,
@@ -65,7 +77,7 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
     except Exception:
         logger.warning("Session reconciliation failed on new connection: cp=%s", charge_point_code)
     logger.info("Charge point connected: %s", charge_point_code)
-    boot_accepted = False
+    boot_accepted = may_resume_without_boot
 
     try:
         while True:
@@ -135,6 +147,10 @@ async def ocpp_websocket_endpoint(websocket: WebSocket, charge_point_code: str):
                 response_frame = None
             if action == "BootNotification" and response_frame and response_frame[0] == 3 and isinstance(response_frame[3], dict):
                 boot_accepted = response_frame[3].get("status") == "Accepted"
+                if boot_accepted:
+                    manager.boot_accepted_codes.add(charge_point_code)
+                else:
+                    manager.boot_accepted_codes.discard(charge_point_code)
 
             # Do not deliver work from a replaced socket to its successor.
             if manager.active_connections.get(charge_point_code) is websocket and response:
