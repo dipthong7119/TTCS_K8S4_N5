@@ -250,41 +250,178 @@
   <section class="card station-tariff-card" id="station-tariff-card" data-station-id="{{ station.id }}" aria-labelledby="station-tariff-title">
     <div class="card__header">
       <div>
-        <h2 class="card__title" id="station-tariff-title">Biểu giá trạm</h2>
-        <p class="card__subtitle">Giá điện theo kWh, phí chiếm trụ theo phút và thời gian ân hạn</p>
+        <h2 class="card__title" id="station-tariff-title">Biểu giá trạm &amp; Phí chiếm trụ</h2>
+        <p class="card__subtitle">Khai báo đơn giá điện theo kWh (cố định hoặc nhiều khung giờ), phí chiếm trụ theo phút và thời gian ân hạn</p>
+      </div>
+      <div class="tariff-header-badges">
+        <span class="badge badge--neutral">SCRUM-61 &amp; SCRUM-62</span>
       </div>
     </div>
     <div class="card__body">
       <form id="station-tariff-form" novalidate>
+        <!-- Tên biểu giá -->
         <div class="form-group">
-          <label class="form-label" for="tariff-name">Tên biểu giá</label>
-          <input class="form-input" id="tariff-name" name="name" value="Biểu giá trạm" maxlength="120" required />
+          <label class="form-label" for="tariff-name">
+            Tên biểu giá <span class="required" aria-hidden="true">*</span>
+          </label>
+          <input class="form-input" id="tariff-name" name="name" value="Biểu giá trạm" maxlength="120" required placeholder="VD: Biểu giá tiêu chuẩn, Biểu giá 3 khung giờ..." />
         </div>
+
+        <!-- Chọn chế độ biểu giá: Cố định vs Nhiều khung giờ -->
+        <div class="form-group">
+          <label class="form-label">Loại biểu giá điện <span class="required" aria-hidden="true">*</span></label>
+          <div class="tariff-type-tabs" role="radiogroup" aria-label="Chọn loại biểu giá">
+            <label class="tariff-type-tab is-active" id="label-type-flat">
+              <input type="radio" name="tariff_type" value="flat" id="tariff-type-flat" checked class="sr-only">
+              <div class="tariff-type-tab__icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                </svg>
+              </div>
+              <div class="tariff-type-tab__content">
+                <span class="tariff-type-tab__title">Đơn giá cố định</span>
+                <span class="tariff-type-tab__desc">Một mức giá kWh duy nhất cho cả ngày</span>
+              </div>
+            </label>
+            <label class="tariff-type-tab" id="label-type-bands">
+              <input type="radio" name="tariff_type" value="time_bands" id="tariff-type-bands" class="sr-only">
+              <div class="tariff-type-tab__icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+              </div>
+              <div class="tariff-type-tab__content">
+                <span class="tariff-type-tab__title">Nhiều khung giờ (Time-of-Use)</span>
+                <span class="tariff-type-tab__desc">Chia theo khung giờ: thấp điểm, tiêu chuẩn, cao điểm (phủ kín 24h)</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Khu vực 1: Đơn giá cố định (Flat rate) -->
+        <div id="tariff-flat-section" class="form-group">
+          <label class="form-label" for="tariff-price">
+            Đơn giá điện (đồng/kWh) <span class="required">*</span>
+          </label>
+          <div class="input-with-suffix" style="max-width: 360px;">
+            <input class="form-input" id="tariff-price" name="price_vnd_per_kwh" type="number" min="0" max="1000000000" step="1" placeholder="VD: 3500" required />
+            <span class="input-suffix">đ/kWh</span>
+          </div>
+          <p class="form-hint">Mức giá này sẽ áp dụng liên tục cho mọi thời điểm sạc trong ngày.</p>
+        </div>
+
+        <!-- Khu vực 2: Nhiều khung giờ (SCRUM-62) -->
+        <div id="tariff-bands-section" class="tariff-bands-section is-hidden" aria-labelledby="bands-section-title">
+          <div class="tariff-bands-section__header">
+            <div>
+              <h3 class="tariff-bands-section__title" id="bands-section-title">Cấu hình các khung giờ trong ngày</h3>
+              <p class="form-hint" style="margin:0;">Tổng các khung giờ phải phủ kín 24 giờ (từ 00:00 đến 24:00) và không được chồng lấn nhau.</p>
+            </div>
+            <div class="tariff-bands-actions">
+              <button type="button" class="btn btn--secondary btn--sm" id="btn-apply-preset-bands" title="Nạp nhanh 3 khung giờ mẫu: Thấp điểm, Tiêu chuẩn, Cao điểm">
+                ⚡ Áp dụng mẫu 24h chuẩn
+              </button>
+            </div>
+          </div>
+
+          <!-- Thanh trực quan 24 giờ -->
+          <div class="timeline-24h" aria-label="Biểu đồ trực quan phân bổ khung giờ 24h">
+            <div class="timeline-24h__ruler">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span>24:00</span>
+            </div>
+            <div class="timeline-24h__track" id="timeline-24h-track" title="Thanh phân bổ khung giờ trong ngày">
+              <!-- Render động bởi JS -->
+            </div>
+            <div class="timeline-24h__legend" id="timeline-24h-legend">
+              <!-- Chú giải động -->
+            </div>
+          </div>
+
+          <!-- Cảnh báo thời gian thực: Chồng lấn / Hở giờ / Hợp lệ -->
+          <div id="tariff-bands-validation-alert" class="tariff-validation-alert" role="alert" aria-live="polite">
+            <!-- Nội dung validation hiển thị động -->
+          </div>
+
+          <!-- Bảng các khung giờ -->
+          <div class="table-wrap tariff-bands-table-wrap">
+            <table class="table tariff-bands-table" id="tariff-bands-table" aria-label="Bảng danh sách các khung giờ">
+              <thead>
+                <tr>
+                  <th scope="col" style="width: 25%;">Tên khung giờ <span class="required">*</span></th>
+                  <th scope="col" style="width: 22%;">Giờ bắt đầu <span class="required">*</span></th>
+                  <th scope="col" style="width: 22%;">Giờ kết thúc <span class="required">*</span></th>
+                  <th scope="col" style="width: 23%;">Đơn giá (đồng/kWh) <span class="required">*</span></th>
+                  <th scope="col" style="width: 8%; text-align: center;">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="tariff-bands-tbody">
+                <!-- Các dòng khung giờ sẽ được render ở đây -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="tariff-bands-footer">
+            <button type="button" class="btn btn--secondary btn--sm" id="btn-add-time-band">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              + Thêm khung giờ
+            </button>
+            <span class="form-hint" id="bands-count-hint">Đang có 0 khung giờ</span>
+          </div>
+        </div>
+
+        <!-- Phí chiếm trụ & ân hạn (SCRUM-61) -->
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label" for="tariff-price">Đơn giá điện (đồng/kWh) <span class="required">*</span></label>
-            <input class="form-input" id="tariff-price" name="price_vnd_per_kwh" type="number" min="0" max="1000000000" step="1" required />
+            <label class="form-label" for="tariff-occupancy">
+              Phí chiếm trụ (đồng/phút)
+            </label>
+            <div class="input-with-suffix">
+              <input class="form-input" id="tariff-occupancy" name="occupancy_fee_vnd_per_minute" type="number" min="0" max="1000000000" step="1" value="0" required />
+              <span class="input-suffix">đ/phút</span>
+            </div>
+            <p class="form-hint">Phí tính khi xe đã sạc đầy hoặc dừng sạc nhưng chưa rút súng sau thời gian ân hạn.</p>
           </div>
           <div class="form-group">
-            <label class="form-label" for="tariff-occupancy">Phí chiếm trụ (đồng/phút)</label>
-            <input class="form-input" id="tariff-occupancy" name="occupancy_fee_vnd_per_minute" type="number" min="0" max="1000000000" step="1" value="0" required />
+            <label class="form-label" for="tariff-grace">
+              Thời gian ân hạn (phút)
+            </label>
+            <div class="input-with-suffix">
+              <input class="form-input" id="tariff-grace" name="grace_period_minutes" type="number" min="0" max="100000" step="1" value="0" required />
+              <span class="input-suffix">phút</span>
+            </div>
+            <p class="form-hint">Số phút miễn phí đỗ trước khi bắt đầu tính phí chiếm trụ.</p>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="tariff-grace">Thời gian ân hạn (phút)</label>
-            <input class="form-input" id="tariff-grace" name="grace_period_minutes" type="number" min="0" max="100000" step="1" value="0" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="tariff-effective">Có hiệu lực từ</label>
-            <input class="form-input" id="tariff-effective" name="effective_from" type="datetime-local" />
-          </div>
+
+        <!-- Thời điểm hiệu lực -->
+        <div class="form-group">
+          <label class="form-label" for="tariff-effective">
+            Thời điểm có hiệu lực
+          </label>
+          <input class="form-input" id="tariff-effective" name="effective_from" type="datetime-local" style="max-width: 320px;" />
+          <p class="form-hint">Để trống để áp dụng ngay lập tức. Biểu giá mới áp dụng cho các phiên bắt đầu từ thời điểm này.</p>
         </div>
-        <p class="form-hint">Để trống thời điểm hiệu lực để áp dụng ngay. Biểu giá mới áp dụng cho phiên bắt đầu từ thời điểm này.</p>
-        <button class="btn btn--primary" type="submit" id="tariff-submit">Lưu biểu giá</button>
+
+        <div class="tariff-submit-row">
+          <button class="btn btn--primary" type="submit" id="tariff-submit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Lưu biểu giá
+          </button>
+        </div>
       </form>
+
       <div id="station-tariff-message" role="status" aria-live="polite" style="margin-top:var(--space-4);"></div>
-      <div id="station-tariff-history" style="margin-top:var(--space-4);"></div>
+
+      <!-- Lịch sử các phiên bản biểu giá của trạm -->
+      <div id="station-tariff-history" class="station-tariff-history" style="margin-top:var(--space-6);"></div>
     </div>
   </section>
   {% endif %}
