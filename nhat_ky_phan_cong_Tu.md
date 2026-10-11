@@ -29,9 +29,23 @@ Theo quy tắc chống nghẽn (Mục 6.1), Tú có thể bắt đầu làm vi�
 - Luôn ưu tiên chốt schema/hợp đồng API ngay từ đầu Sprint.
 - Nếu bị chờ BE quá 1 ngày (dù đã hối thúc), báo cáo ngay cho Scrum Master (Trịnh Thanh Tùng) trong buổi Daily Scrum.
 
-## 5. Tiến độ thực hiện (Cập nhật)
-- **[Đã hoàn thành trước] SCRUM-61:** Đã dựng xong `form.html` (Màn hình khai báo biểu giá với Form nhập liệu kWh, phí chiếm trụ, tích hợp sẵn logic Mock Data khi submit).
-- **[Đã hoàn thành trước] SCRUM-62:** Đã dựng xong `time_frames.html` (Màn hình cấu hình khung giờ động, bao gồm thuật toán bằng JavaScript để validate tính liền mạch 24h và chống chồng lấn các khung giờ).
+## 5. Tiến độ thực hiện (Cập nhật ngày 11/10/2026)
+- **[HOÀN THÀNH 100%] SCRUM-61 (FE - Khai báo biểu giá theo kWh và phí chiếm trụ theo phút):**
+  - Tích hợp trực tiếp vào màn hình sửa trạm sạc (`frontend/templates/stations/form.html` và `frontend/static/js/pages/stations_form.js`).
+  - Hỗ trợ đầy đủ các trường: Tên biểu giá, Đơn giá điện (hoặc chế độ nhiều khung giờ), Phí chiếm trụ (đồng/phút), Thời gian ân hạn (phút), Thời điểm hiệu lực (`effective_from`).
+  - Kết nối API authoritative `POST /api/stations/{station_id}/tariffs` và `GET /api/stations/{station_id}/tariffs`.
+  - Hiển thị danh sách lịch sử các phiên bản biểu giá của trạm với đầy đủ thông tin phí và thời điểm áp dụng.
+- **[HOÀN THÀNH 100%] SCRUM-62 (FE - Cấu hình nhiều khung giờ, cảnh báo chồng lấn/thiếu giờ):**
+  - Thiết kế tab chuyển đổi trực quan giữa 2 chế độ: "Đơn giá cố định cả ngày" và "Nhiều khung giờ (Time-of-Use)".
+  - Hỗ trợ thêm/xóa/sửa các khung giờ động linh hoạt trong ngày.
+  - Tích hợp nút tiện ích: "⚡ Áp dụng mẫu 24h chuẩn" nạp nhanh 3 khung giờ mẫu (Thấp điểm, Tiêu chuẩn, Cao điểm).
+  - Thanh trực quan 24 giờ (Visual 24-hour timeline bar) chia tỉ lệ theo 1440 phút, phân màu rõ rệt theo loại khung giờ và hiển thị các khoảng hở (gaps) hoặc chồng lấn (overlaps).
+  - Thuật toán kiểm tra (Client-side validation) thời gian thực theo đúng chuẩn nghiệp vụ:
+    - Bắt lỗi hở giờ chính xác đến từng phút (`Biểu giá bị hở từ XX:XX đến YY:YY` hoặc `đến 24:00`).
+    - Bắt lỗi chồng lấn giờ chính xác (`Biểu giá bị chồng lấn từ XX:XX đến YY:YY`).
+    - Bắt lỗi giờ trùng nhau, đơn giá âm, tên khung rỗng.
+    - Hiển thị thông báo trạng thái màu xanh khi cấu hình hợp lệ phủ kín 24h.
+  - Chuyển đổi dữ liệu sang định dạng `bands: [{label, start_minute, end_minute, price_vnd_per_kwh}]` gửi lên API Backend.
+  - Thẻ lịch sử biểu giá hiển thị chi tiết từng khung giờ kèm dải thời gian và đơn giá.
 - **Bước tiếp theo:**
-  - Chờ API từ phía Backend để ghép vào các hàm Submit hiện tại.
-  - Xin file JSON mẫu từ Backend để tiến hành render cho phần hóa đơn (SCRUM-66, 208).
+  - Chuyển sang thực hiện **SCRUM-63 (Subtask 208 FE)** và **SCRUM-66 (FE)**: Nâng cấp bảng chi tiết diễn giải hóa đơn (Breakdown segments) trên trang phiên sạc `my_session.html` / `my_session.js`.
