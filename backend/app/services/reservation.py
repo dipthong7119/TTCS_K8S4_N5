@@ -358,16 +358,18 @@ async def create_reservation(
         )
 
     # Trụ phản hồi Occupied, Faulted, Unavailable, Rejected...
+    status_str = str(raw_status) if raw_status is not None else "Rejected"
     reservation.status = "rejected"
-    reservation.reject_reason = raw_status or "Rejected"
+    reservation.reject_reason = status_str
     record_reservation_outcome("reservation.rejected", reservation.reject_reason)
 
-    reason_msg = {
+    reason_mapping: dict[str, str] = {
         "Occupied": "Trụ sạc báo đầu nối đang bận (Occupied).",
         "Faulted": "Trụ sạc đang gặp sự cố (Faulted).",
         "Unavailable": "Đầu nối hiện không khả dụng (Unavailable).",
         "Rejected": "Trụ sạc từ chối nhận lệnh đặt chỗ (Rejected).",
-    }.get(raw_status, f"Trụ sạc từ chối đặt chỗ: {raw_status}")
+    }
+    reason_msg = reason_mapping.get(status_str, f"Trụ sạc từ chối đặt chỗ: {status_str}")
 
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
