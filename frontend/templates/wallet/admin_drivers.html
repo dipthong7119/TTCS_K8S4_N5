@@ -94,6 +94,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>window.WalletAdmin = { canTopUp: {{ 'true' if 'admin' in current_user.roles else 'false' }} };</script>
 <script src="{{ asset_url('js/pages/admin_drivers.js') }}"></script>
 {% endblock %}
+

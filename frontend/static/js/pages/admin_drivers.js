@@ -32,23 +32,39 @@
     }
   }
 
+  function checkCanTopUp() {
+    if (window.WalletAdmin && typeof window.WalletAdmin.canTopUp === 'boolean') {
+      return window.WalletAdmin.canTopUp;
+    }
+    if (document.getElementById('topup-dialog')) {
+      return true;
+    }
+    try {
+      const auth = JSON.parse(document.getElementById('auth-context')?.textContent || '{}');
+      return Array.isArray(auth.roles) && auth.roles.includes('admin');
+    } catch (_) {
+      return false;
+    }
+  }
+
   function renderRows(drivers) {
     const tbody = document.getElementById('driver-wallet-tbody');
     if (!drivers.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="driver-table-message">Không tìm thấy tài khoản tài xế.</td></tr>';
       return;
     }
+    const hasTopUpPermission = checkCanTopUp();
     tbody.innerHTML = drivers.map(driver => {
       const isNegative = (driver.balance_vnd || 0) < 0;
       const balanceClass = `text-right driver-money${isNegative ? ' driver-money--negative' : ''}`;
-      const negativeTag = isNegative ? ' <span class="badge badge--fault badge--xs" title="T\u00e0i x\u1ebf đang nợ - số d\u01b0 âm">Nợ</span>' : '';
+      const negativeTag = isNegative ? ' <span class="badge badge--fault badge--xs" title="Tài xế đang nợ - số dư âm">Nợ</span>' : '';
       return `<tr>
         <td><div class="driver-cell__name">${escapeHtml(driver.full_name)}</div><div class="driver-cell__email">${escapeHtml(driver.email)}</div></td>
         <td><span class="badge ${driver.is_active ? 'badge--available' : 'badge--fault'}">${driver.is_active ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
         <td class="${balanceClass}">${money(driver.balance_vnd)}${negativeTag}</td>
         <td class="text-right">${money(driver.total_spent_vnd)}</td>
         <td class="driver-last-charge">${dateTime(driver.last_charge_at)}</td>
-        <td class="text-right">${window.WalletAdmin.canTopUp && driver.is_active
+        <td class="text-right">${hasTopUpPermission && driver.is_active
           ? `<button class="btn btn--primary btn--sm" type="button" data-topup-driver="${driver.id}" data-driver-name="${escapeHtml(driver.full_name)}" data-driver-balance="${driver.balance_vnd || 0}">Nạp tiền</button>`
           : '<span class="driver-readonly">Chỉ xem</span>'}</td>
       </tr>`;
