@@ -49,7 +49,11 @@ async def _run_local_simulator_fleet() -> None:
     while True:
         try:
             logger.info("Starting local OCPP simulator fleet (%s charge points)", len(codes))
-            await run_fleet(codes, settings.CSMS_LOCAL_SIMULATOR_URL)
+            await run_fleet(
+                codes,
+                settings.CSMS_LOCAL_SIMULATOR_URL,
+                isolate_boot_rejections=True,
+            )
             logger.warning("Local OCPP simulator fleet stopped; reconnecting in 3 seconds")
         except asyncio.CancelledError:
             raise
