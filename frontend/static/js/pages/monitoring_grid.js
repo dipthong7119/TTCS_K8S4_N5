@@ -308,7 +308,7 @@
   }
 
   function startState(code) {
-    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '', tag: '' });
+    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', topUpUrl: null, selected: '', tag: '' });
     return startRequests.get(code);
   }
 
@@ -328,19 +328,32 @@
       select.disabled = tag.disabled = state.pending;
       button.disabled = state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20;
       button.textContent = state.pending ? 'Đang chờ bắt đầu sạc…' : 'Bắt đầu sạc';
-      message.textContent = state.message;
+      message.textContent = state.topUpUrl ? `${state.message} ` : state.message;
+      if (state.topUpLink) {
+        state.topUpLink.remove();
+        state.topUpLink = null;
+      }
+      if (state.topUpUrl === '/wallet') {
+        const link = document.createElement('a');
+        link.href = '/wallet';
+        link.className = 'btn btn--primary btn--sm';
+        link.textContent = 'Nạp tiền vào ví';
+        state.topUpLink = link;
+        message.appendChild(link);
+      }
     };
     if (state.selected) select.value = state.selected;
     if (state.tag !== undefined) tag.value = state.tag;
     state.update = update;
-    select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; } update(); });
-    tag.addEventListener('input', () => { if (!state.pending) state.tag = tag.value; update(); });
+    select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; state.topUpUrl = null; } update(); });
+    tag.addEventListener('input', () => { if (!state.pending) { state.tag = tag.value; state.topUpUrl = null; } update(); });
     button.addEventListener('click', async () => {
       if (state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20) return;
       state.selected = select.value;
       state.tag = tag.value.trim();
       state.pending = true;
       state.message = 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
+      state.topUpUrl = null;
       const started = Date.now();
       const controller = new AbortController();
       state.controller = controller;
@@ -394,7 +407,10 @@
         await poll();
       } catch (error) {
         if (!withinDeadline()) return;
-        if (error.status === 409) finish(/ngoại tuyến|ngắt kết nối/i.test(error.message || '') ? error.message : 'Trụ hoặc đầu nối đang bận. Vui lòng chọn đầu nối khác.');
+        if (error.code === 'wallet_below_minimum') {
+          state.topUpUrl = error.top_up_url === '/wallet' ? error.top_up_url : null;
+          finish(error.message || 'Số dư ví dưới ngưỡng tối thiểu để bắt đầu sạc.');
+        } else if (error.status === 409) finish(/ngoại tuyến|ngắt kết nối/i.test(error.message || '') ? error.message : 'Trụ hoặc đầu nối đang bận. Vui lòng chọn đầu nối khác.');
         else if (error.status === 504 || error.name === 'AbortError') finish('Hết thời gian chờ, trụ chưa phản hồi. Kiểm tra trạng thái trước khi thử lại.');
         else if (error.status === 502) finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.');
         else finish(error.message || 'Không thể gửi yêu cầu bắt đầu sạc. Vui lòng thử lại.');

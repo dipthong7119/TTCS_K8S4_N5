@@ -15,6 +15,7 @@
   let _activeStart = null;
   let _activeSession = null;
   let _currentLiveKwh = 0;
+  let _invoiceDetailRequest = 0;
 
   // Quản lý trạng thái dừng từ xa (T-50)
   let _pendingStopSessionId = null;
@@ -426,25 +427,39 @@
     }
   }
 
-  function openDetail(session) {
+  function renderInvoiceDetail(invoice) {
+    if (invoice?.status !== 'issued') {
+      return `<section aria-label="Trạng thái hóa đơn" role="status" style="margin-top:var(--space-5);">
+        <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Hóa đơn</h3>
+        <p class="form-hint">${escHtml(invoice?.message || 'Chưa tải được trạng thái hóa đơn.')}</p>
+      </section>`;
+    }
+
+    const segments = Array.isArray(invoice.segments) ? invoice.segments : [];
+    const lines = segments.length ? `<ol style="padding-left:var(--space-5);display:grid;gap:var(--space-2);">
+      ${segments.map(segment => {
+        const title = `${segment.tariff_name ? `${escHtml(segment.tariff_name)} · ` : ''}${escHtml(segment.band || 'Khung giá')}`;
+        const date = segment.service_date ? ` · ngày ${escHtml(segment.service_date)}` : '';
+        const detail = segment.kind === 'occupancy_fee'
+          ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
+          : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
+        return `<li><strong>${title}</strong>${date} (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
+      }).join('')}
+    </ol>` : '<p class="form-hint">Hóa đơn không có dòng chi tiết.</p>';
+
+    return `<section aria-label="Chi tiết hóa đơn" style="margin-top:var(--space-5);">
+      <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Chi tiết hóa đơn</h3>
+      <p class="form-hint">${escHtml(invoice.rounding_rule || '')}</p>
+      ${lines}
+      <p style="margin-top:var(--space-3);font-weight:700;">Tổng cộng: ${fmtVND(invoice.total_vnd)}</p>
+    </section>`;
+  }
+
+  async function openDetail(session) {
     if (!session) return;
+    const requestId = ++_invoiceDetailRequest;
     const titleEl = document.getElementById('session-detail-title');
     if (titleEl) titleEl.textContent = `Chi tiết phiên sạc #${session.id}`;
-
-    const invoiceSegments = Array.isArray(session.invoice_segments) ? session.invoice_segments : [];
-    const invoiceBreakdown = invoiceSegments.length ? `
-      <section aria-label="Chi tiết hóa đơn" style="margin-top:var(--space-5);">
-        <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Phân bổ chi phí theo khung giá</h3>
-        <p class="form-hint">${escHtml(session.invoice_rounding_rule || 'Làm tròn HALF_UP đến đồng trên từng khung giá; phí chiếm trụ tính mỗi phút bắt đầu sau ân hạn.')}</p>
-        <ol style="padding-left:var(--space-5);display:grid;gap:var(--space-2);">
-          ${invoiceSegments.map(segment => {
-      const detail = segment.kind === 'occupancy_fee'
-        ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
-        : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
-      return `<li><strong>${escHtml(segment.band || 'Khung giá')}</strong> (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
-    }).join('')}
-        </ol>
-      </section>` : '';
 
     const bodyEl = document.getElementById('session-detail-body');
     if (bodyEl) {
@@ -459,10 +474,26 @@
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Chi phí sạc</dt><dd style="font-weight:700;">${session.cost_vnd != null ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(session.cost_vnd) : 'Chưa có cấu hình biểu giá'}</dd></div>
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạng thái</dt><dd><span class="badge ${STATUS_CLASS[session.status] || 'badge--neutral'}">${STATUS_LABEL[session.status] || 'Không rõ'}</span></dd></div>
           <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Lý do kết thúc</dt><dd>${escHtml(session.stop_reason || '—')}</dd></div>
-        </dl>${invoiceBreakdown}`;
+        </dl><div id="session-invoice-detail"><p class="form-hint" role="status">Đang tải hóa đơn...</p></div>`;
     }
     const modal = document.getElementById('session-detail-modal');
     if (modal) modal.classList.remove('is-hidden');
+
+    try {
+      const invoice = await ApiClient.getSessionInvoice(session.id);
+      if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
+      const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
+      if (invoiceEl) invoiceEl.innerHTML = renderInvoiceDetail(invoice);
+    } catch (error) {
+      if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
+      const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
+      if (invoiceEl) {
+        invoiceEl.innerHTML = renderInvoiceDetail({
+          status: 'unavailable',
+          message: error.message || 'Không thể tải hóa đơn. Vui lòng thử lại.',
+        });
+      }
+    }
   }
 
   // ── Khởi tạo trang ────────────────────────────────────────────────────────
@@ -480,11 +511,15 @@
     });
 
     document.getElementById('session-modal-close')?.addEventListener('click', () => {
+      ++_invoiceDetailRequest;
       document.getElementById('session-detail-modal')?.classList.add('is-hidden');
     });
 
     document.getElementById('session-detail-modal')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) e.currentTarget.classList.add('is-hidden');
+      if (e.target === e.currentTarget) {
+        ++_invoiceDetailRequest;
+        e.currentTarget.classList.add('is-hidden');
+      }
     });
 
     // Modal dừng từ xa (T-50)

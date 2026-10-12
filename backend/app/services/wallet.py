@@ -2,6 +2,7 @@
 
 import re
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -11,9 +12,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.charging_session import ChargingSession
 from app.models.payment_transaction import PaymentTransaction
+from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
+from app.services.pricing import DEMO_TARIFF_BANDS
 
 
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
@@ -307,12 +310,47 @@ def list_user_payment_transactions(
     }
 
 
+def minimum_wallet_balance_vnd(db: Session) -> int:
+    """Ngưỡng toàn hệ thống: cấu hình tường minh hoặc 5 kWh theo giá cao nhất."""
+    if settings.WALLET_MINIMUM_BALANCE_VND is not None:
+        return settings.WALLET_MINIMUM_BALANCE_VND
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    latest_effective_by_station = (
+        db.query(
+            StationTariff.station_id.label("station_id"),
+            func.max(StationTariff.effective_from).label("effective_from"),
+        )
+        .filter(StationTariff.effective_from <= now)
+        .group_by(StationTariff.station_id)
+        .subquery()
+    )
+    highest_effective_rate = cast(
+        int | None,
+        db.query(func.max(TariffBand.price_vnd_per_kwh))
+        .join(StationTariff, TariffBand.tariff_id == StationTariff.id)
+        .join(
+            latest_effective_by_station,
+            (latest_effective_by_station.c.station_id == StationTariff.station_id)
+            & (latest_effective_by_station.c.effective_from == StationTariff.effective_from),
+        )
+        .scalar(),
+    )
+    if highest_effective_rate is None:
+        highest_effective_rate = max(
+            cast(int, band["price_vnd_per_kwh"]) for band in DEMO_TARIFF_BANDS
+        )
+    return int(highest_effective_rate) * 5
+
+
 def has_minimum_balance(
     db: Session,
     user_id: int,
-    min_amount_vnd: int = 50_000,
+    min_amount_vnd: int | None = None,
 ) -> bool:
     """Kiểm tra số dư đạt ngưỡng tối thiểu trước khi sạc (SCRUM-199, 72)."""
+    if min_amount_vnd is None:
+        min_amount_vnd = minimum_wallet_balance_vnd(db)
     totals = wallet_totals(db, user_id)
     return totals["balance_vnd"] >= min_amount_vnd
 

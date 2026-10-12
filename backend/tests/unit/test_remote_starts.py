@@ -26,6 +26,7 @@ from app.models.id_tag import IdTag
 from app.models.remote_start_request import RemoteStartRequest, RemoteStartStatus
 from app.models.station import Station
 from app.models.user import Role, User
+from app.models.wallet_ledger import WalletLedgerEntry
 from app.ocpp.handlers.authorize import handle_authorize
 from app.ocpp.handlers.start_transaction import handle_start_transaction
 from app.services import remote_start as remote_start_service
@@ -63,6 +64,16 @@ def context(tmp_path: Path):
     accountant.roles = [accountant_role]
     db.add_all([owner, driver_a, driver_b, operator, admin, station_owner, accountant])
     db.flush()
+    for driver in (driver_a, driver_b):
+        db.add(
+            WalletLedgerEntry(
+                user_id=driver.id,
+                entry_type="manual_topup",
+                amount_vnd=50_000,
+                idempotency_key=f"test-start-wallet:{driver.id}",
+                description="Test wallet funding",
+            )
+        )
     station = Station(name="Station", owner_id=owner.id, status="active")
     db.add(station)
     db.flush()
@@ -466,6 +477,87 @@ def test_missing_login_is_unauthorized(context, monkeypatch):
     )
     assert response.status_code == 401
     assert response.json()["code"] == "unauthorized"
+
+
+def test_remote_start_is_blocked_below_wallet_minimum_without_sending_ocpp(
+    context, monkeypatch
+):
+    driver = context["users"]["driver_a"]
+    context["db"].add(
+        WalletLedgerEntry(
+            user_id=driver.id,
+            entry_type="session_charge",
+            amount_vnd=-25_001,
+            idempotency_key="test-start-wallet-below-minimum",
+            reference_type="session",
+            reference_id=999,
+            description="Test balance below minimum",
+        )
+    )
+    context["db"].commit()
+    calls = _accepting(monkeypatch)
+
+    response = context["client"].post(
+        f"/api/connectors/{context['connector'].id}/remote-start"
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Số dư ví cần tối thiểu 25,000 đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.",
+        "code": "wallet_below_minimum",
+        "minimum_required_vnd": 25_000,
+        "top_up_url": "/wallet",
+    }
+    assert calls == []
+    assert context["db"].query(RemoteStartRequest).count() == 0
+
+
+def test_remote_start_allows_balance_equal_to_wallet_minimum(context, monkeypatch):
+    driver = context["users"]["driver_a"]
+    context["db"].add(
+        WalletLedgerEntry(
+            user_id=driver.id,
+            entry_type="session_charge",
+            amount_vnd=-25_000,
+            idempotency_key="test-start-wallet-exact-minimum",
+            reference_type="session",
+            reference_id=1001,
+            description="Set test balance to minimum",
+        )
+    )
+    context["db"].commit()
+    calls = _accepting(monkeypatch)
+
+    response = context["client"].post(
+        f"/api/connectors/{context['connector'].id}/remote-start"
+    )
+
+    assert response.status_code == 202
+    assert calls and calls[0][1] == "RemoteStartTransaction"
+
+
+def test_authorize_returns_blocked_below_wallet_minimum(context):
+    driver = context["users"]["driver_a"]
+    context["db"].add(
+        WalletLedgerEntry(
+            user_id=driver.id,
+            entry_type="session_charge",
+            amount_vnd=-25_001,
+            idempotency_key="test-authorize-wallet-below-minimum",
+            reference_type="session",
+            reference_id=1000,
+            description="Test balance below minimum",
+        )
+    )
+    tag = IdTag(id_tag="DRIVER-TAG-LOW", user_id=driver.id, is_blocked=False)
+    context["db"].add(tag)
+    context["db"].commit()
+
+    response = handle_authorize(
+        context["db"], context["point"], "wallet-low", {"idTag": tag.id_tag}
+    )
+
+    assert parse_message(response)[3]["idTagInfo"]["status"] == "Blocked"
 
 
 def test_invalid_connector_path_has_standard_error_body(context, monkeypatch):
