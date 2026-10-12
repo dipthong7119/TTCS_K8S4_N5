@@ -72,6 +72,27 @@ def _assert_price_matches_manual_case(case, actual):
     )
 
 
+def _price_manual_case(case):
+    inputs = dict(case["input"])
+    inputs["started_at"] = datetime.fromisoformat(inputs["started_at"].replace("Z", "+00:00"))
+    inputs["ended_at"] = datetime.fromisoformat(inputs["ended_at"].replace("Z", "+00:00"))
+    if case.get("tariff_versions"):
+        inputs["tariff_versions"] = [
+            {
+                "effective_from": datetime.fromisoformat(
+                    version["effective_from"].replace("Z", "+00:00")
+                ),
+                "bands": MANUAL_DATA["tariffs"][version["tariff"]],
+            }
+            for version in case["tariff_versions"]
+        ]
+    return calculate_session_price(
+        **inputs,
+        bands=MANUAL_DATA["tariffs"][case["tariff"]],
+        timezone_name=MANUAL_DATA["timezone_name"],
+    )
+
+
 def test_manual_dataset_has_required_scope_and_author():
     assert MANUAL_DATA["ticket"] == "SCRUM-65"
     assert "Trịnh Thanh Tùng" in MANUAL_DATA["calculated_by"]
@@ -87,21 +108,28 @@ def test_manual_dataset_has_required_scope_and_author():
         assert type(case["expected"]["total_vnd"]) is int, case["case_id"]
         assert case["tariff"] in MANUAL_DATA["tariffs"], case["case_id"]
         # Never silently run an unsupported case by discarding its extra inputs.
-        if "idle_input" in case or "tariff_versions" in case:
+        if "idle_input" in case:
             assert case.get("blocked_by"), f"{case['case_id']}: cần nối adapter trước khi bật"
+        if "tariff_versions" in case:
+            assert not case.get("blocked_by"), f"{case['case_id']}: phải kiểm tra nhiều phiên bản giá"
 
 
 @pytest.mark.parametrize("case", [_case_parameter(case) for case in MANUAL_CASES])
 def test_session_price_matches_manual_answer(case):
-    inputs = dict(case["input"])
-    inputs["started_at"] = datetime.fromisoformat(inputs["started_at"].replace("Z", "+00:00"))
-    inputs["ended_at"] = datetime.fromisoformat(inputs["ended_at"].replace("Z", "+00:00"))
-    actual = calculate_session_price(
-        **inputs,
-        bands=MANUAL_DATA["tariffs"][case["tariff"]],
-        timezone_name=MANUAL_DATA["timezone_name"],
-    )
-    _assert_price_matches_manual_case(case, actual)
+    _assert_price_matches_manual_case(case, _price_manual_case(case))
+
+
+def test_scrum209_multi_band_and_midnight_scenarios_match_manual_answers():
+    """SCRUM-209: recheck hand-calculated cases that cross one or more price windows."""
+    multi_band_cases = [
+        case
+        for case in MANUAL_CASES
+        if case["category"]
+        in {"boundary", "midnight", "sparse_readings", "tariff_version"}
+    ]
+    assert len(multi_band_cases) >= 7
+    for case in multi_band_cases:
+        _assert_price_matches_manual_case(case, _price_manual_case(case))
 
 
 def test_failure_reports_case_segment_and_exact_vnd_difference():

@@ -27,7 +27,14 @@ const ApiClient = (() => {
           const next = window.location.pathname + window.location.search;
           window.location.replace('/login?next=' + encodeURIComponent(next));
         }
-        throw { status: res.status, message, detail: data?.detail };
+        throw {
+          status: res.status,
+          message,
+          detail: data?.detail,
+          code: data?.code,
+          minimum_required_vnd: data?.minimum_required_vnd,
+          top_up_url: data?.top_up_url,
+        };
       }
       return data;
     } catch (err) {
@@ -90,6 +97,7 @@ const ApiClient = (() => {
     getCurrentSession: (opts) => _request('GET', '/sessions/current', null, opts),
     listAllSessions: (params = {}, opts) => _request('GET', '/sessions?' + new URLSearchParams(params), null, opts),
     getSession: (id) => _request('GET', `/sessions/${id}`),
+    getSessionInvoice: (id) => _request('GET', `/sessions/${id}/invoice`),
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 

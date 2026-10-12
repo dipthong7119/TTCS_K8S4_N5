@@ -84,10 +84,11 @@ def test_small_live_reconnect_scenario_with_offline_stop_and_no_reboot():
         env=environment,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )
 
-    output = result.stdout + result.stderr
+    output = (result.stdout or "") + (result.stderr or "")
     assert result.returncode == 0, output
     assert "5/5 phiên khớp" in output

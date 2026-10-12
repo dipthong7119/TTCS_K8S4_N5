@@ -264,5 +264,3 @@ async def subscriptions_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )
-
-

@@ -646,6 +646,21 @@ test('T-53 anomaly list propagates API errors instead of returning sample data',
   await assert.rejects(client.api.listAnomalies(), error => error.status === 500 && error.message === 'Anomalies unavailable');
 });
 
+test('SCRUM-72: API errors preserve wallet blocking details for the start screen', async () => {
+  const client = authClient(async () => ({
+    ok: false, status: 409,
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      detail: 'Số dư ví cần tối thiểu 50,000 đồng.',
+      code: 'wallet_below_minimum', minimum_required_vnd: 50_000, top_up_url: '/wallet'
+    })
+  }));
+  await assert.rejects(client.api.remoteStartChargePoint('CP01', 1, 'TAG'), error =>
+    error.status === 409 && error.code === 'wallet_below_minimum' &&
+    error.minimum_required_vnd === 50_000 && error.top_up_url === '/wallet'
+  );
+});
+
 test('audit displays the real Reset event returned by the server', async () => {
   const items = [];
   const requests = [];
@@ -929,6 +944,26 @@ for (const [status, expected] of [[409, /đang bận/], [504, /Hết thời gian
   });
 }
 
+test('SCRUM-72: low wallet tells the driver why and links directly to top up', async () => {
+  const page = await startPage({ remoteStart: async () => {
+    throw {
+      status: 409,
+      code: 'wallet_below_minimum',
+      message: 'Số dư ví cần tối thiểu 50,000 đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.',
+      minimum_required_vnd: 50_000,
+      top_up_url: '/wallet',
+    };
+  } });
+
+  await page.click();
+
+  assert.match(page.message.textContent, /Số dư ví cần tối thiểu 50,000 đồng/);
+  assert.equal(page.message.children.length, 1);
+  assert.equal(page.message.children[0].href, '/wallet');
+  assert.equal(page.message.children[0].textContent, 'Nạp tiền vào ví');
+  assert.equal(page.button.disabled, false);
+});
+
 test('SCRUM-191: timeout ignores a late Accepted response and never navigates', async () => {
   let resolve;
   const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
@@ -1151,6 +1186,9 @@ function sessionPage(getSessions, options = {}) {
     canRemoteStop: options.stop ? 'true' : 'false',
     liveUpdates: options.liveUpdates || options.stop ? 'true' : 'false',
   };
+  const sessionRows = options.row ? [options.row] : [];
+  document.getElementById('sessions-tbody').querySelectorAll = selector =>
+    selector === '[data-session-id]' ? sessionRows : [];
 
   const calls = [], timers = [], toasts = [];
   const callbacks = {}, cleared = [];
@@ -1164,6 +1202,9 @@ function sessionPage(getSessions, options = {}) {
       return getSessions();
     },
     getCurrentSession: options.currentSession || (async () => null),
+    getSessionInvoice: options.getSessionInvoice || (async () => ({
+      session_id: 0, status: 'pending', message: 'Hóa đơn sẽ có sau khi phiên sạc kết thúc.'
+    })),
     remoteStop: options.stop,
   };
   vm.runInContext(read('pages/my_session.js'), vm.createContext({
@@ -1209,6 +1250,67 @@ test('driver session API failure reports the error without displaying sample ses
   assert.doesNotMatch(page.document.getElementById('sessions-tbody').innerHTML, /8888|EcoCharge/);
   assert.equal(page.document.getElementById('session-count').textContent, 'Lỗi kết nối');
   assert.equal(page.timers.length, 0);
+});
+
+test('SCRUM-66: session detail reads the persisted invoice and renders line items and total', async () => {
+  const row = element();
+  row.dataset.sessionId = '123';
+  const invoiceCalls = [];
+  const page = sessionPage(async () => ({
+    items: [{ id: 123, status: 'completed', ended_at: '2026-10-12T01:00:00Z', cost_vnd: 36_000 }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => {
+      invoiceCalls.push(id);
+      return {
+        invoice_id: 10, session_id: id, status: 'issued', total_vnd: 36_000,
+        rounding_rule: 'Làm tròn từng đoạn.',
+        segments: [{
+          service_date: '2026-10-11', tariff_name: 'Tariff đêm', band: 'Thấp điểm',
+          from: '2026-10-11T23:00:00+07:00', to: '2026-10-12T00:00:00+07:00',
+          energy_kwh: '6', price_vnd_per_kwh: 3_000, amount_vnd: 18_000,
+        }, {
+          service_date: '2026-10-12', tariff_name: 'Tariff ngày', band: 'Cao điểm',
+          from: '2026-10-12T00:00:00+07:00', to: '2026-10-12T01:00:00+07:00',
+          energy_kwh: '4', price_vnd_per_kwh: 4_500, amount_vnd: 18_000,
+        }],
+      };
+    },
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const details = page.document.getElementById('session-detail-body');
+  assert.deepEqual(invoiceCalls, [123]);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /Tariff đêm/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /2026-10-12/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /36\.000/);
+});
+
+test('SCRUM-66: a session needing review shows its message without a provisional total', async () => {
+  const row = element();
+  row.dataset.sessionId = '124';
+  const page = sessionPage(async () => ({
+    items: [{ id: 124, status: 'needs_review', ended_at: '2026-10-12T01:00:00Z', cost_vnd: null }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => ({
+      session_id: id, status: 'pending_review',
+      message: 'Phiên sạc đang chờ xử lý; hóa đơn chưa sẵn sàng.',
+    }),
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const invoice = page.document.getElementById('session-detail-body').querySelector('#session-invoice-detail').innerHTML;
+  assert.match(invoice, /đang chờ xử lý/);
+  assert.doesNotMatch(invoice, /Tổng cộng|\d+\.\d{3} ₫/);
 });
 
 const reconciliationSample = JSON.parse(fs.readFileSync(

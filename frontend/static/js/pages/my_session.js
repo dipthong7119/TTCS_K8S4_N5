@@ -17,6 +17,7 @@
   let _activeStart = null;
   let _activeSession = null;
   let _currentLiveKwh = 0;
+  let _invoiceDetailRequest = 0;
 
   // Quản lý trạng thái dừng từ xa (T-50)
   let _pendingStopSessionId = null;
@@ -441,11 +442,17 @@
       const fromTime = seg.from ? new Date(seg.from).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
       const toTime = seg.to ? new Date(seg.to).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
       const bandLabel = escHtml(seg.band || `Khung giá ${idx + 1}`);
+      const tariffName = seg.tariff_name
+        ? `<small class="invoice-tariff-name">${escHtml(seg.tariff_name)}</small>`
+        : '';
+      const serviceDate = seg.service_date
+        ? `<small class="invoice-service-date">${escHtml(seg.service_date)}</small>`
+        : '';
       const isLast = idx === energySegs.length - 1 && !occupancySeg;
       return `
         <tr class="invoice-seg-row">
-          <td><span class="invoice-band-chip">${bandLabel}</span></td>
-          <td class="invoice-time-cell"><span class="invoice-time">${fromTime}</span><span class="invoice-time-sep">→</span><span class="invoice-time">${toTime}</span></td>
+          <td><span class="invoice-band-chip">${bandLabel}</span>${tariffName}</td>
+          <td class="invoice-time-cell"><span class="invoice-time">${fromTime}</span><span class="invoice-time-sep">→</span><span class="invoice-time">${toTime}</span>${serviceDate}</td>
           <td class="invoice-num-cell">${escHtml(String(parseFloat(seg.energy_kwh || 0).toFixed(3)))} kWh</td>
           <td class="invoice-num-cell">${fmtVND(seg.price_vnd_per_kwh)}<span class="invoice-unit">/kWh</span></td>
           <td class="invoice-amount-cell">${fmtVND(seg.amount_vnd)}</td>
@@ -502,8 +509,28 @@
       </section>`;
   }
 
-  function openDetail(session) {
+  function renderInvoiceDetail(invoice, session) {
+    if (invoice?.status !== 'issued') {
+      return `<section aria-label="Trạng thái hóa đơn" role="status" style="margin-top:var(--space-5);">
+        <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Hóa đơn</h3>
+        <p class="form-hint">${escHtml(invoice?.message || 'Chưa tải được trạng thái hóa đơn.')}</p>
+      </section>`;
+    }
+
+    const invoiceSession = {
+      ...session,
+      cost_vnd: invoice.total_vnd,
+      invoice_segments: Array.isArray(invoice.segments) ? invoice.segments : [],
+      invoice_rounding_rule: invoice.rounding_rule,
+      invoice_subscription_id: invoice.subscription_id,
+      invoice_package_name: invoice.package_name,
+    };
+    return renderInvoiceBreakdown(invoiceSession);
+  }
+
+  async function openDetail(session) {
     if (!session) return;
+    const requestId = ++_invoiceDetailRequest;
     const titleEl = document.getElementById('session-detail-title');
     if (titleEl) titleEl.textContent = `Chi tiết phiên sạc #${session.id}`;
 
@@ -544,20 +571,44 @@
             <dd><span class="badge ${STATUS_CLASS[session.status] || 'badge--neutral'}">${STATUS_LABEL[session.status] || 'Không rõ'}</span></dd>
           </div>
           ${session.stop_reason ? `<div class="session-detail-field session-detail-field--full"><dt>Lý do kết thúc</dt><dd>${escHtml(session.stop_reason)}</dd></div>` : ''}
-        </dl>
-        ${renderInvoiceBreakdown(session)}`;
-
-      // Gắn sự kiện nút "Xem hoá đơn đầy đủ" (SCRUM-66)
-      const invoiceBtn = bodyEl.querySelector('#btn-open-invoice');
-      if (invoiceBtn) {
-        invoiceBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openInvoice(session);
-        });
-      }
+        </dl><div id="session-invoice-detail"><p class="form-hint" role="status">Đang tải hóa đơn...</p></div>`;
     }
     const modal = document.getElementById('session-detail-modal');
     if (modal) modal.classList.remove('is-hidden');
+
+    try {
+      const invoice = await ApiClient.getSessionInvoice(session.id);
+      if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
+      const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
+      if (!invoiceEl) return;
+      invoiceEl.innerHTML = renderInvoiceDetail(invoice, session);
+      if (invoice.status === 'issued') {
+        const invoiceSession = {
+          ...session,
+          cost_vnd: invoice.total_vnd,
+          invoice_segments: Array.isArray(invoice.segments) ? invoice.segments : [],
+          invoice_rounding_rule: invoice.rounding_rule,
+          invoice_subscription_id: invoice.subscription_id,
+          invoice_package_name: invoice.package_name,
+        };
+        const costEl = bodyEl.querySelector('.field-cost');
+        if (costEl) costEl.textContent = fmtVND(invoice.total_vnd);
+        const invoiceButton = invoiceEl.querySelector('#btn-open-invoice');
+        invoiceButton?.addEventListener('click', event => {
+          event.stopPropagation();
+          openInvoice(invoiceSession);
+        });
+      }
+    } catch (error) {
+      if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
+      const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
+      if (invoiceEl) {
+        invoiceEl.innerHTML = renderInvoiceDetail({
+          status: 'unavailable',
+          message: error.message || 'Không thể tải hóa đơn. Vui lòng thử lại.',
+        }, session);
+      }
+    }
   }
 
   // ── SCRUM-66: Modal hoá đơn E-Receipt đầy đủ ─────────────────────────────
@@ -583,6 +634,8 @@
         <div class="receipt-line-item">
           <div class="receipt-line-left">
             <span class="receipt-band">${escHtml(seg.band || 'Khung giá')}</span>
+            ${seg.tariff_name ? `<span class="receipt-detail">${escHtml(seg.tariff_name)}</span>` : ''}
+            ${seg.service_date ? `<span class="receipt-detail">Ngày ${escHtml(seg.service_date)}</span>` : ''}
             <span class="receipt-timerange">${fromTime} → ${toTime}</span>
             <span class="receipt-detail">${kwh} kWh × ${fmtVND(seg.price_vnd_per_kwh)}/kWh</span>
           </div>
@@ -703,11 +756,15 @@
     });
 
     document.getElementById('session-modal-close')?.addEventListener('click', () => {
+      ++_invoiceDetailRequest;
       document.getElementById('session-detail-modal')?.classList.add('is-hidden');
     });
 
     document.getElementById('session-detail-modal')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) e.currentTarget.classList.add('is-hidden');
+      if (e.target === e.currentTarget) {
+        ++_invoiceDetailRequest;
+        e.currentTarget.classList.add('is-hidden');
+      }
     });
 
     // SCRUM-66: Đóng modal hoá đơn E-Receipt

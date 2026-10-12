@@ -122,7 +122,7 @@
     const params = { ...getFilters(), page, page_size: PAGE_SIZE };
     const tbody = document.getElementById('audit-tbody');
     tbody.innerHTML = '<tr><td colspan="7" class="text-center">Đang tải dữ liệu nhật ký...</td></tr>';
-    
+
     try {
       const data = await ApiClient.listAuditLogs(params);
       currentItems = data.items || [];
