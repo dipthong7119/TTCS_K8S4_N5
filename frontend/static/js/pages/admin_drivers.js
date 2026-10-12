@@ -6,7 +6,7 @@
   let page = 1;
   let query = '';
   let searchTimer;
-  let selectedDriver = null;
+  let selectedDriver = null; // { id, name, balance }
 
   const money = value => new Intl.NumberFormat('vi-VN', {
     style: 'currency', currency: 'VND', maximumFractionDigits: 0,
@@ -38,18 +38,27 @@
       tbody.innerHTML = '<tr><td colspan="6" class="driver-table-message">Không tìm thấy tài khoản tài xế.</td></tr>';
       return;
     }
-    tbody.innerHTML = drivers.map(driver => `<tr>
-      <td><div class="driver-cell__name">${escapeHtml(driver.full_name)}</div><div class="driver-cell__email">${escapeHtml(driver.email)}</div></td>
-      <td><span class="badge ${driver.is_active ? 'badge--available' : 'badge--fault'}">${driver.is_active ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
-      <td class="text-right driver-money">${money(driver.balance_vnd)}</td>
-      <td class="text-right">${money(driver.total_spent_vnd)}</td>
-      <td class="driver-last-charge">${dateTime(driver.last_charge_at)}</td>
-      <td class="text-right">${window.WalletAdmin.canTopUp && driver.is_active
-        ? `<button class="btn btn--primary btn--sm" type="button" data-topup-driver="${driver.id}" data-driver-name="${escapeHtml(driver.full_name)}">Nạp tiền</button>`
-        : '<span class="driver-readonly">Chỉ xem</span>'}</td>
-    </tr>`).join('');
+    tbody.innerHTML = drivers.map(driver => {
+      const isNegative = (driver.balance_vnd || 0) < 0;
+      const balanceClass = `text-right driver-money${isNegative ? ' driver-money--negative' : ''}`;
+      const negativeTag = isNegative ? ' <span class="badge badge--fault badge--xs" title="T\u00e0i x\u1ebf đang nợ - số d\u01b0 âm">Nợ</span>' : '';
+      return `<tr>
+        <td><div class="driver-cell__name">${escapeHtml(driver.full_name)}</div><div class="driver-cell__email">${escapeHtml(driver.email)}</div></td>
+        <td><span class="badge ${driver.is_active ? 'badge--available' : 'badge--fault'}">${driver.is_active ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
+        <td class="${balanceClass}">${money(driver.balance_vnd)}${negativeTag}</td>
+        <td class="text-right">${money(driver.total_spent_vnd)}</td>
+        <td class="driver-last-charge">${dateTime(driver.last_charge_at)}</td>
+        <td class="text-right">${window.WalletAdmin.canTopUp && driver.is_active
+          ? `<button class="btn btn--primary btn--sm" type="button" data-topup-driver="${driver.id}" data-driver-name="${escapeHtml(driver.full_name)}" data-driver-balance="${driver.balance_vnd || 0}">Nạp tiền</button>`
+          : '<span class="driver-readonly">Chỉ xem</span>'}</td>
+      </tr>`;
+    }).join('');
     tbody.querySelectorAll('[data-topup-driver]').forEach(button => {
-      button.addEventListener('click', () => openTopUp(button.dataset.topupDriver, button.dataset.driverName));
+      button.addEventListener('click', () => openTopUp(
+        button.dataset.topupDriver,
+        button.dataset.driverName,
+        Number(button.dataset.driverBalance),
+      ));
     });
   }
 
@@ -76,9 +85,13 @@
     addButton('›', page + 1, page === pages, 'Trang sau');
   }
 
-  function openTopUp(driverId, driverName) {
-    selectedDriver = driverId;
+  function openTopUp(driverId, driverName, balance) {
+    selectedDriver = { id: driverId, name: driverName, balance };
     document.getElementById('topup-driver-name').textContent = driverName;
+    const balanceEl = document.getElementById('topup-driver-balance');
+    const isNeg = balance < 0;
+    balanceEl.textContent = `Số dư hiện tại: ${money(balance)}${isNeg ? ' (đang nợ)' : ''}`;
+    balanceEl.className = `topup-driver-balance${isNeg ? ' topup-driver-balance--negative' : ''}`;
     document.getElementById('topup-form').reset();
     document.getElementById('topup-dialog').showModal();
     document.getElementById('topup-amount').focus();
@@ -91,19 +104,35 @@
     if (!form.reportValidity()) return;
     const submit = document.getElementById('topup-submit');
     submit.disabled = true;
+    submit.textContent = 'Đang ghi nhận...';
     try {
       const amount = Number(document.getElementById('topup-amount').value);
       const receipt = document.getElementById('topup-receipt').value.trim();
-      const result = await ApiClient.manualTopUp(selectedDriver, {
-        amount_vnd: amount, receipt_code: receipt,
+      const note = (document.getElementById('topup-note')?.value || '').trim();
+      const result = await ApiClient.manualTopUp(selectedDriver.id, {
+        amount_vnd: amount,
+        receipt_code: receipt,
+        ...(note ? { note } : {}),
       });
       document.getElementById('topup-dialog').close();
-      showToast(`Đã nạp ${money(result.amount_vnd)}. Số dư mới: ${money(result.balance_vnd)}.`, 'success');
+      showToast(
+        `Đã nạp ${money(result.amount_vnd || result.amount)} cho ${escapeHtml(selectedDriver.name)}. Số dư mới: ${money(result.balance_vnd || result.balance_after)}.`,
+        'success',
+      );
+      selectedDriver = null;
       await loadDrivers();
     } catch (error) {
-      showToast(error.message || 'Không ghi nhận được khoản nạp', 'error');
+      // Phân biệt lỗi trùng mã phiếu (409) với lỗi khác
+      const isConflict = error.message?.includes('409') || error.message?.toLowerCase().includes('phiếu');
+      showToast(
+        isConflict
+          ? 'Mã phiếu thu này đã được sử dụng. Vui lòng kiểm tra lại mã phiếu.'
+          : (error.message || 'Không ghi nhận được khoản nạp'),
+        'error',
+      );
     } finally {
       submit.disabled = false;
+      submit.textContent = 'Ghi nhận nạp tiền';
     }
   }
 

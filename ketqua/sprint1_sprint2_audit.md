@@ -1,3 +1,4 @@
+
 # Đối chiếu Sprint 1 và Sprint 2: Excel → code
 
 Ngày kiểm tra: 04/10/2026. Nhánh `main` local và GitHub hiện ở `255bd32`, đã chứa các bản sửa Sprint 1–2, dọn file và commit hợp nhất `baf6256`. Bản sửa dependency cho lỗi audit CI/CD của lượt kiểm tra lại đang ở working tree.

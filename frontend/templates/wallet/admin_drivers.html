@@ -39,7 +39,7 @@
       <thead><tr>
         <th scope="col">Tài xế</th>
         <th scope="col">Trạng thái</th>
-        <th scope="col" class="text-right">Số dư</th>
+        <th scope="col" class="text-right">Số dư ví</th>
         <th scope="col" class="text-right">Tổng chi</th>
         <th scope="col">Lần sạc gần nhất</th>
         <th scope="col" class="text-right">Thao tác</th>
@@ -58,18 +58,32 @@
 
 {% if 'admin' in current_user.roles %}
 <dialog class="topup-dialog" id="topup-dialog" aria-labelledby="topup-title">
-  <form id="topup-form" class="topup-form">
+  <form id="topup-form" class="topup-form" autocomplete="off">
     <div class="topup-dialog__header">
-      <div><h2 id="topup-title">Nạp ví tài xế</h2><p id="topup-driver-name"></p></div>
+      <div>
+        <h2 id="topup-title">Nạp ví tài xế</h2>
+        <p id="topup-driver-name" class="topup-driver-name"></p>
+        <p id="topup-driver-balance" class="topup-driver-balance"></p>
+      </div>
       <button class="btn btn--ghost btn--sm" id="topup-close" type="button" aria-label="Đóng">✕</button>
     </div>
-    <label class="form-label" for="topup-amount">Số tiền (VND)</label>
-    <input class="form-input" id="topup-amount" name="amount_vnd" type="number" min="10000" max="10000000" step="1000" required />
-    <small class="form-hint">Từ 10.000 đến 10.000.000 VND.</small>
-    <label class="form-label" for="topup-receipt">Mã phiếu thu</label>
-    <input class="form-input" id="topup-receipt" name="receipt_code" type="text" minlength="3" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,79}" autocomplete="off" required />
-    <small class="form-hint">Mã duy nhất để đối soát; chỉ gồm chữ, số, dấu gạch ngang hoặc gạch dưới.</small>
-    <p class="topup-disclaimer">Bản demo ghi nhận khoản nạp thủ công, chưa thu tiền qua cổng thanh toán.</p>
+
+    <label class="form-label" for="topup-amount">Số tiền nạp (VND) <span class="required-mark">*</span></label>
+    <input class="form-input" id="topup-amount" name="amount_vnd" type="number" min="1000" max="20000000" step="1000" placeholder="Ví dụ: 500000" required />
+    <small class="form-hint">Từ 1.000 đến 20.000.000 VND.</small>
+
+    <label class="form-label" for="topup-receipt">Mã phiếu thu <span class="required-mark">*</span></label>
+    <input class="form-input" id="topup-receipt" name="receipt_code" type="text" minlength="3" maxlength="80"
+      pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,79}" autocomplete="off" placeholder="Ví dụ: PT-2026-001" required />
+    <small class="form-hint">Mã duy nhất để đối soát. Chỉ gồm chữ cái, chữ số, dấu gạch ngang hoặc gạch dưới. Mã đã dùng không thể nạp lại.</small>
+
+    <label class="form-label" for="topup-note">Ghi chú</label>
+    <input class="form-input" id="topup-note" name="note" type="text" maxlength="200" placeholder="Lý do nạp, số hóa đơn, họ tên người nộp tiền..." />
+    <small class="form-hint">Tùy chọn. Hiển thị trong nhật ký kiểm toán.</small>
+
+    <div class="topup-disclaimer" role="note">
+      <strong>⚠ Nạp thủ công:</strong> Thao tác này ghi nhận khoản nạp theo phiếu thu giấy, không qua cổng thanh toán. Vui lòng kiểm tra kỹ số tiền và mã phiếu trước khi xác nhận.
+    </div>
     <div class="topup-actions">
       <button class="btn btn--ghost" id="topup-cancel" type="button">Hủy</button>
       <button class="btn btn--primary" id="topup-submit" type="submit">Ghi nhận nạp tiền</button>
