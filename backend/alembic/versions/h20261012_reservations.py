@@ -37,9 +37,18 @@ def upgrade() -> None:
         "reservations",
         ["charge_point_id", "connector_id", "status"],
     )
+    op.create_index(
+        "uq_reservations_active_connector",
+        "reservations",
+        ["charge_point_id", "connector_id"],
+        unique=True,
+        sqlite_where=sa.text("status IN ('accepted', 'pending')"),
+        postgresql_where=sa.text("status IN ('accepted', 'pending')"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("uq_reservations_active_connector", table_name="reservations")
     op.drop_index("ix_reservations_cp_conn_status", table_name="reservations")
     op.drop_index("ix_reservations_user_id", table_name="reservations")
     op.drop_index("ix_reservations_charge_point_id", table_name="reservations")

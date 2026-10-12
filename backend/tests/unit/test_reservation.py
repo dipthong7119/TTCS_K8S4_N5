@@ -1,12 +1,15 @@
-"""Unit tests for SCRUM-76 (S-48): Driver charge point reservation."""
-
 import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from unittest import mock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -21,7 +24,9 @@ from app.models.reservation import Reservation
 from app.models.station import Station
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
+from app.schemas.reservation import ReservationCreateRequest
 from app.services.connection_manager import manager
+from app.services.reservation import create_reservation
 
 engine_test = create_engine(
     "sqlite:///:memory:",
@@ -53,6 +58,16 @@ class MockUser:
         self.email = email
         self.full_name = "Driver Test"
         self.roles = [MockRole(r) for r in roles]
+
+
+user_by_thread = threading.local()
+
+
+def get_mock_user():
+    user_id = getattr(user_by_thread, "user_id", 10)
+    roles = getattr(user_by_thread, "roles", ["driver"])
+    return MockUser(user_id, roles)
+
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -145,7 +160,9 @@ def setup_db():
     db.close()
 
     # Mặc định đăng nhập user 10 (role driver)
-    app.dependency_overrides[get_current_user] = lambda: MockUser(10, ["driver"])
+    user_by_thread.user_id = 10
+    user_by_thread.roles = ["driver"]
+    app.dependency_overrides[get_current_user] = get_mock_user
 
     yield
 
@@ -370,7 +387,10 @@ def test_create_reservation_conflict_existing_reservation(monkeypatch):
         },
     )
     assert resp.status_code == 409
-    assert "Đầu nối đã có người đặt trước" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "Đầu nối đã có người đặt trước" in detail["message"]
+    assert detail["code"] == "connector_already_reserved"
+    assert "suggestions" in detail
 
 
 def test_list_and_get_user_reservations(monkeypatch):
@@ -416,3 +436,239 @@ def test_list_and_get_user_reservations(monkeypatch):
     # User 10 gọi detail res2 của người khác -> 403 Forbidden
     resp_forbidden = client.get("/api/reservations/102")
     assert resp_forbidden.status_code == 403
+
+
+def test_db_partial_unique_constraint_blocks_concurrent_active_reservations():
+    """Ràng buộc CSDL (partial unique index uq_reservations_active_connector) chặn 2 reservation active."""
+    db = SessionLocalTest()
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    res1 = Reservation(
+        charge_point_id=1,
+        connector_id=1,
+        user_id=10,
+        id_tag="TAG-1",
+        start_time=now,
+        expiry_date=now + timedelta(minutes=30),
+        status="pending",
+    )
+    db.add(res1)
+    db.commit()
+
+    # Thêm reservation thứ hai ở trạng thái accepted/pending trên cùng đầu nối -> Bị DB chặn (IntegrityError)
+    res2 = Reservation(
+        charge_point_id=1,
+        connector_id=1,
+        user_id=20,
+        id_tag="TAG-2",
+        start_time=now,
+        expiry_date=now + timedelta(minutes=30),
+        status="accepted",
+    )
+    db.add(res2)
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+    # Thêm reservation ở trạng thái rejected hoặc expired hoặc cancelled -> Cho phép bình thường
+    res_rejected = Reservation(
+        charge_point_id=1,
+        connector_id=1,
+        user_id=20,
+        id_tag="TAG-2",
+        start_time=now,
+        expiry_date=now + timedelta(minutes=30),
+        status="rejected",
+    )
+    db.add(res_rejected)
+    db.commit()
+    assert res_rejected.id is not None
+    db.close()
+
+
+def test_find_alternative_connectors_returns_available_options(monkeypatch):
+    """Khi đầu nối bị trùng, trả về danh sách các đầu nối khả dụng cùng trạm hoặc trạm khác (SCRUM-77)."""
+    monkeypatch.setitem(manager.active_connections, "CP_TEST_01", mock.AsyncMock())
+    monkeypatch.setitem(manager.active_connections, "CP_TEST_02", mock.AsyncMock())
+
+    db = SessionLocalTest()
+    # Thêm trụ thứ 2 trong cùng trạm và đầu nối khả dụng
+    cp2 = ChargePoint(
+        id=2,
+        code="CP_TEST_02",
+        station_id=1,
+        status="online",
+        last_seen_at=datetime.now(UTC).replace(tzinfo=None),
+    )
+    conn2_1 = Connector(
+        id=10,
+        charge_point_id=2,
+        connector_id=1,
+        status="available",
+        ocpp_status="Available",
+    )
+    db.add_all([cp2, conn2_1])
+
+    # Đặt trước connector 1 của CP_TEST_01
+    active_res = Reservation(
+        charge_point_id=1,
+        connector_id=1,
+        user_id=20,
+        id_tag="TAG-OTHER",
+        start_time=datetime.now(UTC).replace(tzinfo=None),
+        expiry_date=(datetime.now(UTC) + timedelta(minutes=45)).replace(tzinfo=None),
+        status="accepted",
+    )
+    db.add(active_res)
+    db.commit()
+    db.close()
+
+    resp = client.post(
+        "/api/reservations",
+        json={
+            "charge_point_code": "CP_TEST_01",
+            "connector_id": 1,
+            "expiry_minutes": 30,
+        },
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "suggestions" in detail
+    suggestions = detail["suggestions"]
+    assert len(suggestions) >= 1
+    suggested_codes = [s["charge_point_code"] for s in suggestions]
+    assert "CP_TEST_02" in suggested_codes
+
+
+def test_expired_reservation_allows_new_reservation(monkeypatch):
+    """Đặt chỗ cũ đã quá hạn được tự động giải phóng (expired), cho phép tài xế mới đặt thành công."""
+    monkeypatch.setitem(manager.active_connections, "CP_TEST_01", mock.AsyncMock())
+
+    async def fake_send_call(code, action, payload, timeout):
+        return {"status": "Accepted"}
+
+    monkeypatch.setattr(manager, "send_call", fake_send_call)
+
+    # Tạo reservation đã quá hạn (expiry_date trong quá khứ)
+    db = SessionLocalTest()
+    past_res = Reservation(
+        charge_point_id=1,
+        connector_id=1,
+        user_id=20,
+        id_tag="TAG-OTHER",
+        start_time=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+        expiry_date=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=30),
+        status="accepted",
+    )
+    db.add(past_res)
+    db.commit()
+    past_res_id = past_res.id
+    db.close()
+
+    resp = client.post(
+        "/api/reservations",
+        json={
+            "charge_point_code": "CP_TEST_01",
+            "connector_id": 1,
+            "expiry_minutes": 30,
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "Accepted"
+
+    # Kiểm tra reservation cũ đã chuyển sang expired trong CSDL
+    db = SessionLocalTest()
+    old_res = db.query(Reservation).filter(Reservation.id == past_res_id).first()
+    assert old_res.status == "expired"
+    db.close()
+
+
+def test_concurrent_two_drivers_reserve_same_connector_only_one_succeeds(tmp_path, monkeypatch):
+    """SCRUM-77 (S-49): Hai tài xế đặt cùng trụ cùng lúc -> chỉ đúng một người thành công, người kia nhận 409 + gợi ý."""
+    database = tmp_path / "concurrent_reservation.db"
+    concur_engine = create_engine(
+        f"sqlite:///{database.as_posix()}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(bind=concur_engine)
+    factory = sessionmaker(bind=concur_engine, expire_on_commit=False)
+
+    with factory() as seed_db:
+        r_driver = Role(id=1, name="driver")
+        u10 = User(id=10, email="d10@test.com", password_hash="h", full_name="Driver 10", is_active=True)
+        u10.roles = [r_driver]
+        u20 = User(id=20, email="d20@test.com", password_hash="h", full_name="Driver 20", is_active=True)
+        u20.roles = [r_driver]
+        w10 = WalletLedgerEntry(user_id=10, amount_vnd=100000, entry_type="manual_topup", idempotency_key="top10", description="Topup 10")
+        w20 = WalletLedgerEntry(user_id=20, amount_vnd=100000, entry_type="manual_topup", idempotency_key="top20", description="Topup 20")
+        t10 = IdTag(id=1, user_id=10, id_tag="TAG-10", is_virtual=True, is_blocked=False)
+        t20 = IdTag(id=2, user_id=20, id_tag="TAG-20", is_virtual=True, is_blocked=False)
+        st = Station(id=1, name="Station Test", owner_id=10, status="active")
+        cp = ChargePoint(id=1, code="CP_CONCUR_01", station_id=1, status="online", last_seen_at=datetime.now(UTC).replace(tzinfo=None))
+        conn = Connector(id=1, charge_point_id=1, connector_id=1, status="available", ocpp_status="Available")
+        seed_db.add_all([r_driver, u10, u20, w10, w20, t10, t20, st, cp, conn])
+        seed_db.commit()
+
+    monkeypatch.setitem(manager.active_connections, "CP_CONCUR_01", mock.AsyncMock())
+
+    async def fake_send_call(code, action, payload, timeout):
+        await asyncio.sleep(0.05)
+        return {"status": "Accepted"}
+
+    monkeypatch.setattr(manager, "send_call", fake_send_call)
+
+    barrier = Barrier(2)
+    results = []
+
+    def run_driver(user_id: int):
+        with factory() as db:
+            barrier.wait(timeout=5)
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                user = db.get(User, user_id)
+                payload = ReservationCreateRequest(
+                    charge_point_code="CP_CONCUR_01",
+                    connector_id=1,
+                    expiry_minutes=30,
+                )
+                res = loop.run_until_complete(create_reservation(db, user, payload))
+                results.append((user_id, 201, res.model_dump()))
+            except HTTPException as exc:
+                results.append((user_id, exc.status_code, exc.detail))
+            finally:
+                loop.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(run_driver, uid) for uid in [10, 20]]
+        for f in futures:
+            f.result()
+
+    # Đúng 1 người nhận 201 Created và 1 người nhận 409 Conflict
+    status_codes = [r[1] for r in results]
+    assert sorted(status_codes) == [201, 409]
+
+    success = next(r[2] for r in results if r[1] == 201)
+    assert success["status"] == "Accepted"
+    assert success["reservation"] is not None
+
+    fail = next(r[2] for r in results if r[1] == 409)
+    assert "Đầu nối đã có người đặt trước" in fail["message"]
+    assert "suggestions" in fail
+
+    # Kiểm tra trong DB chỉ có đúng 1 reservation active
+    with factory() as db:
+        active_res = (
+            db.query(Reservation)
+            .filter(
+                Reservation.charge_point_id == 1,
+                Reservation.connector_id == 1,
+                Reservation.status == "accepted",
+            )
+            .all()
+        )
+        assert len(active_res) == 1
+    concur_engine.dispose()
+
+

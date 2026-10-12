@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -58,5 +59,13 @@ class Reservation(Base):
             "charge_point_id",
             "connector_id",
             "status",
+        ),
+        Index(
+            "uq_reservations_active_connector",
+            "charge_point_id",
+            "connector_id",
+            unique=True,
+            sqlite_where=text("status IN ('accepted', 'pending')"),
+            postgresql_where=text("status IN ('accepted', 'pending')"),
         ),
     )

@@ -57,3 +57,26 @@ class ReservationCreateResponse(BaseModel):
     status: str  # "Accepted", "Rejected", "Occupied", "Unavailable", "Faulted"
     message: str
     reservation: ReservationItem | None = None
+
+
+class AlternativeSuggestion(BaseModel):
+    """Gợi ý đầu nối / trụ sạc khả dụng khác khi xảy ra trùng lịch hoặc tranh chấp (SCRUM-77 / S-49)."""
+
+    station_id: int
+    station_name: str
+    station_address: str | None = None
+    charge_point_id: int
+    charge_point_code: str
+    connector_id: int
+    connector_status: str = "available"
+
+
+class ReservationConflictResponse(BaseModel):
+    """Cấu trúc lỗi 409 khi đầu nối đã có người đặt trước hoặc tranh chấp đồng thời (SCRUM-77 / S-49)."""
+
+    message: str
+    code: str = "connector_already_reserved"
+    charge_point_code: str
+    connector_id: int
+    suggestions: list[AlternativeSuggestion] = []
+

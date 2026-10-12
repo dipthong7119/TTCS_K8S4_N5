@@ -5,16 +5,22 @@ Services: reservations (SCRUM-76 / S-48: Nghiệp vụ đặt chỗ trụ sạc)
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 from fastapi import HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.charge_point import ChargePoint, Connector
 from app.models.id_tag import IdTag
 from app.models.reservation import Reservation
+from app.models.station import Station
 from app.models.user import User
 from app.schemas.reservation import (
+    AlternativeSuggestion,
     ReservationCreateRequest,
     ReservationCreateResponse,
     ReservationItem,
@@ -142,6 +148,203 @@ def validate_reservation_times(
     return start, expiry
 
 
+def lock_connector_for_reservation(db: Session, connector_pk: int) -> None:
+    """Khóa bản ghi đầu nối ở tầng CSDL để tuần tự hóa các yêu cầu cạnh tranh (SCRUM-77 / S-49).
+    
+    SQLite: BEGIN IMMEDIATE khóa file ghi cơ sở dữ liệu ngay lập tức.
+    PostgreSQL / dialect khác: SELECT ... FOR UPDATE trên bản ghi Connector.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite":
+        connection = db.connection()
+        raw_connection = connection.connection.driver_connection
+        if raw_connection is not None and not raw_connection.in_transaction:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        return
+    db.execute(
+        select(Connector.id)
+        .where(Connector.id == connector_pk)
+        .with_for_update()
+    ).first()
+
+
+def expire_stale_reservations(db: Session, now: datetime) -> int:
+    """Tự động chuyển các đặt chỗ đã quá hạn sang trạng thái 'expired' tại CSDL (SCRUM-77)."""
+    result = db.execute(
+        update(Reservation)
+        .where(
+            Reservation.status.in_(["accepted", "pending"]),
+            Reservation.expiry_date <= now,
+        )
+        .values(
+            status="expired",
+            reject_reason="expired",
+        )
+        .execution_options(synchronize_session="fetch")
+    )
+    return int(cast(CursorResult[Any], result).rowcount or 0)
+
+
+def find_alternative_connectors(
+    db: Session,
+    current_charge_point_id: int,
+    current_connector_id: int,
+    limit: int = 3,
+) -> list[AlternativeSuggestion]:
+    """Tìm các đầu nối khả dụng khác để gợi ý cho tài xế khi bị trùng đặt chỗ (SCRUM-77 / S-49).
+
+    Ưu tiên:
+    1. Đầu nối khác trên cùng trạm sạc (cùng trụ hoặc trụ khác trong trạm).
+    2. Đầu nối tại các trạm đang hoạt động khác.
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    current_cp = (
+        db.query(ChargePoint)
+        .filter(ChargePoint.id == current_charge_point_id)
+        .first()
+    )
+    if not current_cp:
+        return []
+
+    station_id = current_cp.station_id
+
+    # Danh sách ID các cặp (trụ, đầu nối) đã có đặt chỗ active
+    active_reserved_pairs = set(
+        db.query(Reservation.charge_point_id, Reservation.connector_id)
+        .filter(
+            Reservation.status.in_(["accepted", "pending"]),
+            Reservation.expiry_date > now,
+        )
+        .all()
+    )
+
+    busy_statuses = {
+        "charging",
+        "suspended_ev",
+        "suspended_evse",
+        "finishing",
+        "reserved",
+        "faulted",
+        "unavailable",
+    }
+    busy_ocpp = {
+        "Charging",
+        "SuspendedEV",
+        "SuspendedEVSE",
+        "Finishing",
+        "Reserved",
+        "Faulted",
+        "Unavailable",
+        "Occupied",
+    }
+
+    suggestions: list[AlternativeSuggestion] = []
+
+    # 1. Tìm trong cùng trạm sạc trước
+    same_station_cps = (
+        db.query(ChargePoint, Station)
+        .join(Station, ChargePoint.station_id == Station.id)
+        .filter(
+            ChargePoint.station_id == station_id,
+            ChargePoint.status == "online",
+            Station.status == "active",
+        )
+        .all()
+    )
+
+    for cp, st in same_station_cps:
+        if (
+            cp.code not in manager.active_connections
+            or is_charge_point_stale(cp.last_seen_at)
+        ):
+            continue
+        for conn in cp.connectors:
+            if (
+                cp.id == current_charge_point_id
+                and conn.connector_id == current_connector_id
+            ):
+                continue
+            if conn.status.lower() in busy_statuses or (
+                conn.ocpp_status and conn.ocpp_status in busy_ocpp
+            ):
+                continue
+            if (cp.id, conn.connector_id) in active_reserved_pairs:
+                continue
+            suggestions.append(
+                AlternativeSuggestion(
+                    station_id=st.id,
+                    station_name=st.name,
+                    station_address=st.address,
+                    charge_point_id=cp.id,
+                    charge_point_code=cp.code,
+                    connector_id=conn.connector_id,
+                    connector_status=conn.status,
+                )
+            )
+            if len(suggestions) >= limit:
+                return suggestions
+
+    # 2. Nếu vẫn chưa đủ, tìm ở các trạm active khác
+    other_cps = (
+        db.query(ChargePoint, Station)
+        .join(Station, ChargePoint.station_id == Station.id)
+        .filter(
+            ChargePoint.station_id != station_id,
+            ChargePoint.status == "online",
+            Station.status == "active",
+        )
+        .limit(limit * 2)
+        .all()
+    )
+
+    for cp, st in other_cps:
+        if (
+            cp.code not in manager.active_connections
+            or is_charge_point_stale(cp.last_seen_at)
+        ):
+            continue
+        for conn in cp.connectors:
+            if conn.status.lower() in busy_statuses or (
+                conn.ocpp_status and conn.ocpp_status in busy_ocpp
+            ):
+                continue
+            if (cp.id, conn.connector_id) in active_reserved_pairs:
+                continue
+            suggestions.append(
+                AlternativeSuggestion(
+                    station_id=st.id,
+                    station_name=st.name,
+                    station_address=st.address,
+                    charge_point_id=cp.id,
+                    charge_point_code=cp.code,
+                    connector_id=conn.connector_id,
+                    connector_status=conn.status,
+                )
+            )
+            if len(suggestions) >= limit:
+                return suggestions
+
+    return suggestions
+
+
+def build_conflict_detail(
+    db: Session,
+    charge_point: ChargePoint,
+    connector_id: int,
+    message: str = "Đầu nối đã có người đặt trước trong khoảng thời gian này.",
+    code: str = "connector_already_reserved",
+) -> dict[str, Any]:
+    """Tạo payload chi tiết lỗi 409 kèm gợi ý các trụ/đầu nối khả dụng khác (SCRUM-77 / S-49)."""
+    suggestions = find_alternative_connectors(db, charge_point.id, connector_id)
+    return {
+        "message": message,
+        "code": code,
+        "charge_point_code": charge_point.code,
+        "connector_id": connector_id,
+        "suggestions": [s.model_dump() for s in suggestions],
+    }
+
+
 async def create_reservation(
     db: Session,
     user: User,
@@ -228,8 +431,11 @@ async def create_reservation(
         payload.start_time, payload.expiry_date, payload.expiry_minutes
     )
 
-    # 7. Kiểm tra trùng lịch đặt chỗ đã có hiệu lực
+    # 7. Khóa đầu nối tại CSDL và kiểm tra trùng lịch đặt chỗ đã có hiệu lực (SCRUM-77 / S-49)
+    lock_connector_for_reservation(db, connector.id)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    expire_stale_reservations(db, now)
+
     existing_reservation = (
         db.query(Reservation)
         .filter(
@@ -243,10 +449,10 @@ async def create_reservation(
     if existing_reservation is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Đầu nối đã có người đặt trước trong khoảng thời gian này.",
+            detail=build_conflict_detail(db, point, payload.connector_id),
         )
 
-    # 8. Tạo bản ghi reservation ở trạng thái pending
+    # 8. Tạo bản ghi reservation ở trạng thái pending (được bảo vệ bởi partial unique index CSDL)
     reservation = Reservation(
         charge_point_id=point.id,
         connector_id=payload.connector_id,
@@ -257,13 +463,21 @@ async def create_reservation(
         status="pending",
     )
     db.add(reservation)
-    db.commit()
-    db.refresh(reservation)
+    try:
+        db.flush()
+        reservation_id = int(reservation.id)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=build_conflict_detail(db, point, payload.connector_id),
+        ) from exc
 
     masked_tag = id_tag[-4:] if len(id_tag) >= 4 else "****"
     logger.info(
         "Sending OCPP ReserveNow: reservation_id=%s charge_point=%s connector_id=%s id_tag=%s expiry=%s",
-        reservation.id,
+        reservation_id,
         point.code,
         payload.connector_id,
         masked_tag,
@@ -275,7 +489,7 @@ async def create_reservation(
         "connectorId": payload.connector_id,
         "expiryDate": expiry_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "idTag": id_tag,
-        "reservationId": reservation.id,
+        "reservationId": reservation_id,
     }
 
     def record_reservation_outcome(action: str, outcome: str) -> None:
@@ -284,7 +498,7 @@ async def create_reservation(
             action=action,
             command="ReserveNow",
             object_type="reservation",
-            object_id=reservation.id,
+            object_id=reservation_id,
             actor=user,
             charge_point_code=point.code,
             outcome=outcome,
@@ -339,17 +553,17 @@ async def create_reservation(
         publish_charge_point_status(db, point.id)
 
         item = ReservationItem(
-            id=reservation.id,
+            id=reservation_id,
             charge_point_id=point.id,
             charge_point_code=point.code,
             connector_id=payload.connector_id,
             user_id=user.id,
             id_tag=id_tag,
-            start_time=reservation.start_time,
-            expiry_date=reservation.expiry_date,
-            status=reservation.status,
+            start_time=start_time,
+            expiry_date=expiry_date,
+            status="accepted",
             reject_reason=None,
-            created_at=reservation.created_at,
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         return ReservationCreateResponse(
             status="Accepted",
