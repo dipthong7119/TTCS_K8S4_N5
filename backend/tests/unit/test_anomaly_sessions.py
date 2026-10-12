@@ -6,8 +6,8 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-import app.models.ocpp_message  # noqa: F401
-import app.models.orphan_message  # noqa: F401
+import app.models.ocpp_message
+import app.models.orphan_message
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.main import app
