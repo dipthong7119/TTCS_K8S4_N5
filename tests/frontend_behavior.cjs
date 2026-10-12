@@ -54,7 +54,13 @@ function monitoring(getTree, clock = Date, options = {}) {
       remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
       listAllSessions: options.listSessions || (async () => ({ items: [] })),
       getCurrentSession: options.currentSession || (async () => null),
-    remoteStop: options.stop,
+      createDriverRemoteStart: options.createDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      getDriverRemoteStart: options.getDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      remoteStop: options.stop,
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
@@ -864,6 +870,9 @@ async function startPage(options = {}) {
   const tag = controls.querySelector('[data-start-tag]');
   const message = controls.querySelector('[data-start-message]');
   button.dataset.cpCode = 'REAL-01';
+  select.selectedOptions = [
+    { dataset: { connectorDbId: '101' } }
+  ];
   const timers = new Map(); let timerId = 0; let now = Date.now();
   class Clock extends Date { static now() { return now; } }
   const calls = []; const redirects = [];
@@ -871,10 +880,12 @@ async function startPage(options = {}) {
     startControls: [controls], redirects,
     remoteStart: async (...args) => { calls.push(args); return options.remoteStart ? options.remoteStart(...args) : { status: 'Rejected' }; },
     listSessions: options.listSessions, currentSession: options.currentSession,
+    createDriverRemoteStart: options.createDriverRemoteStart,
+    getDriverRemoteStart: options.getDriverRemoteStart,
     setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, time: now + ms }); return id; },
     clearTimeout: id => timers.delete(id),
   });
-  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['driver'] });
+  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['operator'] });
   await flush(); page.openDetail();
   select.value = '1'; select.handlers.change(); tag.value = 'CARD-01'; tag.handlers.input();
   return {
@@ -927,17 +938,35 @@ test('SCRUM-191: timeout ignores a late Accepted response and never navigates', 
   assert.equal(page.timers.size, 0);
 });
 
-test('SCRUM-194: only a new session on the chosen point and connector navigates to T-48', async () => {
-  let session = { id: 1, charge_point_code: 'OTHER', connector_number: 1, started_at: new Date().toISOString() };
-  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }), currentSession: async () => session });
-  await page.click(); assert.deepEqual(page.redirects, []);
-  session = { ...session, charge_point_code: 'REAL-01', connector_number: 2 };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session = { ...session, connector_number: 1, started_at: '2000-01-01T00:00:00Z' };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session.started_at = new Date(Date.now() + 10000).toISOString();
-  await page.advance(2000); assert.deepEqual(page.redirects, ['/sessions/mine']);
-  assert.match(page.message.textContent, /đã bắt đầu/); assert.equal(page.timers.size, 0);
+test('SCRUM-95: driver waits for its remote-start request before navigating', async () => {
+  let request = {
+    id: 95, status: 'waiting_start', seconds_left: 60
+  };
+  const page = await startPage({
+    roles: ['driver'],
+    createDriverRemoteStart: async connectorId => {
+      assert.equal(connectorId, 101);
+      return request;
+    },
+    getDriverRemoteStart: async requestId => {
+      assert.equal(requestId, 95);
+      return request;
+    }
+  });
+
+  page.tag.value = '';
+  await page.click();
+  assert.deepEqual(page.redirects, []);
+  assert.equal(page.button.disabled, true);
+
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, []);
+
+  request = { id: 95, status: 'started', session_id: 123 };
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, ['/sessions/mine']);
+  assert.match(page.message.textContent, /đã bắt đầu/);
+  assert.equal(page.timers.size, 0);
 });
 
 test('SCRUM-191: delayed deadline timer cannot accept a response after 60 seconds', async () => {
@@ -960,7 +989,7 @@ test('SCRUM-191: delayed session response after deadline cannot report success',
   let resolve;
   const page = await startPage({
     remoteStart: async () => ({ status: 'Accepted' }),
-    currentSession: () => new Promise(done => { resolve = done; })
+    listSessions: () => new Promise(done => { resolve = done; })
   });
   const pending = page.click(); await flush();
   page.elapseWithoutTimers(60000);
