@@ -70,4 +70,3 @@ Theo quy tắc chống nghẽn (Mục 6.1), Tú có thể bắt đầu làm vi�
 | SCRUM-62 (FE) | Màn hình cấu hình khung giờ | 3 | ✅ Hoàn thành |
 | SCRUM-208 (FE) | Bảng phân rã chi phí trong modal | 5 (chung) | ✅ Hoàn thành |
 | SCRUM-66 (FE) | Modal hoá đơn E-Receipt | 3 (chung) | ✅ Hoàn thành |
-

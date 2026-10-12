@@ -41,3 +41,15 @@
   .driver-search { width: 100%; }
   .driver-wallet-footer { align-items: flex-start; flex-direction: column; }
 }
+
+/* Số dư âm – cảnh báo tài xế đang nợ */
+.driver-money--negative { color: var(--color-danger, #e53e3e) !important; }
+.badge--xs { font-size: 0.65rem; padding: 1px 5px; vertical-align: middle; margin-left: 4px; }
+
+/* Thông tin số dư trong dialog nạp tiền */
+.topup-driver-name { color: var(--color-text-secondary); margin: var(--space-1) 0 0; }
+.topup-driver-balance { font-size: var(--font-size-sm); margin: var(--space-1) 0 0; color: var(--color-text-secondary); }
+.topup-driver-balance--negative { color: var(--color-danger, #e53e3e); font-weight: 600; }
+
+/* Trường bắt buộc */
+.required-mark { color: var(--color-danger, #e53e3e); margin-left: 2px; }

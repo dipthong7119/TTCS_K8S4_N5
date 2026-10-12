@@ -44,6 +44,8 @@ class ManualTopUpRequest(BaseModel):
 class LegacyManualTopUpRequest(BaseModel):
     amount_vnd: StrictInt
     receipt_code: str
+    note: str = ""
+
 
 
 @router.post(
@@ -121,6 +123,7 @@ async def legacy_manually_top_up_driver(
             driver_user_id=driver_id,
             amount_vnd=body.amount_vnd,
             receipt_code=body.receipt_code,
+            note=body.note,
         )
         db.commit()
     except ValueError as exc:
