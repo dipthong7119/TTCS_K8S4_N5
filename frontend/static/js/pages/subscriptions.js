@@ -125,6 +125,7 @@
           <div>
             ${plan.name.toLowerCase().includes('tiết kiệm') || plan.name.toLowerCase().includes('pro') ? '<span class="plan-card__badge-top">Phổ biến</span>' : ''}
             <h3 class="plan-card__title">${escapeHtml(plan.name)}</h3>
+            ${plan.description ? `<p class="plan-card__description">${escapeHtml(plan.description)}</p>` : ''}
             <div class="plan-card__pricing">
               <div class="plan-card__fee">${escapeHtml(money(plan.monthly_fee_vnd))} <span class="plan-card__fee-unit">/ tháng</span></div>
               <div class="plan-card__rate">⚡ Giá sạc ưu đãi: ${escapeHtml(moneyRate(plan.price_vnd_per_kwh))}</div>
