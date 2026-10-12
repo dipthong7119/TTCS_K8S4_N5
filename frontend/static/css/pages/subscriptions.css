@@ -1,0 +1,315 @@
+/* pages/subscriptions.css — SCRUM-68: Giao diện đăng ký gói thuê bao hàng tháng */
+
+.sub-header-banner {
+  background: linear-gradient(135deg, hsl(215, 60%, 16%) 0%, hsl(205, 75%, 22%) 50%, hsl(175, 80%, 20%) 100%);
+  color: white;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-6);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px hsla(205, 80%, 20%, 0.4);
+  border: 1px solid hsla(180, 80%, 60%, 0.2);
+}
+
+.sub-header-banner::after {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, hsla(170, 90%, 50%, 0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.sub-header-banner__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-2xl);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.sub-header-banner__desc {
+  margin: 0;
+  max-width: 680px;
+  color: hsla(0, 0%, 100%, 0.85);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+}
+
+/* Active subscription status card */
+.active-sub-card {
+  border: 2px solid var(--color-primary, #0284c7);
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.active-sub-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.active-sub-card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.active-sub-card__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.active-sub-metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.active-sub-metric__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin-bottom: var(--space-1);
+}
+
+.active-sub-metric__val {
+  font-size: var(--font-size-xl);
+  font-weight: 750;
+  color: var(--color-text);
+}
+
+.active-sub-metric__val--highlight {
+  color: var(--color-primary, #0284c7);
+}
+
+.active-sub-metric__sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* Plans section & cards grid */
+.plans-heading {
+  margin: var(--space-6) 0 var(--space-4);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-8);
+}
+
+.plan-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+}
+
+.plan-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary, #0284c7);
+}
+
+.plan-card--featured {
+  border: 2px solid var(--color-primary, #0284c7);
+  box-shadow: 0 8px 20px -4px hsla(205, 80%, 40%, 0.15);
+}
+
+.plan-card__badge-top {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  background: linear-gradient(135deg, hsl(200, 85%, 45%), hsl(170, 85%, 40%));
+  color: white;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plan-card__title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+}
+
+.plan-card__pricing {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.plan-card__fee {
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1.1;
+}
+
+.plan-card__fee-unit {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.plan-card__rate {
+  margin-top: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background: hsla(142, 70%, 45%, 0.12);
+  color: hsl(142, 80%, 32%);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.plan-card__features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.plan-card__features li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.plan-card__features li svg {
+  color: var(--color-success, #16a34a);
+  flex-shrink: 0;
+}
+
+.plan-card__action {
+  margin-top: auto;
+}
+
+.plan-card__action .btn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 650;
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Modal Dialog Xác nhận đăng ký */
+.sub-dialog {
+  width: min(500px, calc(100vw - 32px));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+}
+
+.sub-dialog::backdrop {
+  background: rgb(15 23 42 / 60%);
+  backdrop-filter: blur(2px);
+}
+
+.sub-dialog__content {
+  padding: var(--space-6);
+}
+
+.sub-dialog__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sub-dialog__title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 750;
+}
+
+.sub-balance-box {
+  background: var(--color-surface-alt, #f8fafc);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sub-balance-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+
+.sub-balance-row strong {
+  font-weight: 700;
+}
+
+.sub-balance-row--warning {
+  color: var(--color-danger, #dc2626);
+  font-weight: 600;
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.sub-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/* History table */
+.sub-history-card {
+  margin-top: var(--space-8);
+}
+
+@media (max-width: 640px) {
+  .sub-header-banner {
+    padding: var(--space-5) var(--space-4);
+  }
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+}
