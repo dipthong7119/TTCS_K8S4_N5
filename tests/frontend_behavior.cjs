@@ -666,10 +666,11 @@ test('audit displays the real Reset event returned by the server', async () => {
   assert.equal(requests[1].config.method, 'GET');
   assert.equal(requests[1].config.credentials, 'include');
   assert.match(page.html(), /RESET-NEW-03/);
-  assert.match(page.html(), /Reset trụ thành công/);
+  assert.match(page.html(), /Khởi động lại trụ \(Reset\)/);
+  assert.match(page.html(), /Chấp nhận/);
   assert.match(page.html(), /Operator real/);
   assert.match(page.html(), /operator@example.test/);
-  assert.match(page.html(), /Hard/);
+  assert.deepEqual(JSON.parse(requests[0].config.body), { type: 'Hard' });
   assert.equal(page.document.getElementById('audit-count').textContent, '1 sự kiện');
   assert.doesNotMatch(page.html(), /CP_VIN_01|CP_LOT_02/);
 });
@@ -699,7 +700,7 @@ test('audit sends filters and pagination to the server and resets page on filter
 test('audit shows actual empty and failed API responses without sample events', async () => {
   const empty = auditPage(async () => auditResponse({ items: [], total: 0 }));
   empty.load(); await flush();
-  assert.match(empty.html(), /Chưa có nhật ký phù hợp/);
+  assert.match(empty.html(), /Không tìm thấy sự kiện phù hợp/);
   assert.equal(empty.document.getElementById('audit-count').textContent, '0 sự kiện');
   const failed = auditPage(async () => ({
     ok: false, status: 500,
