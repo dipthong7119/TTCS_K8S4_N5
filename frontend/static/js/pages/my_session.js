@@ -3,6 +3,8 @@
  * Nhiệm vụ Sprint 3:
  * - T-48 (SCRUM-179, Story S-22): Màn hình phiên đang sạc, live kWh tăng dần realtime (<2s), empty state cho tài xế.
  * - T-50 (SCRUM-173, Story S-23): Nút dừng từ xa, modal xác nhận, đồng hồ đếm ngược 2 phút (120s), xử lý 3 ca lỗi và 1 ca thành công.
+ * - SCRUM-208 (FE, thuộc SCRUM-63): Hiển thị chi tiết cách tính tiền theo từng khung giờ trong modal phiên sạc.
+ * - SCRUM-66 (FE): Màn hình hoá đơn E-Receipt có diễn giải từng đoạn giá cho tài xế.
  */
 (function () {
   'use strict';
@@ -427,7 +429,87 @@
     }
   }
 
-  function renderInvoiceDetail(invoice) {
+  // ── SCRUM-208: Render bảng phân rã chi phí chi tiết theo khung giờ ──────────
+  function renderInvoiceBreakdown(session) {
+    const segments = Array.isArray(session.invoice_segments) ? session.invoice_segments : [];
+    if (!segments.length) return '';
+
+    const energySegs = segments.filter(s => s.kind !== 'occupancy_fee');
+    const occupancySeg = segments.find(s => s.kind === 'occupancy_fee');
+    const energyTotal = energySegs.reduce((sum, s) => sum + (s.amount_vnd || 0), 0);
+
+    const segRows = energySegs.map((seg, idx) => {
+      const fromTime = seg.from ? new Date(seg.from).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
+      const toTime = seg.to ? new Date(seg.to).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
+      const bandLabel = escHtml(seg.band || `Khung giá ${idx + 1}`);
+      const tariffName = seg.tariff_name
+        ? `<small class="invoice-tariff-name">${escHtml(seg.tariff_name)}</small>`
+        : '';
+      const serviceDate = seg.service_date
+        ? `<small class="invoice-service-date">${escHtml(seg.service_date)}</small>`
+        : '';
+      const isLast = idx === energySegs.length - 1 && !occupancySeg;
+      return `
+        <tr class="invoice-seg-row">
+          <td><span class="invoice-band-chip">${bandLabel}</span>${tariffName}</td>
+          <td class="invoice-time-cell"><span class="invoice-time">${fromTime}</span><span class="invoice-time-sep">→</span><span class="invoice-time">${toTime}</span>${serviceDate}</td>
+          <td class="invoice-num-cell">${escHtml(String(parseFloat(seg.energy_kwh || 0).toFixed(3)))} kWh</td>
+          <td class="invoice-num-cell">${fmtVND(seg.price_vnd_per_kwh)}<span class="invoice-unit">/kWh</span></td>
+          <td class="invoice-amount-cell">${fmtVND(seg.amount_vnd)}</td>
+        </tr>`;
+    }).join('');
+
+    const occupancyRow = occupancySeg ? `
+      <tr class="invoice-seg-row invoice-occupancy-row">
+        <td><span class="invoice-band-chip invoice-band-chip--occupancy">Phí chiếm trụ</span></td>
+        <td class="invoice-time-cell"><span class="invoice-hint">Sau ân hạn</span></td>
+        <td class="invoice-num-cell">${escHtml(String(occupancySeg.duration_minutes || 0))} phút</td>
+        <td class="invoice-num-cell">${fmtVND(occupancySeg.price_vnd_per_minute)}<span class="invoice-unit">/phút</span></td>
+        <td class="invoice-amount-cell">${fmtVND(occupancySeg.amount_vnd)}</td>
+      </tr>` : '';
+
+    const totalRow = `
+      <tr class="invoice-total-row">
+        <td colspan="4">Tổng cộng</td>
+        <td class="invoice-amount-cell invoice-grand-total">${fmtVND(session.cost_vnd)}</td>
+      </tr>`;
+
+    const roundingNote = session.invoice_rounding_rule
+      ? `<p class="invoice-rounding-note">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          ${escHtml(session.invoice_rounding_rule)}
+        </p>` : '';
+
+    return `
+      <section class="invoice-breakdown" aria-label="Phân rã chi phí theo khung giờ">
+        <div class="invoice-breakdown__header">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+          <h3>Phân rã chi phí theo khung giờ</h3>
+        </div>
+        <div class="invoice-table-wrap">
+          <table class="invoice-table" aria-label="Chi tiết từng khung giờ sạc">
+            <thead>
+              <tr>
+                <th>Khung giá</th>
+                <th>Thời gian</th>
+                <th>Sản lượng</th>
+                <th>Đơn giá</th>
+                <th>Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>${segRows}${occupancyRow}</tbody>
+            <tfoot>${totalRow}</tfoot>
+          </table>
+        </div>
+        ${roundingNote}
+        ${session.cost_vnd != null ? `<button class="btn btn--ghost btn--sm invoice-view-btn" type="button" id="btn-open-invoice" data-session-id="${session.id}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Xem hoá đơn đầy đủ
+        </button>` : ''}
+      </section>`;
+  }
+
+  function renderInvoiceDetail(invoice, session) {
     if (invoice?.status !== 'issued') {
       return `<section aria-label="Trạng thái hóa đơn" role="status" style="margin-top:var(--space-5);">
         <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Hóa đơn</h3>
@@ -435,24 +517,15 @@
       </section>`;
     }
 
-    const segments = Array.isArray(invoice.segments) ? invoice.segments : [];
-    const lines = segments.length ? `<ol style="padding-left:var(--space-5);display:grid;gap:var(--space-2);">
-      ${segments.map(segment => {
-        const title = `${segment.tariff_name ? `${escHtml(segment.tariff_name)} · ` : ''}${escHtml(segment.band || 'Khung giá')}`;
-        const date = segment.service_date ? ` · ngày ${escHtml(segment.service_date)}` : '';
-        const detail = segment.kind === 'occupancy_fee'
-          ? `${escHtml(segment.duration_minutes)} phút × ${fmtVND(segment.price_vnd_per_minute)}/phút`
-          : `${escHtml(segment.energy_kwh || '0')} kWh × ${fmtVND(segment.price_vnd_per_kwh)}/kWh`;
-        return `<li><strong>${title}</strong>${date} (${escHtml(segment.from || '—')} – ${escHtml(segment.to || '—')}): ${detail} = <strong>${fmtVND(segment.amount_vnd)}</strong></li>`;
-      }).join('')}
-    </ol>` : '<p class="form-hint">Hóa đơn không có dòng chi tiết.</p>';
-
-    return `<section aria-label="Chi tiết hóa đơn" style="margin-top:var(--space-5);">
-      <h3 style="font-size:var(--font-size-sm);margin-bottom:var(--space-2);">Chi tiết hóa đơn</h3>
-      <p class="form-hint">${escHtml(invoice.rounding_rule || '')}</p>
-      ${lines}
-      <p style="margin-top:var(--space-3);font-weight:700;">Tổng cộng: ${fmtVND(invoice.total_vnd)}</p>
-    </section>`;
+    const invoiceSession = {
+      ...session,
+      cost_vnd: invoice.total_vnd,
+      invoice_segments: Array.isArray(invoice.segments) ? invoice.segments : [],
+      invoice_rounding_rule: invoice.rounding_rule,
+      invoice_subscription_id: invoice.subscription_id,
+      invoice_package_name: invoice.package_name,
+    };
+    return renderInvoiceBreakdown(invoiceSession);
   }
 
   async function openDetail(session) {
@@ -461,19 +534,43 @@
     const titleEl = document.getElementById('session-detail-title');
     if (titleEl) titleEl.textContent = `Chi tiết phiên sạc #${session.id}`;
 
+    const isCompleted = !!session.ended_at;
+    const hasCost = session.cost_vnd != null;
+
     const bodyEl = document.getElementById('session-detail-body');
     if (bodyEl) {
       bodyEl.innerHTML = `
-        <dl style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3) var(--space-6);">
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạm sạc</dt><dd>${escHtml(session.station_name || '—')}</dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Mã trụ</dt><dd><code style="font-family:monospace;">${escHtml(session.charge_point_code || '—')}</code></dd></div>
-          ${_isGlobal ? `<div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Tài xế</dt><dd>${escHtml(session.driver_name || '—')}</dd></div>` : ''}
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Thời điểm bắt đầu</dt><dd>${fmtDatetime(session.started_at)}</dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Thời điểm kết thúc</dt><dd>${session.ended_at ? fmtDatetime(session.ended_at) : '<span style="color:var(--color-charging);font-weight:600;">Đang sạc</span>'}</dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Điện năng tiêu thụ</dt><dd style="font-weight:700;">${session.ended_at ? (session.kwh != null ? session.kwh.toFixed(3) + ' kWh' : '—') : (session.live_kwh != null ? session.live_kwh.toFixed(3) + ' kWh' : 'Đang sạc')}</dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Chi phí sạc</dt><dd style="font-weight:700;">${session.cost_vnd != null ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(session.cost_vnd) : 'Chưa có cấu hình biểu giá'}</dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Trạng thái</dt><dd><span class="badge ${STATUS_CLASS[session.status] || 'badge--neutral'}">${STATUS_LABEL[session.status] || 'Không rõ'}</span></dd></div>
-          <div><dt style="font-size:var(--font-size-xs);color:var(--color-text-secondary);font-weight:600;margin-bottom:2px;">Lý do kết thúc</dt><dd>${escHtml(session.stop_reason || '—')}</dd></div>
+        <dl class="session-detail-dl">
+          <div class="session-detail-field">
+            <dt>Trạm sạc</dt>
+            <dd>${escHtml(session.station_name || '—')}</dd>
+          </div>
+          <div class="session-detail-field">
+            <dt>Mã trụ</dt>
+            <dd><code class="mono-code">${escHtml(session.charge_point_code || '—')}</code></dd>
+          </div>
+          ${_isGlobal ? `<div class="session-detail-field"><dt>Tài xế</dt><dd>${escHtml(session.driver_name || '—')}</dd></div>` : ''}
+          <div class="session-detail-field">
+            <dt>Bắt đầu</dt>
+            <dd>${fmtDatetime(session.started_at)}</dd>
+          </div>
+          <div class="session-detail-field">
+            <dt>Kết thúc</dt>
+            <dd>${isCompleted ? fmtDatetime(session.ended_at) : '<span class="status-charging">Đang sạc</span>'}</dd>
+          </div>
+          <div class="session-detail-field">
+            <dt>Điện năng</dt>
+            <dd class="field-highlight">${isCompleted ? (session.kwh != null ? session.kwh.toFixed(3) + ' kWh' : '—') : (session.live_kwh != null ? session.live_kwh.toFixed(3) + ' kWh' : 'Đang sạc')}</dd>
+          </div>
+          <div class="session-detail-field">
+            <dt>Chi phí sạc</dt>
+            <dd class="field-highlight field-cost">${hasCost ? fmtVND(session.cost_vnd) : '<span class="text-muted">Chưa có cấu hình biểu giá</span>'}</dd>
+          </div>
+          <div class="session-detail-field">
+            <dt>Trạng thái</dt>
+            <dd><span class="badge ${STATUS_CLASS[session.status] || 'badge--neutral'}">${STATUS_LABEL[session.status] || 'Không rõ'}</span></dd>
+          </div>
+          ${session.stop_reason ? `<div class="session-detail-field session-detail-field--full"><dt>Lý do kết thúc</dt><dd>${escHtml(session.stop_reason)}</dd></div>` : ''}
         </dl><div id="session-invoice-detail"><p class="form-hint" role="status">Đang tải hóa đơn...</p></div>`;
     }
     const modal = document.getElementById('session-detail-modal');
@@ -483,7 +580,25 @@
       const invoice = await ApiClient.getSessionInvoice(session.id);
       if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
       const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
-      if (invoiceEl) invoiceEl.innerHTML = renderInvoiceDetail(invoice);
+      if (!invoiceEl) return;
+      invoiceEl.innerHTML = renderInvoiceDetail(invoice, session);
+      if (invoice.status === 'issued') {
+        const invoiceSession = {
+          ...session,
+          cost_vnd: invoice.total_vnd,
+          invoice_segments: Array.isArray(invoice.segments) ? invoice.segments : [],
+          invoice_rounding_rule: invoice.rounding_rule,
+          invoice_subscription_id: invoice.subscription_id,
+          invoice_package_name: invoice.package_name,
+        };
+        const costEl = bodyEl.querySelector('.field-cost');
+        if (costEl) costEl.textContent = fmtVND(invoice.total_vnd);
+        const invoiceButton = invoiceEl.querySelector('#btn-open-invoice');
+        invoiceButton?.addEventListener('click', event => {
+          event.stopPropagation();
+          openInvoice(invoiceSession);
+        });
+      }
     } catch (error) {
       if (requestId !== _invoiceDetailRequest || modal?.classList.contains('is-hidden')) return;
       const invoiceEl = bodyEl?.querySelector('#session-invoice-detail');
@@ -491,9 +606,139 @@
         invoiceEl.innerHTML = renderInvoiceDetail({
           status: 'unavailable',
           message: error.message || 'Không thể tải hóa đơn. Vui lòng thử lại.',
-        });
+        }, session);
       }
     }
+  }
+
+  // ── SCRUM-66: Modal hoá đơn E-Receipt đầy đủ ─────────────────────────────
+  function openInvoice(session) {
+    if (!session) return;
+    const modal = document.getElementById('invoice-modal');
+    if (!modal) return;
+
+    const segments = Array.isArray(session.invoice_segments) ? session.invoice_segments : [];
+    const energySegs = segments.filter(s => s.kind !== 'occupancy_fee');
+    const occupancySeg = segments.find(s => s.kind === 'occupancy_fee');
+    const issuedAt = session.ended_at ? new Date(session.ended_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const totalKwh = session.kwh != null ? session.kwh.toFixed(3) : '—';
+    const durationSec = session.duration_seconds || 0;
+    const durationStr = fmtDuration(durationSec);
+
+    // Dòng chi tiết từng đoạn
+    const segLines = energySegs.map(seg => {
+      const fromTime = seg.from ? new Date(seg.from).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
+      const toTime = seg.to ? new Date(seg.to).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—';
+      const kwh = parseFloat(seg.energy_kwh || 0).toFixed(3);
+      return `
+        <div class="receipt-line-item">
+          <div class="receipt-line-left">
+            <span class="receipt-band">${escHtml(seg.band || 'Khung giá')}</span>
+            ${seg.tariff_name ? `<span class="receipt-detail">${escHtml(seg.tariff_name)}</span>` : ''}
+            ${seg.service_date ? `<span class="receipt-detail">Ngày ${escHtml(seg.service_date)}</span>` : ''}
+            <span class="receipt-timerange">${fromTime} → ${toTime}</span>
+            <span class="receipt-detail">${kwh} kWh × ${fmtVND(seg.price_vnd_per_kwh)}/kWh</span>
+          </div>
+          <div class="receipt-line-amount">${fmtVND(seg.amount_vnd)}</div>
+        </div>`;
+    }).join('');
+
+    const occupancyLine = occupancySeg ? `
+      <div class="receipt-line-item receipt-occupancy">
+        <div class="receipt-line-left">
+          <span class="receipt-band receipt-band--occupancy">Phí chiếm trụ</span>
+          <span class="receipt-detail">${escHtml(String(occupancySeg.duration_minutes || 0))} phút × ${fmtVND(occupancySeg.price_vnd_per_minute)}/phút</span>
+        </div>
+        <div class="receipt-line-amount">${fmtVND(occupancySeg.amount_vnd)}</div>
+      </div>` : '';
+
+    const walletNote = session.invoice_subscription_id
+      ? `<div class="receipt-wallet-note receipt-wallet-note--sub">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          Áp dụng gói thuê bao: <strong>${escHtml(session.invoice_package_name || 'Thuê bao tháng')}</strong>
+        </div>`
+      : `<div class="receipt-wallet-note">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          Thanh toán từ Ví điện tử CSMS
+        </div>`;
+
+    const bodyEl = document.getElementById('invoice-modal-body');
+    if (!bodyEl) return;
+    bodyEl.innerHTML = `
+      <div class="receipt-card" id="receipt-printable">
+        <!-- Header hoá đơn -->
+        <div class="receipt-header">
+          <div class="receipt-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div class="receipt-brand">
+            <div class="receipt-brand-name">CSMS</div>
+            <div class="receipt-brand-sub">EV Charging Platform</div>
+          </div>
+          <div class="receipt-status-badge">Hoá đơn điện tử</div>
+        </div>
+
+        <!-- Mã phiên + thời gian phát hành -->
+        <div class="receipt-meta-grid">
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Mã phiên sạc</span>
+            <span class="receipt-meta-value receipt-session-id">#${escHtml(String(session.id))}</span>
+          </div>
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Ngày phát hành</span>
+            <span class="receipt-meta-value">${issuedAt}</span>
+          </div>
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Trạm sạc</span>
+            <span class="receipt-meta-value">${escHtml(session.station_name || '—')}</span>
+          </div>
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Mã trụ</span>
+            <span class="receipt-meta-value"><code class="mono-code">${escHtml(session.charge_point_code || '—')}</code></span>
+          </div>
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Thời lượng sạc</span>
+            <span class="receipt-meta-value">${durationStr}</span>
+          </div>
+          <div class="receipt-meta-item">
+            <span class="receipt-meta-label">Tổng điện năng</span>
+            <span class="receipt-meta-value receipt-kwh-val">${totalKwh} kWh</span>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="receipt-divider"></div>
+
+        <!-- Chi tiết từng đoạn giá -->
+        <div class="receipt-section-title">Chi tiết tính phí</div>
+        <div class="receipt-line-items">
+          ${segLines || '<div class="receipt-no-segments">Không có dữ liệu phân đoạn giá.</div>'}
+          ${occupancyLine}
+        </div>
+
+        <!-- Divider -->
+        <div class="receipt-divider"></div>
+
+        <!-- Tổng tiền -->
+        <div class="receipt-total-row">
+          <span class="receipt-total-label">Tổng thanh toán</span>
+          <span class="receipt-total-amount">${fmtVND(session.cost_vnd)}</span>
+        </div>
+
+        <!-- Ghi chú phương thức thanh toán -->
+        ${walletNote}
+
+        <!-- Ghi chú làm tròn -->
+        ${session.invoice_rounding_rule ? `<div class="receipt-rounding"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> ${escHtml(session.invoice_rounding_rule)}</div>` : ''}
+
+        <!-- Footer hoá đơn -->
+        <div class="receipt-footer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+          Cảm ơn bạn đã sử dụng dịch vụ sạc xe điện CSMS!
+        </div>
+      </div>`;
+
+    modal.classList.remove('is-hidden');
   }
 
   // ── Khởi tạo trang ────────────────────────────────────────────────────────
@@ -520,6 +765,15 @@
         ++_invoiceDetailRequest;
         e.currentTarget.classList.add('is-hidden');
       }
+    });
+
+    // SCRUM-66: Đóng modal hoá đơn E-Receipt
+    document.getElementById('invoice-modal-close')?.addEventListener('click', () => {
+      document.getElementById('invoice-modal')?.classList.add('is-hidden');
+    });
+
+    document.getElementById('invoice-modal')?.addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.add('is-hidden');
     });
 
     // Modal dừng từ xa (T-50)
