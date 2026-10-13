@@ -470,16 +470,135 @@ def manual_topup(
     )
     db.add(entry)
     db.flush()
-    
+
+    admin = db.query(User).filter(User.id == admin_user_id).first()
     append_audit(
         db,
         action="wallet.manual_topup",
         object_type="wallet_ledger",
         object_id=entry.id,
         actor_id=admin_user_id,
-        details={"driver_id": driver_user_id, "amount_vnd": amount_vnd, "receipt_code": receipt_code_norm},
+        actor_email=admin.email if admin else None,
+        actor_name=admin.full_name if admin else None,
+        target_user_id=driver_user_id,
+        details={
+            "driver_id": driver_user_id,
+            "driver_email": driver.email,
+            "driver_name": driver.full_name,
+            "amount_vnd": amount_vnd,
+            "receipt_code": receipt_code_norm,
+            "reason": note.strip() if note else "",
+        },
     )
     return entry
+
+
+def adjust_wallet_balance(
+    db: Session,
+    *,
+    admin_user: User,
+    driver_user_id: int,
+    amount_vnd: int,
+    reason: str,
+    reference_code: str | None = None,
+) -> WalletLedgerEntry:
+    """
+    Điều chỉnh số dư ví (SCRUM-91 / S-56).
+    Cho phép số tiền dương (cộng tiền) hoặc âm (trừ tiền), bắt buộc phải có lý do.
+    """
+    if not reason or len(reason.strip()) < 3:
+        raise ValueError("Lý do điều chỉnh ví bắt buộc có tối thiểu 3 ký tự")
+    if amount_vnd == 0:
+        raise ValueError("Số tiền điều chỉnh phải khác 0")
+
+    driver = (
+        db.query(User)
+        .join(user_roles)
+        .join(Role)
+        .filter(User.id == driver_user_id, Role.name == "driver")
+        .first()
+    )
+    if not driver:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
+
+    ref_code = reference_code.strip() if reference_code else f"ADJ-{uuid4().hex[:10].upper()}"
+    entry = WalletLedgerEntry(
+        user_id=driver_user_id,
+        entry_type="adjustment",
+        amount_vnd=amount_vnd,
+        idempotency_key=f"adjustment:{ref_code}",
+        receipt_code=ref_code,
+        description=reason.strip()[:200],
+        actor_id=admin_user.id,
+    )
+    db.add(entry)
+    db.flush()
+
+    append_audit(
+        db,
+        action="wallet.adjust",
+        object_type="wallet_ledger",
+        object_id=entry.id,
+        actor_id=admin_user.id,
+        actor_email=admin_user.email,
+        actor_name=admin_user.full_name,
+        target_user_id=driver_user_id,
+        details={
+            "driver_id": driver_user_id,
+            "driver_email": driver.email,
+            "driver_name": driver.full_name,
+            "amount_vnd": amount_vnd,
+            "reason": reason.strip(),
+            "reference_code": ref_code,
+        },
+    )
+    return entry
+
+
+def set_driver_wallet_lock(
+    db: Session,
+    *,
+    admin_user: User,
+    driver_user_id: int,
+    locked: bool,
+    reason: str,
+) -> User:
+    """Khóa hoặc mở khóa ví tài xế và ghi nhật ký thao tác (SCRUM-91)."""
+    if not reason or len(reason.strip()) < 3:
+        raise ValueError("Lý do thao tác bắt buộc có tối thiểu 3 ký tự")
+
+    driver = (
+        db.query(User)
+        .join(user_roles)
+        .join(Role)
+        .filter(User.id == driver_user_id, Role.name == "driver")
+        .first()
+    )
+    if not driver:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế")
+
+    driver.is_active = not locked
+    db.flush()
+
+    action = "wallet.lock" if locked else "wallet.unlock"
+    append_audit(
+        db,
+        action=action,
+        object_type="wallet",
+        object_id=driver_user_id,
+        actor_id=admin_user.id,
+        actor_email=admin_user.email,
+        actor_name=admin_user.full_name,
+        target_user_id=driver_user_id,
+        details={
+            "driver_id": driver_user_id,
+            "driver_email": driver.email,
+            "driver_name": driver.full_name,
+            "reason": reason.strip(),
+            "is_locked": locked,
+        },
+    )
+    return driver
 
 
 def wallet_balance_matches_ledger(db: Session, wallet_id: int) -> bool:
