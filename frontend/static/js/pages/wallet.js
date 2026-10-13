@@ -193,6 +193,7 @@
       const entryType = e.entry_type || e.type;
       let typeLabel = 'Điều chỉnh';
       if (entryType === 'sandbox_topup') typeLabel = 'Nạp Sandbox';
+      else if (entryType === 'payment_refund') typeLabel = 'Hoàn nạp Sandbox';
       else if (entryType === 'manual_topup') typeLabel = 'Nạp thủ công';
       else if (entryType === 'demo_topup') typeLabel = 'Nạp demo';
       else if (entryType === 'session_charge') typeLabel = 'Phiên sạc';
@@ -262,6 +263,7 @@
     const entryType = item.entry_type || item.type;
     let typeName = 'Bút toán điều chỉnh';
     if (entryType === 'sandbox_topup') typeName = 'Nạp tiền qua Cổng Sandbox';
+    else if (entryType === 'payment_refund') typeName = 'Hoàn giao dịch nạp Sandbox';
     else if (entryType === 'manual_topup') typeName = 'Nạp tiền thủ công qua quản trị';
     else if (entryType === 'demo_topup') typeName = 'Nạp tiền thử nghiệm demo';
     else if (entryType === 'session_charge') typeName = 'Trừ chi phí phiên sạc';
@@ -401,9 +403,17 @@
         statusBadge = '<span class="status-badge status-badge--success">● Thành công</span>';
       } else if (tx.status === 'pending') {
         statusBadge = '<span class="status-badge status-badge--pending">⏳ Chờ thanh toán</span>';
+      } else if (tx.status === 'refunded') {
+        statusBadge = '<span class="status-badge status-badge--failed">↩ Đã hoàn tiền</span>';
+      } else if (tx.status === 'cancelled') {
+        statusBadge = '<span class="status-badge status-badge--failed">✕ Đã hủy</span>';
       } else {
         statusBadge = '<span class="status-badge status-badge--failed">✕ ' + escHtml(tx.status || 'Thất bại') + '</span>';
       }
+      const statusReason = tx.refund_reason || tx.failure_reason;
+      const reasonHtml = statusReason
+        ? `<div class="form-hint" title="${escHtml(statusReason)}">${escHtml(statusReason)}</div>`
+        : '';
 
       let actionHtml = '';
       if (tx.status === 'pending') {
@@ -417,17 +427,24 @@
             </a>
           </div>`;
       } else if (tx.status === 'success') {
-        actionHtml = '<span style="font-size:var(--font-size-xs);color:var(--color-text-muted);">Đã hoàn tất</span>';
+        actionHtml = `<button type="button" class="btn btn--xs btn--secondary btn-refund-topup" data-order="${escHtml(tx.order_code)}" title="Mô phỏng cổng hoàn lại khoản nạp">
+          Mô phỏng hoàn tiền
+        </button>`;
+      } else if (tx.status === 'refunded') {
+        actionHtml = '<span style="font-size:var(--font-size-xs);color:var(--color-text-muted);">Đã hoàn tiền</span>';
       } else {
-        actionHtml = '<span style="font-size:var(--font-size-xs);color:var(--color-text-muted);">Đã hủy</span>';
+        actionHtml = '<span style="font-size:var(--font-size-xs);color:var(--color-text-muted);">Không ghi có vào ví</span>';
       }
 
+      const amountColor = tx.status === 'success'
+        ? 'hsl(142,76%,36%)'
+        : 'var(--color-text-secondary)';
       return `<tr>
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(tx.created_at)}</td>
         <td style="font-family:monospace;font-weight:600;font-size:var(--font-size-xs);color:var(--color-text);">${escHtml(tx.order_code)}</td>
         <td><span class="badge badge--neutral">${escHtml(tx.provider || 'sandbox')}</span></td>
-        <td class="text-right" style="font-weight:700;color:hsl(142,76%,36%);">${fmtVND(tx.amount_vnd)}</td>
-        <td>${statusBadge}</td>
+        <td class="text-right" style="font-weight:700;color:${amountColor};">${fmtVND(tx.amount_vnd)}</td>
+        <td>${statusBadge}${reasonHtml}</td>
         <td class="text-center">${actionHtml}</td>
       </tr>`;
     }).join('');
@@ -453,6 +470,35 @@
           }
           btn.disabled = false;
           btn.textContent = 'Thanh toán ngay';
+        }
+      });
+    });
+
+    tbody.querySelectorAll('.btn-refund-topup').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const orderCode = btn.getAttribute('data-order');
+        if (!orderCode) return;
+        btn.disabled = true;
+        btn.textContent = 'Đang hoàn...';
+        try {
+          const result = await ApiClient.simulateSandboxPay(orderCode, 'refunded');
+          if (typeof showToast === 'function') {
+            showToast(
+              result.status === 'refunded'
+                ? `Đã ghi nhận hoàn ${fmtVND(result.amount_vnd)} từ ví.`
+                : 'Không thể hoàn giao dịch ở trạng thái hiện tại.',
+              result.status === 'refunded' ? 'success' : 'error',
+            );
+          }
+          await loadWallet();
+          await loadTopupHistory();
+          await loadLedger();
+        } catch (err) {
+          if (typeof showToast === 'function') {
+            showToast(err.message || 'Không thể hoàn giao dịch nạp tiền', 'error');
+          }
+          btn.disabled = false;
+          btn.textContent = 'Mô phỏng hoàn tiền';
         }
       });
     });

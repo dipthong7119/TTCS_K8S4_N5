@@ -1,6 +1,7 @@
 """Driver wallet APIs and read-only administrator driver balances."""
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, StrictInt
@@ -15,6 +16,7 @@ from app.core.deps import (
     require_role,
 )
 from app.database import get_db
+from app.models.payment_transaction import PaymentTransaction
 from app.services.audit import append_audit
 from app.services.payment_signatures import verify_sandbox_webhook_signature
 from app.services.wallet import (
@@ -166,14 +168,14 @@ class SandboxTopUpRequest(BaseModel):
 
 class SandboxWebhookPayload(BaseModel):
     order_code: str = Field(min_length=5, max_length=80)
-    status: str = Field(default="success")
-    failure_reason: str | None = None
+    status: Literal["success", "failed", "cancelled", "refunded"] = "success"
+    failure_reason: str | None = Field(default=None, max_length=255)
     signature: str | None = None
 
 
 class SimulatePayRequest(BaseModel):
     order_code: str = Field(min_length=5, max_length=80)
-    status: str = Field(default="success")
+    status: Literal["success", "failed", "cancelled", "refunded"] = "success"
 
 
 @router.post(
@@ -233,6 +235,8 @@ async def sandbox_topup_webhook(
             detail="Chữ ký webhook không hợp lệ",
         )
 
+    previous_tx = db.query(PaymentTransaction).filter_by(order_code=payload.order_code).first()
+    previous_status = previous_tx.status if previous_tx else None
     tx, entry = process_sandbox_webhook(
         db,
         order_code=payload.order_code,
@@ -245,10 +249,16 @@ async def sandbox_topup_webhook(
             detail="Không tìm thấy mã giao dịch thanh toán",
         )
 
-    if entry:
+    if tx.status != previous_status:
+        if tx.status == "success":
+            action = "wallet.sandbox_topup_success"
+        elif tx.status == "refunded":
+            action = "wallet.sandbox_topup_refunded"
+        else:
+            action = f"wallet.sandbox_topup_{tx.status}"
         append_audit(
             db,
-            action="wallet.sandbox_topup_success",
+            action=action,
             object_type="payment_transaction",
             object_id=tx.id,
             actor_id=tx.user_id,
@@ -257,7 +267,10 @@ async def sandbox_topup_webhook(
             details={
                 "order_code": tx.order_code,
                 "amount_vnd": tx.amount_vnd,
-                "ledger_entry_id": entry.id,
+                "ledger_entry_id": entry.id if entry else None,
+                "status": tx.status,
+                "failure_reason": tx.failure_reason,
+                "refund_reason": tx.refund_reason,
             },
         )
     db.commit()
@@ -269,6 +282,9 @@ async def sandbox_topup_webhook(
         "amount_vnd": tx.amount_vnd,
         "user_id": tx.user_id,
         "balance_vnd": current_totals["balance_vnd"],
+        "failure_reason": tx.failure_reason,
+        "refund_reason": tx.refund_reason,
+        "refunded_at": tx.refunded_at.isoformat() + "Z" if tx.refunded_at else None,
     }
 
 
@@ -281,33 +297,47 @@ async def simulate_sandbox_payment(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    """Giả lập thanh toán nhanh cho tài xế hoặc tester (SCRUM-196, 198)."""
+    """Giả lập kết quả thanh toán sandbox, gồm thất bại và hoàn tiền."""
+    tx_before = db.query(PaymentTransaction).filter_by(order_code=body.order_code).first()
+    if not tx_before:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy mã đơn nạp tiền",
+        )
+    if tx_before.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền thanh toán đơn nạp của tài khoản khác",
+        )
+    previous_status = tx_before.status
     tx, entry = process_sandbox_webhook(
         db,
         order_code=body.order_code,
         status=body.status,
     )
-    if not tx:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Không tìm thấy mã đơn nạp tiền",
-        )
-    if tx.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bạn không có quyền thanh toán đơn nạp của tài khoản khác",
-        )
-
-    if entry:
+    if tx and tx.status != previous_status:
+        if tx.status == "success":
+            action = "wallet.sandbox_simulated_pay"
+        elif tx.status == "refunded":
+            action = "wallet.sandbox_simulated_refund"
+        else:
+            action = f"wallet.sandbox_simulated_{tx.status}"
         append_audit(
             db,
-            action="wallet.sandbox_simulated_pay",
+            action=action,
             object_type="payment_transaction",
             object_id=tx.id,
             actor_id=current_user.id,
             actor_email=current_user.email,
             actor_name=current_user.full_name,
-            details={"order_code": tx.order_code, "amount_vnd": tx.amount_vnd},
+            details={
+                "order_code": tx.order_code,
+                "amount_vnd": tx.amount_vnd,
+                "ledger_entry_id": entry.id if entry else None,
+                "status": tx.status,
+                "failure_reason": tx.failure_reason,
+                "refund_reason": tx.refund_reason,
+            },
         )
     db.commit()
 
@@ -316,6 +346,9 @@ async def simulate_sandbox_payment(
         "status": tx.status,
         "amount_vnd": tx.amount_vnd,
         "balance_vnd": wallet_totals(db, current_user.id)["balance_vnd"],
+        "failure_reason": tx.failure_reason,
+        "refund_reason": tx.refund_reason,
+        "refunded_at": tx.refunded_at.isoformat() + "Z" if tx.refunded_at else None,
     }
 
 

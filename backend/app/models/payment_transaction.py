@@ -19,6 +19,8 @@ class PaymentTransaction(Base):
     provider = Column(String(30), nullable=False, default="sandbox")
     payment_url = Column(Text, nullable=True)
     failure_reason = Column(String(255), nullable=True)
+    refund_reason = Column(String(255), nullable=True)
+    refunded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
