@@ -32,3 +32,6 @@ htmlcov/
 # Nhật ký cá nhân - chỉ lưu trên máy local, không push lên GitHub
 nhat_ky_lam_tung.md
 .vscode/
+
+# Kế hoạch làm việc cá nhân - chỉ lưu local, không push lên GitHub
+huongdan/ke_hoach_SCRUM_*.md
