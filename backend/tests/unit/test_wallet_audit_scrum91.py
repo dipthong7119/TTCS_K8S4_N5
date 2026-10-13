@@ -9,7 +9,6 @@ Bao phủ:
 - Quyền bảo mật deny-by-default và tính bất biến 405 của audit_logs.
 """
 
-from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +21,6 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.user import Role, User, user_roles
-from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.wallet import (
     adjust_wallet_balance,
     manual_topup,
