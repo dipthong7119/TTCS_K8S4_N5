@@ -315,6 +315,11 @@ async def simulate_sandbox_payment(
         order_code=body.order_code,
         status=body.status,
     )
+    if tx is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy mã đơn nạp tiền",
+        )
     if tx and tx.status != previous_status:
         if tx.status == "success":
             action = "wallet.sandbox_simulated_pay"
