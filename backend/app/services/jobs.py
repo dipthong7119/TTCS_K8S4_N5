@@ -117,17 +117,31 @@ def review_stale_sessions_once(db) -> int:
     return len(changed)
 
 
+def scan_alerts_once(db) -> int:
+    """Chạy quét cảnh báo một lần và trả về số lượng cảnh báo mới được kích hoạt (SCRUM-90)."""
+    from app.services.alert_service import (
+        auto_resolve_recovered_offline_alerts,
+        scan_all_alerts,
+    )
+
+    auto_resolve_recovered_offline_alerts(db)
+    new_alerts = scan_all_alerts(db)
+    return len(new_alerts)
+
+
 async def check_offline_charge_points():
     while True:
         try:
             with SessionLocal() as db:
                 expire_stale_charge_points_once(db)
                 review_stale_sessions_once(db)
+                scan_alerts_once(db)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Offline charge point check failed")
         await asyncio.sleep(settings.OCPP_JOB_POLL_SECONDS)
+
 
 
 def cleanup_old_ocpp_messages_once(db) -> int:
