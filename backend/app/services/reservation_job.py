@@ -12,14 +12,14 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models.charge_point import ChargePoint, Connector
 from app.models.reservation import CancelStatus, Reservation, ReservationStatus
-from app.services.reservations import expire_reservation, is_overdue, send_cancel_reservation
+from app.services.reservations import expire_reservation, send_cancel_reservation
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +91,15 @@ async def retry_cancel_reservations_once(
     max_attempts = settings.CANCEL_RESERVATION_MAX_ATTEMPTS
     cutoff = now - retry_window  # expired_at phải sau cutoff để còn được thử
 
-    # Tìm các đặt chỗ cần thử lại
+    # Tìm các đặt chỗ cần thử lại (cả expired và cancelled đang pending)
+    ref_time = func.coalesce(Reservation.cancelled_at, Reservation.expired_at)
     rows = (
-        db.query(Reservation.id, Reservation.connector_id, Reservation.cancel_attempts, Reservation.expired_at)
+        db.query(Reservation.id, Reservation.connector_id, Reservation.cancel_attempts)
         .filter(
-            Reservation.status == ReservationStatus.EXPIRED,
+            Reservation.status.in_([ReservationStatus.EXPIRED, ReservationStatus.CANCELLED]),
             Reservation.cancel_status == CancelStatus.PENDING,
             Reservation.cancel_attempts < max_attempts,
-            Reservation.expired_at >= cutoff,
+            ref_time >= cutoff,
         )
         .limit(settings.RESERVATION_EXPIRY_BATCH)
         .all()
@@ -108,7 +109,7 @@ async def retry_cancel_reservations_once(
         return 0
 
     sent = 0
-    for res_id, connector_id, attempts, _ in rows:
+    for res_id, connector_id, attempts in rows:
         # Tra kết nối sống theo mã trụ
         cp_code = _get_charge_point_code(db, connector_id)
         if cp_code is None:
@@ -137,17 +138,32 @@ def _abandon_stale_cancels(
     cutoff: datetime,
 ) -> None:
     """Chuyển cancel_status → abandoned khi hết số lần hoặc hết thời gian."""
-    db.execute(
-        update(Reservation)
-        .where(
-            Reservation.status == ReservationStatus.EXPIRED,
-            Reservation.cancel_status == CancelStatus.PENDING,
-            (Reservation.cancel_attempts >= max_attempts)
-            | (Reservation.expired_at < cutoff),
+    ref_time = func.coalesce(Reservation.cancelled_at, Reservation.expired_at)
+    stale_ids = [
+        r[0]
+        for r in (
+            db.query(Reservation.id)
+            .filter(
+                Reservation.status.in_([ReservationStatus.EXPIRED, ReservationStatus.CANCELLED]),
+                Reservation.cancel_status == CancelStatus.PENDING,
+                (Reservation.cancel_attempts >= max_attempts)
+                | (ref_time < cutoff),
+            )
+            .all()
         )
-        .values(cancel_status=CancelStatus.ABANDONED)
-    )
-    db.commit()
+    ]
+    if stale_ids:
+        logger.warning(
+            "CancelReservation abandoned sau %s lần thử hoặc quá hạn retry window: reservations=%s",
+            max_attempts,
+            stale_ids,
+        )
+        db.execute(
+            update(Reservation)
+            .where(Reservation.id.in_(stale_ids))
+            .values(cancel_status=CancelStatus.ABANDONED)
+        )
+        db.commit()
 
 
 def _get_charge_point_code(db: Session, connector_id: int) -> str | None:

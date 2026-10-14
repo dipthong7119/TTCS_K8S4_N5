@@ -29,6 +29,7 @@ from app.routers.pages import router as pages_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
+from app.routers.reservations import router as reservations_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
 from app.routers.subscriptions import router as subscriptions_router
@@ -155,6 +156,7 @@ app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(subscriptions_router, prefix="/api")
+app.include_router(reservations_router, prefix="/api")
 
 app.include_router(pages_router)
 

@@ -8,23 +8,20 @@ Thiết kế:
 """
 
 import logging
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select, update
+from fastapi import status
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.id_tag import IdTag
 from app.models.reservation import CancelStatus, Reservation, ReservationStatus
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
 from app.services.connection_manager import manager
 from app.services.ocpp_parser import OCPPError
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -380,6 +377,12 @@ async def send_cancel_reservation(
             new_status = CancelStatus.DONE
         else:
             # Rejected → trụ không còn biết chỗ này (đã tự nhả) → coi như xong
+            logger.warning(
+                "CancelReservation Rejected bởi trụ (trụ đã tự nhả chỗ): "
+                "id=%s cp=%s",
+                reservation_id,
+                charge_point_code,
+            )
             new_status = CancelStatus.GONE
     except (ConnectionError, TimeoutError, OCPPError, Exception):
         # Trụ ngoại tuyến, timeout, CALLERROR → giữ pending, tăng cancel_attempts
@@ -549,6 +552,198 @@ def mark_reservation_fulfilled(
             cancel_status=CancelStatus.NOT_NEEDED,
         )
     )
-    if result.rowcount == 0:
-        return False  # race: job giành trước — không hoàn tiền, ghi warning
-    return True
+    return result.rowcount > 0
+
+
+# ── S-51: Tài xế huỷ chỗ đã đặt ──────────────────────────────────────────────
+
+
+class ReservationCancelError(Exception):
+    """Lỗi nghiệp vụ khi huỷ đặt chỗ."""
+
+    def __init__(self, status_code: int, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.code = code
+        self.detail = detail
+
+
+def get_charge_point_code_for_connector(db: Session, connector_id: int) -> str | None:
+    """Tra mã trụ từ connector_id (db PK)."""
+    from app.models.charge_point import ChargePoint, Connector
+
+    row = (
+        db.query(ChargePoint.code)
+        .join(Connector, Connector.charge_point_id == ChargePoint.id)
+        .filter(Connector.id == connector_id)
+        .first()
+    )
+    return row[0] if row else None
+
+
+async def cancel_reservation(
+    db: Session,
+    reservation_id: int,
+    user_id: int,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Tài xế huỷ chỗ đã đặt (S-51).
+
+    Quy trình:
+    1. UPDATE có điều kiện, nguyên tử:
+       WHERE id = :id AND driver_user_id = :uid AND status = 'active' AND expiry_at > :cutoff_threshold
+       với cutoff_threshold = now + timedelta(seconds=CANCEL_CUTOFF_SECONDS).
+       - status = 'cancelled'
+       - cancelled_at = :now
+       - cancel_status = 'pending'
+       - fee_waived_reason = 'driver_cancelled'
+    2. Nếu rowcount == 1:
+       - Thắng race:
+       - Ghi audit log (tài xế, reservation_id, kết quả; không ghi PII).
+       - Commit transaction (giải phóng DB write lock trước khi gọi mạng).
+       - Tra mã trụ và gửi CancelReservation(reservationId) qua helper T-34 (send_cancel_reservation).
+       - Nếu trụ Accepted -> cancel_status = 'done'.
+       - Nếu trụ Rejected -> cancel_status = 'gone', ghi cảnh báo.
+       - Nếu trụ offline/timeout -> cancel_status = 'pending', để job thử lại xử lý.
+       - Trả về thông tin {id, status: 'cancelled', cancelled_at, cancel_status}.
+    3. Nếu rowcount == 0:
+       - Thua race hoặc không hợp lệ. Đọc lại row để xác định nguyên nhân:
+         + Không tồn tại hoặc không thuộc về user_id: 403 Forbidden.
+         + res.status == CANCELLED: idempotent, trả 200 dữ liệu hiện có (không gửi lại CancelReservation).
+         + res.status == FULFILLED: 409 RESERVATION_FULFILLED.
+         + res.status == EXPIRED: 409 RESERVATION_EXPIRED.
+         + res.status == ACTIVE nhưng đã quá hạn (now >= expiry_at): 409 RESERVATION_EXPIRED.
+         + res.status == ACTIVE nhưng qua cutoff (now >= expiry_at - CANCEL_CUTOFF_SECONDS): 409 CANCEL_TOO_LATE.
+    """
+    if now is None:
+        now = datetime.now(UTC).replace(tzinfo=None)
+
+    cutoff_seconds = settings.CANCEL_CUTOFF_SECONDS
+    cutoff_threshold = now + timedelta(seconds=cutoff_seconds)
+
+    # 1. UPDATE có điều kiện, nguyên tử
+    result = db.execute(
+        update(Reservation)
+        .where(
+            Reservation.id == reservation_id,
+            Reservation.driver_user_id == user_id,
+            Reservation.status == ReservationStatus.ACTIVE,
+            Reservation.expiry_at > cutoff_threshold,
+        )
+        .values(
+            status=ReservationStatus.CANCELLED,
+            cancelled_at=now,
+            cancel_status=CancelStatus.PENDING,
+            fee_waived_reason="driver_cancelled",
+        )
+    )
+
+    if result.rowcount == 1:
+        # Ghi nhật ký audit
+        append_audit(
+            db,
+            action="reservation.cancelled",
+            object_type="reservation",
+            object_id=reservation_id,
+            actor_id=user_id,
+            details={
+                "driver_user_id": user_id,
+                "cancelled_at": now.isoformat(),
+                "cancel_status": CancelStatus.PENDING.value,
+                "fee_waived_reason": "driver_cancelled",
+            },
+        )
+        # Commit xong mới gửi OCPP (không giữ transaction trong lúc chờ trụ)
+        db.commit()
+
+        # Reload row để lấy connector_id
+        res = db.get(Reservation, reservation_id)
+        cp_code = (
+            get_charge_point_code_for_connector(db, res.connector_id)
+            if res
+            else None
+        )
+
+        if cp_code:
+            await send_cancel_reservation(db, reservation_id, cp_code)
+
+        # Lấy lại trạng thái mới nhất sau khi gửi trụ
+        db.expire_all()
+        res = db.get(Reservation, reservation_id)
+        if res is None:
+            raise ReservationCancelError(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code="not_found",
+                detail="Không tìm thấy đặt chỗ",
+            )
+        return {
+            "id": res.id,
+            "status": res.status.value,
+            "cancelled_at": res.cancelled_at,
+            "cancel_status": res.cancel_status.value,
+        }
+
+    # rowcount == 0: phân tích nguyên nhân
+    db.rollback()
+    res = db.get(Reservation, reservation_id)
+
+    # Thống nhất 403 Forbidden khi không tồn tại hoặc không thuộc về người gọi
+    if res is None or res.driver_user_id != user_id:
+        logger.warning(
+            "reservation_cancel_denied: user_id=%s reservation_id=%s",
+            user_id,
+            reservation_id,
+        )
+        raise ReservationCancelError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="forbidden",
+            detail="Không có quyền truy cập đặt chỗ này",
+        )
+
+    # Idempotent: đã huỷ bởi chính tài xế đó
+    if res.status == ReservationStatus.CANCELLED:
+        return {
+            "id": res.id,
+            "status": res.status.value,
+            "cancelled_at": res.cancelled_at,
+            "cancel_status": res.cancel_status.value,
+        }
+
+    if res.status == ReservationStatus.FULFILLED:
+        raise ReservationCancelError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="RESERVATION_FULFILLED",
+            detail="Đặt chỗ đã được sử dụng để sạc",
+        )
+
+    if res.status == ReservationStatus.EXPIRED:
+        raise ReservationCancelError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="RESERVATION_EXPIRED",
+            detail="Đặt chỗ đã quá hạn và bị tính phí",
+        )
+
+    if res.status == ReservationStatus.ACTIVE:
+        exp = res.expiry_at
+        if hasattr(exp, "tzinfo") and exp.tzinfo is not None:
+            exp = exp.astimezone(UTC).replace(tzinfo=None)
+
+        if now >= exp:
+            raise ReservationCancelError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="RESERVATION_EXPIRED",
+                detail="Đặt chỗ đã quá hạn",
+            )
+        else:
+            raise ReservationCancelError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="CANCEL_TOO_LATE",
+                detail="Đã qua thời hạn cho phép huỷ đặt chỗ",
+            )
+
+    raise ReservationCancelError(
+        status_code=status.HTTP_409_CONFLICT,
+        code="conflict",
+        detail=f"Không thể huỷ đặt chỗ ở trạng thái {res.status.value}",
+    )
+

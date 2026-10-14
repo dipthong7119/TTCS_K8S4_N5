@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     CANCEL_RESERVATION_MAX_ATTEMPTS: int = Field(5, ge=1)
     # Cửa sổ thời gian thử lại CancelReservation (giây); sau đó chuyển abandoned
     CANCEL_RESERVATION_RETRY_WINDOW: int = Field(86400, ge=60)
+    # S-51: Khoảng thời gian trước expiry_at không còn được huỷ (giây). Mặc định 0 = huỷ sát giờ.
+    CANCEL_CUTOFF_SECONDS: int = Field(0, ge=0)
 
     # Optional global override for SCRUM-72. If omitted, the wallet service
     # derives the floor from 5 kWh at the highest effective station tariff.
