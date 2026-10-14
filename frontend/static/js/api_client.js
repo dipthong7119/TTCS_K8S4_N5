@@ -124,6 +124,18 @@ const ApiClient = (() => {
     listSubscriptionPlans: () => _request('GET', '/subscriptions/plans'),
     getMySubscriptions: () => _request('GET', '/subscriptions/mine'),
     subscribePlan: (planId) => _request('POST', '/subscriptions', { plan_id: planId }),
+
+    // --- Reservations (SCRUM-76 / S-48) ---
+    listReservations: (params = {}, opts = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/reservations' + (q ? '?' + q : ''), null, opts);
+    },
+    createReservation: (body, opts = {}) =>
+      _request('POST', '/reservations', body, opts),
+    cancelReservation: (id, opts = {}) =>
+      _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, null, opts),
+    getReservation: (id, opts = {}) =>
+      _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
   };
 })();
 
