@@ -85,8 +85,11 @@ async def lifespan(app: FastAPI):
     # T-26: Start background job
 
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+    from app.services.reservation_job import check_expired_reservations
+
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
+    reservation_task = asyncio.create_task(check_expired_reservations())
     local_simulator_task: asyncio.Task[None] | None = None
     if settings.APP_ENV == "development" and settings.CSMS_LOCAL_SIMULATOR_ENABLED:
         local_simulator_task = asyncio.create_task(_run_local_simulator_fleet())
@@ -95,7 +98,8 @@ async def lifespan(app: FastAPI):
 
     bg_task.cancel()
     cleanup_task.cancel()
-    tasks = [bg_task, cleanup_task]
+    reservation_task.cancel()
+    tasks = [bg_task, cleanup_task, reservation_task]
     if local_simulator_task is not None:
         local_simulator_task.cancel()
         tasks.append(local_simulator_task)

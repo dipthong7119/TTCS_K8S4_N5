@@ -66,6 +66,21 @@ class Settings(BaseSettings):
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
 
+    # S-52: đặt chỗ quá hạn không tới
+    # Ân hạn trước khi job giành quyền (giây); lý do: StartTransaction bù từ trụ ngoại tuyến
+    # có thể tới muộn sau expiry_at một chút — ân hạn cho phép nó còn được coi là fulfilled.
+    NO_SHOW_GRACE_SECONDS: int = Field(120, ge=0)
+    # Chu kỳ job quét đặt chỗ quá hạn (giây)
+    RESERVATION_EXPIRY_JOB_INTERVAL: int = Field(60, ge=1)
+    # Tối đa đặt chỗ xử lý mỗi lần quét
+    RESERVATION_EXPIRY_BATCH: int = Field(100, ge=1)
+    # Miễn phí lần đầu không đến (false = an toàn, không miễn; bật bằng env)
+    NO_SHOW_FIRST_FREE: bool = False
+    # Số lần thử tối đa gửi CancelReservation
+    CANCEL_RESERVATION_MAX_ATTEMPTS: int = Field(5, ge=1)
+    # Cửa sổ thời gian thử lại CancelReservation (giây); sau đó chuyển abandoned
+    CANCEL_RESERVATION_RETRY_WINDOW: int = Field(86400, ge=60)
+
     # Optional global override for SCRUM-72. If omitted, the wallet service
     # derives the floor from 5 kWh at the highest effective station tariff.
     WALLET_MINIMUM_BALANCE_VND: int | None = Field(default=None, ge=0)

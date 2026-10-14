@@ -95,7 +95,7 @@ def list_wallet_entries(
         entry_type = entry.entry_type
         if entry_type in ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup"):
             display_type = "topup"
-        elif entry_type in ("session_charge", "subscription_charge"):
+        elif entry_type in ("session_charge", "subscription_charge", "no_show_fee"):
             display_type = "charge"
         elif entry_type in ("refund", "payment_refund"):
             display_type = "refund"

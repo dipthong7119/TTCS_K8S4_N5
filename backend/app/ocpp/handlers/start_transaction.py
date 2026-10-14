@@ -101,6 +101,36 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
             session.id,
         )
 
+    # S-52: đánh dấu đặt chỗ là fulfilled khi tài xế bắt đầu phiên.
+    # Không được làm hỏng việc tạo phiên nếu lỗi.
+    if accepted and connector is not None:
+        reservation_id_payload = payload.get("reservationId")
+        res_id: int | None = (
+            int(reservation_id_payload)
+            if isinstance(reservation_id_payload, int)
+            else None
+        )
+        try:
+            from app.services.reservations import mark_reservation_fulfilled
+
+            with db.begin_nested():
+                mark_reservation_fulfilled(
+                    db,
+                    connector.id,          # DB PK của đầu nối
+                    tag.id if tag else None,
+                    session.id,
+                    reservation_id=res_id,
+                )
+        except Exception:
+            logger.warning(
+                "mark_reservation_fulfilled thất bại (không ảnh hưởng phiên): "
+                "cp=%s connector=%s session=%s reservation=%s",
+                point.code,
+                connector_number,
+                session.id,
+                res_id,
+            )
+
     if accepted and connector is not None:
         connector.status = "charging"
 
