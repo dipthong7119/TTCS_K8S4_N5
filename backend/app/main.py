@@ -26,6 +26,7 @@ from app.routers.charge_points import router as charge_points_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
+from app.routers.power_capacity import router as power_capacity_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
@@ -139,6 +140,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 # -- Routers ------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
 app.include_router(stations_router, prefix="/api")
+app.include_router(power_capacity_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
 app.include_router(charge_point_configuration_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api/monitoring")
