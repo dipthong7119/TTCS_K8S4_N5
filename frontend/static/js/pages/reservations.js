@@ -497,6 +497,151 @@
     }
   }
 
+  // --- SCRUM-77 (S-49): Xử lý tranh chấp đặt chỗ đồng thời & Gợi ý trụ khác ---
+  function findAlternativeConnectors(currentStationId, excludeCpCode, excludeConnId) {
+    const suggestions = [];
+    const currentStation = stationsTree.find(s => s.id === currentStationId);
+
+    // 1. Tìm các đầu nối khác trong cùng trạm trước
+    if (currentStation) {
+      (currentStation.charge_points || []).forEach(cp => {
+        if (cp.status === 'offline') return;
+        (cp.connectors || []).forEach(conn => {
+          if (cp.code === excludeCpCode && Number(conn.connector_id) === Number(excludeConnId)) {
+            return; // Bỏ qua đầu nối đang bị xung đột
+          }
+          const isAvail = (conn.ocpp_status ? conn.ocpp_status === 'Available' : conn.status === 'rảnh');
+          if (isAvail) {
+            suggestions.push({
+              station_id: currentStation.id,
+              station_name: currentStation.name,
+              charge_point_code: cp.code,
+              connector_id: conn.connector_id,
+              type: conn.type || 'CCS2 (60kW)',
+              is_same_station: true
+            });
+          }
+        });
+      });
+    }
+
+    // 2. Nếu cùng trạm ít lựa chọn, quét thêm các trạm lân cận trong hệ thống
+    if (suggestions.length < 3) {
+      stationsTree.forEach(st => {
+        if (st.id === currentStationId) return;
+        (st.charge_points || []).forEach(cp => {
+          if (cp.status === 'offline') return;
+          (cp.connectors || []).forEach(conn => {
+            const isAvail = (conn.ocpp_status ? conn.ocpp_status === 'Available' : conn.status === 'rảnh');
+            if (isAvail && suggestions.length < 4) {
+              suggestions.push({
+                station_id: st.id,
+                station_name: st.name,
+                charge_point_code: cp.code,
+                connector_id: conn.connector_id,
+                type: conn.type || 'CCS2 (60kW)',
+                is_same_station: false
+              });
+            }
+          });
+        });
+      });
+    }
+
+    return suggestions;
+  }
+
+  function renderConflictAlert(errorMessage, stationId, cpCode, connId) {
+    const feedback = document.getElementById('reserve-feedback');
+    if (!feedback) return;
+
+    const alternatives = findAlternativeConnectors(stationId, cpCode, connId);
+
+    let suggestionsHtml = '';
+    if (alternatives.length > 0) {
+      suggestionsHtml = `
+        <div class="suggestion-section">
+          <div class="suggestion-section__title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/>
+            </svg>
+            Gợi ý các vị trí sạc khả dụng thay thế (SCRUM-77)
+          </div>
+          <div class="suggestion-list">
+            ${alternatives.map(alt => `
+              <div class="suggestion-item">
+                <div class="suggestion-item__info">
+                  <span class="badge badge--available" style="font-size:10px;padding:1px 6px;">Rảnh</span>
+                  <div>
+                    <span class="suggestion-item__cp">${escapeHtml(alt.charge_point_code)} - Cổng #${escapeHtml(alt.connector_id)}</span>
+                    <span class="suggestion-item__type">(${escapeHtml(alt.type)}${alt.is_same_station ? '' : ` • ${escapeHtml(alt.station_name)}`})</span>
+                  </div>
+                </div>
+                <button type="button" class="btn btn--primary btn-select-suggested"
+                        data-station-id="${alt.station_id}"
+                        data-cp-code="${escapeHtml(alt.charge_point_code)}"
+                        data-connector-id="${alt.connector_id}">
+                  Đặt vị trí này
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      suggestionsHtml = `
+        <div class="suggestion-section" style="color:var(--color-text-secondary);font-size:var(--font-size-xs);">
+          Hiện tại tất cả các trụ sạc khác tại trạm cũng đang bận hoặc ngoại tuyến. Vui lòng chọn trạm khác trong danh sách.
+        </div>
+      `;
+    }
+
+    feedback.innerHTML = `
+      <div class="conflict-alert" role="alert">
+        <div class="conflict-alert__header">
+          <div class="conflict-alert__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="conflict-alert__title">Trùng lịch đặt chỗ! Vị trí vừa có người đặt</h4>
+            <p class="conflict-alert__desc">${escapeHtml(errorMessage || 'Đầu nối này vừa được một tài xế khác hoàn tất đặt chỗ trước bạn vài phần trăm giây. Để không làm gián đoạn chuyến đi, bạn có thể chọn ngay một trong các vị trí sạc còn trống bên dưới.')}</p>
+          </div>
+        </div>
+        ${suggestionsHtml}
+      </div>
+    `;
+
+    // Gắn sự kiện cho các nút "Đặt vị trí này" để chuyển nhanh đầu nối
+    feedback.querySelectorAll('.btn-select-suggested').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetStId = Number(btn.dataset.stationId);
+        const targetCpCode = btn.dataset.cpCode;
+        const targetConnId = Number(btn.dataset.connectorId);
+
+        if (Number(document.getElementById('select-station').value) !== targetStId) {
+          document.getElementById('select-station').value = targetStId;
+          onStationChanged();
+        }
+
+        setTimeout(() => {
+          const cpSelect = document.getElementById('select-charge-point');
+          cpSelect.value = `${targetCpCode}|${targetConnId}`;
+          feedback.innerHTML = `
+            <div class="alert alert--info" style="animation:resFadeIn 0.2s ease;">
+              ✓ Đã tự động chuyển lựa chọn sang <strong>Trụ ${escapeHtml(targetCpCode)} — Cổng #${targetConnId}</strong>. Bấm nút <strong>"Xác nhận đặt chỗ"</strong> bên dưới để hoàn tất!
+            </div>
+          `;
+          // Tắt toggle mô phỏng để lần bấm kế tiếp thành công
+          const simToggle = document.getElementById('simulate-conflict-toggle');
+          if (simToggle) simToggle.checked = false;
+        }, 150);
+      });
+    });
+  }
+
   async function handleReserveSubmit(e) {
     e.preventDefault();
     const feedback = document.getElementById('reserve-feedback');
@@ -504,6 +649,7 @@
     const stationId = Number(document.getElementById('select-station').value);
     const cpConnVal = document.getElementById('select-charge-point').value;
     const mins = Number(document.getElementById('input-arrival-minutes').value) || 30;
+    const simulateConflict = document.getElementById('simulate-conflict-toggle')?.checked === true;
 
     if (!stationId || !cpConnVal) {
       feedback.innerHTML = '<div class="alert alert--danger">Vui lòng chọn trạm và đầu nối còn trống.</div>';
@@ -514,8 +660,13 @@
     const connectorId = Number(connIdStr);
 
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<div class="spinner spinner--sm"></div> Đang gửi lệnh ReserveNow...';
-    feedback.innerHTML = '<div class="alert alert--info">Hệ thống đang gửi bản tin ReserveNow tới trụ sạc qua WebSocket OCPP...</div>';
+    submitBtn.innerHTML = '<div class="spinner spinner--sm"></div> Đang kiểm tra & gửi ReserveNow...';
+    feedback.innerHTML = '<div class="alert alert--info">Hệ thống đang kiểm tra tính khả dụng và gửi bản tin ReserveNow tới trụ sạc...</div>';
+
+    // Tạo Idempotency Key duy nhất chống double-submit
+    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     const station = stationsTree.find(s => s.id === stationId);
     const payload = {
@@ -525,17 +676,31 @@
       expiry_at: new Date(Date.now() + mins * 60 * 1000).toISOString(),
       station_id: stationId,
       station_name: station?.name || 'Trạm sạc',
-      station_address: station?.address || ''
+      station_address: station?.address || '',
+      idempotency_key: idempotencyKey
     };
 
     try {
+      // 1. Kiểm tra kịch bản giả lập tranh chấp (Conflict Simulation - SCRUM-77)
+      if (simulateConflict) {
+        await new Promise(r => setTimeout(r, 600)); // Delay nhẹ như mạng thật
+        throw {
+          status: 409,
+          code: 'reservation_conflict',
+          message: 'Vị trí này vừa được một tài xế khác hoàn tất đặt trước bạn 0.2 giây (Giả lập tranh chấp đồng thời theo tiêu chí SCRUM-77 / S-49).'
+        };
+      }
+
       let result;
       try {
         result = await ApiClient.createReservation(payload);
       } catch (err) {
-        // Nếu lỗi 409 (đã có người đặt) hoặc 502 (trụ từ chối) -> Ném lỗi theo spec
         if (err.status === 409) {
-          throw { status: 409, message: 'Trụ sạc hoặc đầu nối này hiện đang bận hoặc vừa có người đặt trước. Vui lòng chọn đầu nối khác.' };
+          throw {
+            status: 409,
+            code: 'reservation_conflict',
+            message: err.message || 'Trụ sạc hoặc đầu nối này hiện đang bận hoặc vừa có người đặt trước. Vui lòng chọn đầu nối khác.'
+          };
         } else if (err.status === 502) {
           throw { status: 502, message: 'Trụ sạc từ chối yêu cầu ReserveNow từ máy chủ CSMS (Rejected). Vui lòng thử lại.' };
         }
@@ -574,8 +739,15 @@
       }, 700);
 
     } catch (err) {
-      const msg = err.message || 'Không thể tạo đặt chỗ. Vui lòng thử lại.';
-      feedback.innerHTML = `<div class="alert alert--danger"><strong>Lỗi:</strong> ${escapeHtml(msg)}</div>`;
+      if (err.status === 409) {
+        renderConflictAlert(err.message, stationId, cpCode, connectorId);
+        if (typeof showToast === 'function') {
+          showToast('Trùng vị trí: Đã có người đặt trước bạn!', 'warning');
+        }
+      } else {
+        const msg = err.message || 'Không thể tạo đặt chỗ. Vui lòng thử lại.';
+        feedback.innerHTML = `<div class="alert alert--danger"><strong>Lỗi:</strong> ${escapeHtml(msg)}</div>`;
+      }
     } finally {
       submitBtn.disabled = false;
       submitBtn.innerHTML = `

@@ -227,7 +227,16 @@
         <strong>Quy định đặt chỗ (S-48 / S-50):</strong> Trụ sẽ khóa bằng mã RFID/tài khoản của bạn qua lệnh OCPP <code>ReserveNow</code>. Đầu nối sẽ chuyển sang trạng thái <strong>Đã đặt chỗ (Reserved)</strong>. Quá thời gian giữ chỗ nếu bạn không đến bắt đầu sạc, vị trí sẽ tự động hủy.
       </div>
 
-      <!-- Trạng thái thông báo lỗi / submit -->
+      <!-- SCRUM-77: Giả lập kiểm thử tranh chấp đồng thời -->
+      <div class="simulation-bar" id="conflict-simulation-wrap">
+        <label for="simulate-conflict-toggle">
+          <input type="checkbox" id="simulate-conflict-toggle" />
+          <span>🧪 Thử nghiệm ca tranh chấp (Giả lập 2 tài xế đặt cùng lúc — SCRUM-77)</span>
+        </label>
+        <span style="opacity:0.8;">Mô phỏng đụng hàng</span>
+      </div>
+
+      <!-- Trạng thái thông báo lỗi / submit / gợi ý trụ khác (SCRUM-77) -->
       <div id="reserve-feedback" style="margin-top:var(--space-4);" role="alert" aria-live="polite"></div>
 
       <div class="modal__footer" style="padding:var(--space-4) 0 0;margin-top:var(--space-4);border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:var(--space-3);">
