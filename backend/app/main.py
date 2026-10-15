@@ -29,6 +29,7 @@ from app.routers.pages import router as pages_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
+from app.routers.nearby import router as nearby_router
 from app.routers.reservations import router as reservations_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
@@ -143,6 +144,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
+app.include_router(nearby_router, prefix="/api")   # S-47: phải đứng trước stations_router
 app.include_router(stations_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
 app.include_router(charge_point_configuration_router, prefix="/api")

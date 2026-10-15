@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     # S-51: Khoảng thời gian trước expiry_at không còn được huỷ (giây). Mặc định 0 = huỷ sát giờ.
     CANCEL_CUTOFF_SECONDS: int = Field(0, ge=0)
 
+    # S-47: Tìm trạm gần (nearby stations)
+    NEARBY_DEFAULT_RADIUS_KM: float = Field(20.0, gt=0)
+    NEARBY_MAX_RADIUS_KM: float = Field(100.0, gt=0)
+    NEARBY_DEFAULT_LIMIT: int = Field(20, ge=1, le=50)
+    NEARBY_MAX_LIMIT: int = Field(50, ge=1, le=50)
+    # Múi giờ vận hành để chọn đúng khung giờ biểu giá
+    STATION_TIMEZONE: str = "Asia/Ho_Chi_Minh"
+
     # Optional global override for SCRUM-72. If omitted, the wallet service
     # derives the floor from 5 kWh at the highest effective station tariff.
     WALLET_MINIMUM_BALANCE_VND: int | None = Field(default=None, ge=0)

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Models: charge_points, connectors
 Tham chieu: SPRINT_1.md T-10, 02_CODING_STANDARDS.md muc 2.2
 """
@@ -46,6 +46,8 @@ class Connector(Base):
     charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False)
     # Khop voi connectorId trong tin nhan OCPP, bat dau tu 1 (T-10 NFR)
     connector_id = Column(Integer, nullable=False)
+    # S-47: loai dau noi (CCS2, CHAdeMO, Type2, ...) do quan tri vien khai bao, nullable
+    connector_type = Column(String(50), nullable=True)
     # S-05: status is unknown until the charge point reports it.
     status = Column(String(20), default="unknown", server_default="unknown", nullable=False)
     # Preserve the exact OCPP status separately from the internal UI status.
