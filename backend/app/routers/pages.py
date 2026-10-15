@@ -264,3 +264,27 @@ async def subscriptions_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )
+
+
+# SCRUM-96 (FE) — Tài xế tìm trạm gần & xem đầu nối rảnh (Vy Hoàng Tú)
+@router.get("/driver/stations", dependencies=[Depends(require_role("driver"))])
+async def driver_station_finder_page(request: Request, current_user: CurrentUser):
+    """Trang tìm trạm sạc gần đây cho tài xế — hiện trạng thái đầu nối realtime (SCRUM-96, SCRUM-241, SCRUM-242)."""
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "driver/station_finder.html",
+        _page_context(request, current_user),
+    )
+
+
+# SCRUM-98 (FE) — Theo dõi phiên sạc đang chạy & nhận thông báo khi kết thúc (Vy Hoàng Tú)
+@router.get("/driver/session", dependencies=[Depends(require_role("driver"))])
+async def driver_session_page(request: Request, current_user: CurrentUser):
+    """Trang theo dõi phiên sạc đang chạy của tài xế với SSE realtime (SCRUM-98)."""
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "driver/driver_session.html",
+        _page_context(request, current_user),
+    )
