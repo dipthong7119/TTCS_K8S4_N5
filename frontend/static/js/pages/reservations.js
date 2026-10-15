@@ -61,8 +61,28 @@
       expiry_at: new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString(),
       arrival_minutes: 30,
       status: 'Cancelled',
+      cancellation_reason: 'Thay đổi kế hoạch di chuyển',
+      cancelled_at: new Date(Date.now() - 49.5 * 60 * 60 * 1000).toISOString(),
       ocpp_status: 'Accepted',
+      no_show_fee_vnd: 0,
       note: 'Thay đổi lịch trình'
+    },
+    {
+      id: 98,
+      reservation_code: 'RES-20261011-012',
+      station_id: 2,
+      station_name: 'Trạm Sạc Royal City',
+      station_address: '72A Nguyễn Trãi, Thanh Xuân, Hà Nội',
+      charge_point_code: 'CP_ROYAL_01',
+      connector_id: 1,
+      connector_type: 'CCS2 - 120kW',
+      created_at: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+      expiry_at: new Date(Date.now() - 71.5 * 60 * 60 * 1000).toISOString(),
+      arrival_minutes: 30,
+      status: 'Expired',
+      ocpp_status: 'Accepted',
+      no_show_fee_vnd: 15000,
+      note: 'Quá giờ không tới trạm'
     }
   ];
 
@@ -156,6 +176,64 @@
       stationsTree.map(st => `<option value="${st.id}">${escapeHtml(st.name)} (${escapeHtml(st.address || '')})</option>`).join('');
   }
 
+  // --- 1.1 Giải phóng đầu nối (OCPP CancelReservation / Expiry release) ---
+  function releaseConnector(stationId, cpCode, connId) {
+    if (!stationsTree || !stationsTree.length) return;
+    const st = stationsTree.find(s => s.id === Number(stationId));
+    if (!st) return;
+    const cp = (st.charge_points || []).find(c => c.code === cpCode);
+    if (!cp) return;
+    const conn = (cp.connectors || []).find(cn => Number(cn.connector_id) === Number(connId) || Number(cn.id) === Number(connId));
+    if (conn) {
+      conn.status = 'rảnh';
+      conn.ocpp_status = 'Available';
+    }
+  }
+
+  // --- 1.2 Banner thông báo quá hạn giữ chỗ & phạt không đến (SCRUM-78) ---
+  function renderExpiredNotice(res) {
+    const container = document.getElementById('expired-notice-container');
+    if (!container) return;
+    if (!res) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="expired-alert-banner" role="alert">
+        <div class="expired-alert-banner__content">
+          <div class="expired-alert-banner__icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="expired-alert-banner__title">ĐẶT CHỖ QUÁ HẠN — ĐÃ MỞ LẠI TRỤ CHO TÀI XẾ KHÁC (SCRUM-78)</h3>
+            <p class="expired-alert-banner__desc">
+              Lượt đặt chỗ <strong>${escapeHtml(res.reservation_code)}</strong> tại <strong>${escapeHtml(res.station_name)}</strong> đã quá thời gian giữ chỗ lúc <strong>${formatTimeOnly(res.expiry_at)}</strong>.
+              Trụ sạc đã được tự động mở lại cho tài xế khác. Phí phạt giữ chỗ không đến <strong>15.000 ₫</strong> đã được ghi nhận vào ví của bạn.
+            </p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-2);flex-shrink:0;">
+          <a href="/wallet" class="btn btn--secondary btn--sm" style="display:inline-flex;align-items:center;gap:4px;font-weight:600;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+            </svg>
+            Biến động ví (-15.000 ₫)
+          </a>
+          <button type="button" class="btn btn--secondary btn--sm" id="btn-dismiss-expired-notice" title="Đóng thông báo" style="padding:4px 8px;">
+            ✕
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-dismiss-expired-notice')?.addEventListener('click', () => {
+      container.innerHTML = '';
+    });
+  }
+
   async function loadReservations() {
     try {
       const res = await ApiClient.listReservations();
@@ -165,16 +243,23 @@
       reservations = getLocalMockReservations();
     }
 
-    // Tự động kiểm tra trạng thái hết hạn
+    // Tự động kiểm tra trạng thái hết hạn (SCRUM-78 / S-50)
     const now = Date.now();
     let hasChanges = false;
+    let newlyExpired = null;
     reservations.forEach(r => {
       if (r.status === 'Active' && new Date(r.expiry_at).getTime() <= now) {
         r.status = 'Expired';
+        if (!r.no_show_fee_vnd) r.no_show_fee_vnd = 15000;
+        releaseConnector(r.station_id, r.charge_point_code, r.connector_id);
         hasChanges = true;
+        if (!newlyExpired) newlyExpired = r;
       }
     });
     if (hasChanges) saveLocalMockReservations(reservations);
+    if (newlyExpired) {
+      renderExpiredNotice(newlyExpired);
+    }
 
     // Tìm đặt chỗ đang hoạt động
     activeReservation = reservations.find(r => r.status === 'Active') || null;
@@ -278,7 +363,7 @@
     `;
 
     document.getElementById('btn-cancel-active-res')?.addEventListener('click', () => {
-      cancelReservationAction(activeReservation.id);
+      openCancelModal(activeReservation.id);
     });
 
     startCountdown();
@@ -307,12 +392,16 @@
       el.style.color = '#ef4444';
       stopCountdown();
       activeReservation.status = 'Expired';
+      activeReservation.no_show_fee_vnd = 15000;
+      activeReservation.expired_at = new Date().toISOString();
+      releaseConnector(activeReservation.station_id, activeReservation.charge_point_code, activeReservation.connector_id);
       saveLocalMockReservations(reservations);
+      renderExpiredNotice(activeReservation);
       renderActiveReservation();
       renderStats();
       renderTable();
       if (typeof showToast === 'function') {
-        showToast('Lượt đặt chỗ của bạn đã quá hạn và bị hủy tự động.', 'warning');
+        showToast(`Lượt đặt chỗ ${activeReservation.reservation_code} đã hết hạn. Trụ đã mở lại & phí phạt không đến 15.000 ₫ đã được ghi nhận.`, 'warning');
       }
       return;
     }
@@ -394,10 +483,15 @@
             <strong style="color:${isAct ? 'var(--color-primary)' : 'inherit'};">
               ${formatTimeOnly(r.expiry_at)}
             </strong>
+            ${r.status === 'Expired' ? `
+              <div style="margin-top:2px;">
+                <span class="no-show-badge" title="Phí phạt giữ chỗ không đến: -15.000 ₫">-15.000 ₫</span>
+              </div>
+            ` : ''}
           </td>
           <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
           <td style="text-align:right;">
-            <div style="display:inline-flex;gap:var(--space-2);">
+            <div style="display:inline-flex;gap:var(--space-2);align-items:center;">
               <button class="btn btn--secondary btn--sm btn-view-detail" type="button" data-id="${r.id}" title="Xem chi tiết">
                 Chi tiết
               </button>
@@ -405,6 +499,11 @@
                 <button class="btn btn--secondary btn--sm btn-cancel-row" type="button" data-id="${r.id}" style="color:#ef4444;" title="Hủy đặt chỗ">
                   Hủy
                 </button>
+              ` : ''}
+              ${r.status === 'Expired' ? `
+                <a href="/wallet" class="btn btn--secondary btn--sm" style="font-size:11px;padding:3px 8px;color:var(--color-primary);" title="Xem trừ phí phạt trong ví">
+                  Ví
+                </a>
               ` : ''}
             </div>
           </td>
@@ -417,7 +516,7 @@
     });
 
     tbody.querySelectorAll('.btn-cancel-row').forEach(btn => {
-      btn.addEventListener('click', () => cancelReservationAction(Number(btn.dataset.id)));
+      btn.addEventListener('click', () => openCancelModal(Number(btn.dataset.id)));
     });
   }
 
@@ -759,39 +858,127 @@
     }
   }
 
-  // --- 4. Hủy đặt chỗ (SCRUM-79 unblock) ---
-  async function cancelReservationAction(id) {
+  // --- 4. Hủy đặt chỗ (SCRUM-79 / S-51) ---
+  function openCancelModal(id) {
     const res = reservations.find(r => r.id === id);
     if (!res) return;
 
-    if (!confirm(`Bạn có chắc chắn muốn hủy lượt đặt chỗ ${res.reservation_code} tại ${res.station_name}? Trụ sẽ mở lại cho người khác.`)) {
+    if (res.status === 'Expired') {
+      alert('Không thể hủy lượt đặt chỗ đã quá hạn vì hệ thống đã tự động mở lại trụ và tính phí không đến.');
+      return;
+    }
+    if (res.status === 'Cancelled' || res.status === 'Completed') {
       return;
     }
 
+    const modal = document.getElementById('modal-cancel-confirm');
+    if (!modal) return;
+
+    document.getElementById('cancel-reservation-id').value = res.id;
+    document.getElementById('cancel-code-display').textContent = res.reservation_code;
+    document.getElementById('cancel-station-display').textContent = res.station_name;
+    document.getElementById('cancel-cp-display').textContent = `Trụ ${res.charge_point_code} — Cổng #${res.connector_id} (${res.connector_type || 'CCS2'})`;
+    document.getElementById('cancel-feedback').innerHTML = '';
+    const confirmBtn = document.getElementById('btn-confirm-cancel-submit');
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = 'Xác nhận hủy đặt chỗ';
+    }
+
+    modal.classList.remove('is-hidden');
+  }
+
+  function closeCancelModal() {
+    document.getElementById('modal-cancel-confirm')?.classList.add('is-hidden');
+  }
+
+  async function handleCancelSubmit(e) {
+    e.preventDefault();
+    const id = Number(document.getElementById('cancel-reservation-id').value);
+    const reason = document.getElementById('select-cancel-reason')?.value || 'Thay đổi kế hoạch di chuyển';
+    const feedback = document.getElementById('cancel-feedback');
+    const submitBtn = document.getElementById('btn-confirm-cancel-submit');
+
+    const res = reservations.find(r => r.id === id);
+    if (!res) return;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<div class="spinner spinner--sm"></div> Đang gửi lệnh OCPP CancelReservation...';
+    feedback.innerHTML = '<div class="alert alert--info">Đang gửi bản tin CancelReservation tới trạm sạc để giải phóng đầu nối...</div>';
+
     try {
       try {
-        await ApiClient.cancelReservation(id);
-      } catch (_) {}
+        await ApiClient.cancelReservation(id, { reason });
+      } catch (_) {
+        // Fallback an toàn unblock UI
+      }
 
       res.status = 'Cancelled';
-      saveLocalMockReservations(reservations);
-      loadReservations();
+      res.cancellation_reason = reason;
+      res.cancelled_at = new Date().toISOString();
+      res.no_show_fee_vnd = 0; // Hủy trước hạn hoàn toàn miễn phí (S-51)
+      releaseConnector(res.station_id, res.charge_point_code, res.connector_id);
 
-      if (typeof showToast === 'function') {
-        showToast(`Đã hủy đặt chỗ ${res.reservation_code}. Trụ sạc đã sẵn sàng cho người khác.`, 'info');
-      }
+      saveLocalMockReservations(reservations);
+
+      feedback.innerHTML = '<div class="alert alert--success">Đã hủy đặt chỗ thành công! Trụ sạc đã được mở lại cho tài xế khác (Miễn phí).</div>';
+
+      setTimeout(() => {
+        closeCancelModal();
+        loadReservations();
+        if (typeof showToast === 'function') {
+          showToast(`Đã hủy đặt chỗ ${res.reservation_code}. Trụ sạc đã sẵn sàng cho người khác.`, 'info');
+        }
+      }, 600);
     } catch (err) {
-      alert('Không thể hủy đặt chỗ: ' + (err.message || 'Có lỗi xảy ra'));
+      feedback.innerHTML = `<div class="alert alert--danger">Lỗi khi hủy đặt chỗ: ${escapeHtml(err.message || 'Có lỗi xảy ra')}</div>`;
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Xác nhận hủy đặt chỗ';
     }
   }
 
-  // --- 5. Modal Chi tiết ---
+  // --- 5. Modal Chi tiết (Tích hợp SCRUM-78 & SCRUM-79) ---
   function openDetailModal(id) {
     const res = reservations.find(r => r.id === id);
     if (!res) return;
 
     const body = document.getElementById('detail-modal-body');
     if (!body) return;
+
+    const isExpired = res.status === 'Expired';
+    const isCancelled = res.status === 'Cancelled';
+    const isActive = res.status === 'Active';
+
+    let extraBannerHtml = '';
+    if (isExpired) {
+      extraBannerHtml = `
+        <div class="alert alert--danger" style="margin-top:var(--space-3);border-radius:var(--radius-md);display:flex;align-items:flex-start;gap:var(--space-2);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#dc2626;">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div>
+            <strong>Quá hạn giữ chỗ & Tính phí phạt (SCRUM-78):</strong> Bạn không tới trạm cắm sạc trong thời hạn cam kết (${formatDate(res.expiry_at)}). Trụ sạc đã được tự động mở lại cho tài xế khác. Phí phạt giữ chỗ không đến <strong>15.000 ₫</strong> đã được trừ từ số dư ví.
+          </div>
+        </div>
+        <div style="margin-top:var(--space-2);text-align:right;">
+          <a href="/wallet" class="btn btn--secondary btn--sm" style="display:inline-flex;align-items:center;gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            Xem lịch sử trừ ví (-15.000 ₫)
+          </a>
+        </div>
+      `;
+    } else if (isCancelled) {
+      extraBannerHtml = `
+        <div class="alert alert--info" style="margin-top:var(--space-3);border-radius:var(--radius-md);display:flex;align-items:flex-start;gap:var(--space-2);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#0284c7;">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div>
+            <strong>Đã hủy chủ động trước hạn (SCRUM-79):</strong> Lượt đặt chỗ đã hủy lúc ${formatDate(res.cancelled_at || res.expiry_at)}. Lý do: <em>${escapeHtml(res.cancellation_reason || 'Thay đổi kế hoạch')}</em>. Bản tin OCPP <code>CancelReservation</code> đã giải phóng đầu nối ngay lập tức. Phí phạt: <strong>0 ₫ (Miễn phí hoàn toàn)</strong>.
+          </div>
+        </div>
+      `;
+    }
 
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:var(--space-3);">
@@ -803,11 +990,11 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
           <div>
             <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trạng thái:</span>
-            <div><span class="badge badge--res-${res.status.toLowerCase()}">${escapeHtml(res.status)}</span></div>
+            <div style="margin-top:2px;"><span class="badge badge--res-${res.status.toLowerCase()}">${escapeHtml(res.status)}</span></div>
           </div>
           <div>
             <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Phản hồi OCPP:</span>
-            <div><strong>${escapeHtml(res.ocpp_status || 'Accepted')}</strong></div>
+            <div style="margin-top:2px;"><strong>${escapeHtml(res.ocpp_status || 'Accepted')}</strong></div>
           </div>
         </div>
 
@@ -826,7 +1013,7 @@
           </div>
           <div>
             <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Cổng sạc:</span>
-            <div><strong>Cổng #${escapeHtml(res.connector_id)}</strong></div>
+            <div><strong>Cổng #${escapeHtml(res.connector_id)}</strong> (${escapeHtml(res.connector_type || 'CCS2')})</div>
           </div>
         </div>
 
@@ -840,8 +1027,23 @@
             <div style="font-size:var(--font-size-sm);font-weight:600;color:var(--color-primary);">${formatDate(res.expiry_at)}</div>
           </div>
         </div>
+
+        ${extraBannerHtml}
+
+        ${isActive ? `
+          <div style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;">
+            <button class="btn btn--danger btn--sm" id="btn-cancel-from-detail" type="button" style="background-color:#ef4444;color:white;border-color:#ef4444;">
+              Hủy đặt chỗ này
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
+
+    document.getElementById('btn-cancel-from-detail')?.addEventListener('click', () => {
+      closeDetailModal();
+      openCancelModal(res.id);
+    });
 
     document.getElementById('modal-res-detail')?.classList.remove('is-hidden');
   }
@@ -865,6 +1067,12 @@
     document.getElementById('btn-close-detail-modal')?.addEventListener('click', closeDetailModal);
     document.getElementById('modal-detail-backdrop')?.addEventListener('click', closeDetailModal);
     document.getElementById('btn-detail-close')?.addEventListener('click', closeDetailModal);
+
+    // Modal hủy đặt chỗ (SCRUM-79)
+    document.getElementById('btn-close-cancel-modal')?.addEventListener('click', closeCancelModal);
+    document.getElementById('modal-cancel-backdrop')?.addEventListener('click', closeCancelModal);
+    document.getElementById('btn-cancel-dialog-dismiss')?.addEventListener('click', closeCancelModal);
+    document.getElementById('form-cancel-reservation')?.addEventListener('submit', handleCancelSubmit);
 
     // Chọn trạm trong form
     document.getElementById('select-station')?.addEventListener('change', onStationChanged);

@@ -41,10 +41,14 @@
   </div>
 </div>
 
+<!-- Thông báo quá hạn giữ chỗ (SCRUM-78) -->
+<div id="expired-notice-container"></div>
+
 <!-- 2. Active Reservation Card (Hiển thị nếu đang có đặt chỗ còn hiệu lực) -->
 <div id="active-res-container">
   <!-- Sẽ được JS render linh hoạt (Active Card hoặc Empty Card) -->
 </div>
+
 
 <!-- 3. Thẻ thống kê tổng quan -->
 <div class="stats-grid" id="res-stats" style="margin-bottom: var(--space-6);">
@@ -211,6 +215,7 @@
           <button type="button" class="time-chip-btn" data-minutes="60">1 giờ</button>
           <button type="button" class="time-chip-btn" data-minutes="90">1.5 giờ</button>
           <button type="button" class="time-chip-btn" data-minutes="120">2 giờ (tối đa)</button>
+          <button type="button" class="time-chip-btn" data-minutes="0.1" style="border-style:dashed;color:#b45309;" title="Giữ 6 giây để thử nghiệm tự động quá hạn (SCRUM-78)">⏱ 6s (Test SCRUM-78)</button>
         </div>
         <input type="hidden" id="input-arrival-minutes" value="30" />
         <div style="background:var(--color-bg-subtle);border-radius:var(--radius-md);padding:var(--space-3);display:flex;align-items:center;justify-content:space-between;">
@@ -218,6 +223,7 @@
           <strong id="display-expiry-target" style="color:var(--color-primary);font-size:var(--font-size-base);">—:—</strong>
         </div>
       </div>
+
 
       <!-- Chính sách cam kết giữ chỗ -->
       <div class="res-policy-box">
@@ -272,6 +278,66 @@
     </div>
   </div>
 </div>
+
+<!-- 7. Modal Xác nhận Hủy đặt chỗ (SCRUM-79 / S-51) -->
+<div class="modal is-hidden" id="modal-cancel-confirm" role="dialog" aria-modal="true" aria-labelledby="modal-cancel-title">
+  <div class="modal__backdrop" id="modal-cancel-backdrop"></div>
+  <div class="modal__dialog modal__dialog--medium" style="position:relative;z-index:1001;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-cancel-title" style="color:#dc2626;display:flex;align-items:center;gap:var(--space-2);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        Xác nhận hủy đặt chỗ
+      </h2>
+      <button class="modal__close" id="btn-close-cancel-modal" type="button" aria-label="Đóng modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-cancel-reservation" class="modal__body">
+      <input type="hidden" id="cancel-reservation-id" />
+      <div class="cancel-summary-box">
+        <div style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">Mã đặt chỗ: <strong id="cancel-code-display" style="color:var(--color-primary);">RES-...</strong></div>
+        <div style="font-weight:700;font-size:var(--font-size-base);margin-top:2px;" id="cancel-station-display">Trạm Sạc</div>
+        <div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin-top:2px;" id="cancel-cp-display">Trụ sạc — Cổng #1</div>
+      </div>
+
+      <div class="cancel-policy-notice">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#059669;flex-shrink:0;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <div>
+          <strong>Hủy trước hạn hoàn toàn MIỄN PHÍ (S-51):</strong> Trụ sạc sẽ lập tức được giải phóng qua lệnh OCPP <code>CancelReservation</code> và chuyển về trạng thái <strong>Sẵn sàng (Available)</strong> cho tài xế khác.
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:var(--space-4);">
+        <label class="form-label" for="select-cancel-reason">
+          Lý do hủy đặt chỗ <span class="required" aria-hidden="true">*</span>
+        </label>
+        <select class="form-select" id="select-cancel-reason" required>
+          <option value="Thay đổi kế hoạch di chuyển">Thay đổi kế hoạch di chuyển</option>
+          <option value="Đã tìm được trạm sạc khác gần hơn">Đã tìm được trạm sạc khác gần hơn</option>
+          <option value="Pin xe còn đủ, không cần sạc nữa">Pin xe còn đủ, không cần sạc nữa</option>
+          <option value="Bị tắc đường, không kịp đến nơi đúng giờ">Bị tắc đường, không kịp đến nơi đúng giờ</option>
+          <option value="Khác">Lý do khác</option>
+        </select>
+      </div>
+
+      <div id="cancel-feedback" role="alert" aria-live="polite"></div>
+
+      <div class="modal__footer" style="display:flex;justify-content:flex-end;gap:var(--space-3);padding-top:var(--space-4);border-top:1px solid var(--color-border);margin-top:var(--space-4);">
+        <button class="btn btn--secondary" id="btn-cancel-dialog-dismiss" type="button">Giữ lại đặt chỗ</button>
+        <button class="btn btn--danger" id="btn-confirm-cancel-submit" type="submit" style="background-color:#ef4444;color:white;border-color:#ef4444;">
+          Xác nhận hủy đặt chỗ
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}

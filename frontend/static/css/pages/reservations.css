@@ -470,8 +470,97 @@
   font-weight: 600;
 }
 
+/* 9. SCRUM-79: Modal Xác nhận hủy đặt chỗ */
+.cancel-summary-box {
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.cancel-policy-notice {
+  background: hsla(142, 70%, 45%, 0.1);
+  border: 1px solid hsla(142, 70%, 45%, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: #065f46;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* 10. SCRUM-78: Quá hạn giữ chỗ & Phạt không đến (No-show fee) */
+.expired-alert-banner {
+  background: linear-gradient(135deg, hsla(0, 85%, 55%, 0.12) 0%, hsla(25, 95%, 50%, 0.12) 100%);
+  border: 1.5px solid hsla(0, 80%, 55%, 0.4);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  animation: resFadeIn 0.3s ease;
+}
+
+.expired-alert-banner__content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 750px;
+}
+
+.expired-alert-banner__icon {
+  color: #ef4444;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.expired-alert-banner__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: 750;
+  color: #b91c1c;
+}
+
+.expired-alert-banner__desc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+.no-show-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  background: hsla(0, 80%, 55%, 0.12);
+  color: #dc2626;
+  border: 1px solid hsla(0, 80%, 55%, 0.25);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: var(--font-size-xs);
+}
+
+.wallet-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
 @keyframes resFadeIn {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
 

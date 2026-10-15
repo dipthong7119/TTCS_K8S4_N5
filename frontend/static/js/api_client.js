@@ -132,8 +132,8 @@ const ApiClient = (() => {
     },
     createReservation: (body, opts = {}) =>
       _request('POST', '/reservations', body, opts),
-    cancelReservation: (id, opts = {}) =>
-      _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, null, opts),
+    cancelReservation: (id, body = null, opts = {}) =>
+      _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
     getReservation: (id, opts = {}) =>
       _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
   };
