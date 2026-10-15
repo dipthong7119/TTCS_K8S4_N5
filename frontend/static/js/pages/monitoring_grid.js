@@ -322,7 +322,9 @@
   }
 
   function startState(code) {
-    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '', tag: '' });
+    if (!startRequests.has(code)) startRequests.set(code, {
+      pending: false, message: '', topUpUrl: null, topUpLink: null, selected: '', tag: ''
+    });
     return startRequests.get(code);
   }
 
@@ -346,13 +348,29 @@
         (!driver && (!tag?.value.trim() || tag.value.trim().length > 20));
       button.textContent = state.pending ? 'Đang chờ bắt đầu sạc…' : 'Bắt đầu sạc';
       message.textContent = state.message;
+      if (state.topUpLink) {
+        state.topUpLink.remove();
+        state.topUpLink = null;
+      }
+      if (state.topUpUrl === '/wallet') {
+        message.textContent = `${state.message} `;
+        const link = document.createElement('a');
+        link.href = '/wallet';
+        link.className = 'btn btn--primary btn--sm';
+        link.textContent = 'Nạp tiền vào ví';
+        state.topUpLink = link;
+        message.appendChild(link);
+      }
     };
     if (state.selected) select.value = state.selected;
     if (tag && state.tag !== undefined) tag.value = state.tag;
     state.update = update;
-    select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; } update(); });
+    select.addEventListener('change', () => {
+      if (!state.pending) { state.selected = select.value; state.message = ''; state.topUpUrl = null; }
+      update();
+    });
     tag?.addEventListener('input', () => {
-      if (!state.pending) state.tag = tag.value;
+      if (!state.pending) { state.tag = tag.value; state.topUpUrl = null; }
       update();
     });
     button.addEventListener('click', async () => {
@@ -372,6 +390,7 @@
       state.message = driver
         ? 'Đang gửi yêu cầu bắt đầu sạc bằng tài khoản của bạn…'
         : 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
+      state.topUpUrl = null;
       const started = Date.now();
       let deadlineAt = started + 60000;
       let driverRequestId = null;
@@ -478,7 +497,11 @@
         await poll();
       } catch (error) {
         if (!withinDeadline()) return;
-        if (driver && error.status === 409) {
+        if (error.code === 'wallet_below_minimum') {
+          state.topUpUrl = error.top_up_url === '/wallet' ? error.top_up_url : null;
+          finish(error.message || 'Số dư ví dưới ngưỡng tối thiểu để bắt đầu sạc.');
+          return;
+        } else if (driver && error.status === 409) {
           finish(error.message || 'Không thể bắt đầu sạc bằng tài khoản của bạn.');
           return;
         }

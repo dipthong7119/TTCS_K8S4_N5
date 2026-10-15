@@ -1,77 +1,133 @@
 {% extends "base.html" %}
 {% set active_page = "audit" %}
 
-{% block title %}Nhật ký kiểm toán{% endblock %}
-{% block meta_description %}Tra cứu các thao tác vận hành và sự kiện phiên sạc{% endblock %}
+{% block title %}Nhật ký lệnh điều khiển từ xa{% endblock %}
+{% block meta_description %}Tra cứu lịch sử lệnh điều khiển từ xa: Reset, RemoteStart, RemoteStop, đổi cấu hình và người thực hiện{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
 <span class="sep" aria-hidden="true">/</span>
-<span aria-current="page">Nhật ký kiểm toán</span>
+<span aria-current="page">Nhật ký điều khiển từ xa</span>
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ asset_url('css/pages/sessions.css') }}" />
+<link rel="stylesheet" href="{{ asset_url('css/pages/audit.css') }}" />
 {% endblock %}
 
 {% block content %}
 <div class="page-header" id="audit-page">
   <div class="page-header__info">
-    <h1 class="page-header__title">Nhật ký kiểm toán</h1>
-    <p class="page-header__subtitle">Lịch sử chỉ đọc của thao tác Reset trụ sạc và dừng phiên từ xa.</p>
+    <h1 class="page-header__title">Nhật ký điều khiển từ xa</h1>
+    <p class="page-header__subtitle">Lịch sử chỉ đọc của các lệnh gửi tới trụ sạc: Khởi động lại (Reset), Bắt đầu sạc (RemoteStart), Dừng sạc (RemoteStop) và thay đổi cấu hình kèm người thực hiện.</p>
   </div>
 </div>
 
-<form class="filters-bar audit-filters" id="audit-filters">
-  <label class="audit-filter">
-    <span>Mã trụ</span>
-    <input class="form-input" name="charge_point_code" maxlength="50" placeholder="Ví dụ CP_VINCOM_01" />
-  </label>
-  <label class="audit-filter">
-    <span>Người thực hiện</span>
-    <input class="form-input" name="actor" maxlength="255" placeholder="Tên hoặc email" />
-  </label>
-  <label class="audit-filter">
-    <span>Từ ngày</span>
-    <input class="form-input" type="date" name="date_from" />
-  </label>
-  <label class="audit-filter">
-    <span>Đến ngày</span>
-    <input class="form-input" type="date" name="date_to" />
-  </label>
-  <button class="btn btn--primary" type="submit">Lọc nhật ký</button>
+<form class="audit-filters-bar" id="audit-filters" autocomplete="off">
+  <div class="audit-filter">
+    <label for="filter-charge-point">Mã trụ sạc</label>
+    <input class="form-input" id="filter-charge-point" name="charge_point_code" maxlength="50" placeholder="Ví dụ: CP_VINCOM_01" />
+  </div>
+  <div class="audit-filter">
+    <label for="filter-actor">Người thực hiện</label>
+    <input class="form-input" id="filter-actor" name="actor" maxlength="255" placeholder="Tên hoặc email tài khoản" />
+  </div>
+  <div class="audit-filter">
+    <label for="filter-date-from">Từ ngày</label>
+    <input class="form-input" id="filter-date-from" type="date" name="date_from" />
+  </div>
+  <div class="audit-filter">
+    <label for="filter-date-to">Đến ngày</label>
+    <input class="form-input" id="filter-date-to" type="date" name="date_to" />
+  </div>
+  <div class="audit-filter-actions">
+    <button class="btn btn--primary" id="btn-submit-filter" type="submit">Lọc nhật ký</button>
+    <button class="btn btn--secondary" id="btn-reset-filter" type="button">Đặt lại</button>
+  </div>
 </form>
 
-<div class="card">
+<section class="card audit-card" aria-labelledby="audit-table-heading">
   <div class="card__header">
-    <div class="card__title">Các sự kiện</div>
+    <div>
+      <h2 class="card__title" id="audit-table-heading">Danh sách lệnh điều khiển</h2>
+      <p class="driver-wallet-hint">Sổ nhật ký chỉ ghi thêm (append-only), bảo đảm tính toàn vẹn và trách nhiệm giải trình.</p>
+    </div>
     <span class="tag" id="audit-count">Đang tải...</span>
   </div>
+
   <div class="table-wrap">
-    <table class="table" aria-label="Nhật ký kiểm toán">
+    <table class="table audit-table" aria-label="Bảng nhật ký kiểm toán điều khiển từ xa">
       <thead>
         <tr>
           <th scope="col">Thời điểm</th>
           <th scope="col">Người thực hiện</th>
-          <th scope="col">Thao tác</th>
-          <th scope="col">Đối tượng</th>
+          <th scope="col">Lệnh điều khiển</th>
           <th scope="col">Mã trụ</th>
-          <th scope="col">Chi tiết</th>
+          <th scope="col">Đối tượng</th>
+          <th scope="col">Kết quả</th>
+          <th scope="col" class="text-right">Chi tiết</th>
         </tr>
       </thead>
       <tbody id="audit-tbody">
-        <tr><td colspan="6" class="text-center">Đang tải nhật ký...</td></tr>
+        <tr><td colspan="7" class="text-center">Đang tải dữ liệu nhật ký...</td></tr>
       </tbody>
     </table>
   </div>
-  <div class="card__footer audit-pagination">
-    <span id="audit-page-label">Trang 1</span>
-    <div class="pagination">
-      <button class="pagination__btn" id="audit-prev" type="button" aria-label="Trang trước">‹</button>
-      <button class="pagination__btn" id="audit-next" type="button" aria-label="Trang sau">›</button>
+
+  <div class="card__footer audit-pagination-footer">
+    <span id="audit-page-label" aria-live="polite">Trang 1</span>
+    <div class="pagination" role="navigation" aria-label="Phân trang nhật ký">
+      <button class="pagination__btn" id="audit-prev" type="button" aria-label="Trang trước" disabled>‹</button>
+      <button class="pagination__btn" id="audit-next" type="button" aria-label="Trang sau" disabled>›</button>
     </div>
   </div>
-</div>
+</section>
+
+<!-- Modal xem chi tiết sự kiện nhật ký -->
+<dialog class="audit-dialog" id="audit-detail-dialog" aria-labelledby="audit-detail-title">
+  <div class="audit-dialog__content">
+    <div class="audit-dialog__header">
+      <h2 class="audit-dialog__title" id="audit-detail-title">Chi tiết lệnh kiểm toán</h2>
+      <button class="btn btn--ghost btn--sm" id="audit-detail-close" type="button" aria-label="Đóng">✕</button>
+    </div>
+
+    <div class="audit-dialog__meta-grid">
+      <div class="audit-meta-item">
+        <strong>Thời điểm</strong>
+        <span id="detail-time">—</span>
+      </div>
+      <div class="audit-meta-item">
+        <strong>Người thực hiện</strong>
+        <span id="detail-actor">—</span>
+      </div>
+      <div class="audit-meta-item">
+        <strong>Lệnh điều khiển</strong>
+        <span id="detail-command">—</span>
+      </div>
+      <div class="audit-meta-item">
+        <strong>Mã trụ sạc</strong>
+        <span id="detail-cp">—</span>
+      </div>
+      <div class="audit-meta-item">
+        <strong>Đối tượng tác động</strong>
+        <span id="detail-object">—</span>
+      </div>
+      <div class="audit-meta-item">
+        <strong>Kết quả xử lý</strong>
+        <span id="detail-outcome">—</span>
+      </div>
+    </div>
+
+    <div>
+      <label class="form-label" for="detail-json">Tham số & Chi tiết phản hồi (JSON)</label>
+      <pre class="audit-json-box"><code id="detail-json">{}</code></pre>
+    </div>
+
+    <div class="audit-dialog__actions">
+      <button class="btn btn--secondary" id="btn-copy-json" type="button">Sao chép JSON</button>
+      <button class="btn btn--primary" id="btn-close-dialog" type="button">Đóng</button>
+    </div>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}

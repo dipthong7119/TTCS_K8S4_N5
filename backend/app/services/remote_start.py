@@ -25,6 +25,7 @@ from app.services.audit import append_audit
 from app.services.connection_manager import manager
 from app.services.ocpp_parser import OCPPError
 from app.services.ocpp_status import is_charge_point_stale
+from app.services.wallet import has_minimum_balance, minimum_wallet_balance_vnd
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +43,21 @@ class ConnectorDecision(str, Enum):
 class RemoteStartFailure(Exception):
     """Lỗi nghiệp vụ đã có mã HTTP và mã máy đọc được."""
 
-    def __init__(self, status_code: int, code: str, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        detail: str,
+        *,
+        minimum_required_vnd: int | None = None,
+        top_up_url: str | None = None,
+    ) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.code = code
         self.detail = detail
+        self.minimum_required_vnd = minimum_required_vnd
+        self.top_up_url = top_up_url
 
 
 def decide_connector_start(
@@ -71,9 +82,23 @@ def decide_connector_start(
     return ConnectorDecision.ALLOW
 
 
-def check_start_policy(driver_user_id: int, connector_id: int) -> None:
-    """Điểm móc cho chính sách ví S-38; hiện chưa chặn tài xế nào."""
-    del driver_user_id, connector_id
+def check_start_policy(db: Session, driver_user_id: int, connector_id: int) -> None:
+    """Chặn RemoteStart khi số dư ví thấp hơn ngưỡng toàn hệ thống (SCRUM-72)."""
+    minimum_required_vnd = minimum_wallet_balance_vnd(db)
+    if has_minimum_balance(db, driver_user_id, minimum_required_vnd):
+        return
+    db.rollback()
+    logger.info(
+        "Remote start blocked: connector_id=%s reason=wallet_below_minimum",
+        connector_id,
+    )
+    raise RemoteStartFailure(
+        409,
+        "wallet_below_minimum",
+        f"Số dư ví cần tối thiểu {minimum_required_vnd:,} đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.",
+        minimum_required_vnd=minimum_required_vnd,
+        top_up_url="/wallet",
+    )
 
 
 def utc_now_naive() -> datetime:
@@ -234,7 +259,7 @@ def _preflight(
         }
         raise RemoteStartFailure(409, "connector_not_available", messages[decision])
 
-    check_start_policy(driver_user_id, connector.id)
+    check_start_policy(db, driver_user_id, connector.id)
     return connector, point, station
 
 

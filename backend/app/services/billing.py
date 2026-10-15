@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
@@ -39,8 +39,19 @@ def finalize_session_billing(
             StationTariff.station_id == session.station_id,
             StationTariff.effective_from <= session.started_at,
         )
+        .options(joinedload(StationTariff.bands))
         .order_by(StationTariff.effective_from.desc(), StationTariff.id.desc())
         .first()
+    )
+    tariff_versions = (
+        db.query(StationTariff)
+        .filter(
+            StationTariff.station_id == session.station_id,
+            StationTariff.effective_from <= session.ended_at,
+        )
+        .options(joinedload(StationTariff.bands))
+        .order_by(StationTariff.effective_from, StationTariff.id)
+        .all()
     )
     subscription = None
     if session.user_id is not None:
@@ -80,6 +91,21 @@ def finalize_session_billing(
             meter_readings=meter_readings,
             bands=bands,
             timezone_name=timezone_name,
+            tariff_versions=(
+                [
+                    {
+                        "tariff_id": version.id,
+                        "name": version.name,
+                        "effective_from": version.effective_from,
+                        "bands": version.bands,
+                        "occupancy_fee_vnd_per_minute": version.occupancy_fee_vnd_per_minute,
+                        "grace_period_minutes": version.grace_period_minutes,
+                    }
+                    for version in tariff_versions
+                ]
+                if subscription is None
+                else None
+            ),
             occupancy_started_at=session.occupancy_started_at,
             occupancy_fee_vnd_per_minute=(tariff.occupancy_fee_vnd_per_minute if tariff else 0),
             grace_period_minutes=tariff.grace_period_minutes if tariff else 0,

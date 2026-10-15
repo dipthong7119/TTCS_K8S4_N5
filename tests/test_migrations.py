@@ -85,6 +85,10 @@ def test_configuration_and_payment_migrations_share_one_head(migrated_database) 
     assert {"charge_point_configuration", "payment_transactions"}.issubset(
         set(inspect(engine).get_table_names())
     )
+    payment_columns = {
+        column["name"] for column in inspect(engine).get_columns("payment_transactions")
+    }
+    assert {"refund_reason", "refunded_at"} <= payment_columns
 
 
 def test_tariff_migrations_extend_existing_schema(migrated_database) -> None:
@@ -157,12 +161,20 @@ def test_migrated_wallet_accepts_sandbox_topup_once_and_refund(migrated_database
         assert db.query(WalletLedgerEntry).filter_by(
             idempotency_key=f"sandbox-topup:{order_code}"
         ).count() == 1
+        transaction, reversal = process_sandbox_webhook(
+            db, order_code, "refunded", "Migration test provider refund"
+        )
+        assert transaction is not None and transaction.status == "refunded"
+        assert reversal is not None and reversal.entry_type == "payment_refund"
+        assert reversal.amount_vnd == -50_000
+        db.commit()
+        assert wallet_totals(db, user_id)["balance_vnd"] == original_balance
         db.add(WalletLedgerEntry(
             user_id=user_id, entry_type="refund", amount_vnd=1_000,
             idempotency_key="migration-test-refund", description="Migration test refund",
         ))
         db.commit()
-        assert wallet_totals(db, user_id)["balance_vnd"] == original_balance + 51_000
+        assert wallet_totals(db, user_id)["balance_vnd"] == original_balance + 1_000
         db.add(WalletLedgerEntry(
             user_id=user_id, entry_type="sandbox_topup", amount_vnd=-1_000,
             idempotency_key="migration-test-invalid-topup", description="Invalid topup",

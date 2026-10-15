@@ -3,7 +3,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from itertools import pairwise
-from typing import TypedDict
+from typing import Any, TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEMO_TARIFF_BANDS = (
@@ -21,6 +21,17 @@ class _EnergySegment(TypedDict):
     start: datetime
     end: datetime
     energy_wh: Decimal
+    tariff_id: int | None
+    tariff_name: str | None
+
+
+class _TariffVersion(TypedDict):
+    effective_at: datetime
+    tariff_id: int | None
+    name: str | None
+    bands: list[Any]
+    occupancy_fee_vnd_per_minute: int
+    grace_period_minutes: int
 
 
 def validate_daily_bands(bands) -> None:
@@ -111,6 +122,7 @@ def calculate_session_price(
     meter_readings: list[dict],
     bands,
     timezone_name: str,
+    tariff_versions: list[dict] | None = None,
     occupancy_started_at: datetime | None = None,
     occupancy_fee_vnd_per_minute: int = 0,
     grace_period_minutes: int = 0,
@@ -133,6 +145,13 @@ def calculate_session_price(
         raise ValueError("Thời điểm kết thúc trước thời điểm bắt đầu")
     if end_utc == start_utc and meter_stop_wh != meter_start_wh:
         raise ValueError("Số đo công-tơ thay đổi trong phiên có thời lượng bằng 0")
+    versions = _normalize_tariff_versions(
+        tariff_versions,
+        bands=bands,
+        started_at=start_utc,
+        occupancy_fee_vnd_per_minute=occupancy_fee_vnd_per_minute,
+        grace_period_minutes=grace_period_minutes,
+    )
     points = [(start_utc, Decimal(meter_start_wh))]
     for reading in meter_readings:
         if reading.get("measurand", "Energy.Active.Import.Register") != "Energy.Active.Import.Register":
@@ -161,35 +180,61 @@ def calculate_session_price(
     if monotonic_points[-1][0] != end_utc or monotonic_points[-1][1] != Decimal(meter_stop_wh):
         raise ValueError("Số đo tích lũy không tăng hợp lệ tới thời điểm kết thúc")
 
-    ordered_bands = sorted(bands, key=lambda band: _band_value(band, "start_minute"))
+    ordered_bands = [
+        band
+        for version in versions
+        for band in version["bands"]
+    ]
+    ordered_bands = sorted(ordered_bands, key=lambda band: _band_value(band, "start_minute"))
     boundary_minutes = {0, 1440}
     for band in ordered_bands:
         boundary_minutes.add(int(_band_value(band, "start_minute")))
         boundary_minutes.add(int(_band_value(band, "end_minute")))
 
-    grouped_segments: dict[tuple[datetime, datetime, str, int], _EnergySegment] = {}
+    version_boundaries = [version["effective_at"] for version in versions]
+    grouped_segments: dict[tuple[datetime, datetime, int | None, str, int], _EnergySegment] = {}
     for (interval_start, wh_start), (interval_end, wh_end) in pairwise(monotonic_points):
         duration_seconds = Decimal(str((interval_end - interval_start).total_seconds()))
         if duration_seconds <= 0 or wh_end < wh_start:
             continue
-        cuts = [interval_start, *_tariff_boundaries(interval_start, interval_end, station_zone, boundary_minutes), interval_end]
-        for segment_start, segment_end in pairwise(cuts):
-            band = _band_at(segment_start, station_zone, ordered_bands)
+        cuts = {
+            interval_start,
+            *_tariff_boundaries(interval_start, interval_end, station_zone, boundary_minutes),
+            *(boundary for boundary in version_boundaries if interval_start < boundary < interval_end),
+            interval_end,
+        }
+        ordered_cuts = sorted(cuts)
+        for segment_start, segment_end in pairwise(ordered_cuts):
+            version = _tariff_version_at(segment_start, versions)
+            band = _band_at(segment_start, station_zone, version["bands"])
             seconds = Decimal(str((segment_end - segment_start).total_seconds()))
             energy_wh = (wh_end - wh_start) * seconds / duration_seconds
             price = int(_band_value(band, "price_vnd_per_kwh"))
             window_start, window_end = _band_window(segment_start, band, station_zone)
-            key = (window_start, window_end, str(_band_value(band, "label")), price)
+            tariff_id = version["tariff_id"]
+            key = (
+                window_start,
+                window_end,
+                tariff_id,
+                str(_band_value(band, "label")),
+                price,
+            )
             current = grouped_segments.setdefault(
                 key,
-                {"start": segment_start, "end": segment_end, "energy_wh": Decimal(0)},
+                {
+                    "start": segment_start,
+                    "end": segment_end,
+                    "energy_wh": Decimal(0),
+                    "tariff_id": tariff_id,
+                    "tariff_name": version["name"],
+                },
             )
             current["start"] = min(current["start"], segment_start)
             current["end"] = max(current["end"], segment_end)
             current["energy_wh"] += energy_wh
 
     segments = []
-    for (window_start, _window_end, label, price), item in sorted(
+    for (window_start, _window_end, _tariff_id, label, price), item in sorted(
         grouped_segments.items(), key=lambda pair: pair[1]["start"]
     ):
         energy_wh = item["energy_wh"]
@@ -198,41 +243,125 @@ def calculate_session_price(
                 Decimal(1), rounding=ROUND_HALF_UP
             )
         )
-        segments.append(
-            {
-                "from": item["start"].astimezone(station_zone).isoformat(),
-                "to": item["end"].astimezone(station_zone).isoformat(),
-                "band": label,
-                "energy_kwh": format((energy_wh / Decimal(1000)).quantize(Decimal("0.000001")), "f"),
-                "price_vnd_per_kwh": price,
-                "amount_vnd": amount_vnd,
-            }
-        )
+        local_start = item["start"].astimezone(station_zone)
+        segment = {
+            "from": local_start.isoformat(),
+            "to": item["end"].astimezone(station_zone).isoformat(),
+            "service_date": local_start.date().isoformat(),
+            "band": label,
+            "energy_kwh": format((energy_wh / Decimal(1000)).quantize(Decimal("0.000001")), "f"),
+            "price_vnd_per_kwh": price,
+            "amount_vnd": amount_vnd,
+        }
+        if item["tariff_id"] is not None:
+            segment["tariff_id"] = item["tariff_id"]
+        if item["tariff_name"]:
+            segment["tariff_name"] = item["tariff_name"]
+        segments.append(segment)
 
+    occupancy_version = None
+    if occupancy_started_at is not None:
+        occupancy_version = _tariff_version_at(_as_utc(occupancy_started_at), versions)
+        occupancy_fee_vnd_per_minute = occupancy_version["occupancy_fee_vnd_per_minute"]
+        grace_period_minutes = occupancy_version["grace_period_minutes"]
     if occupancy_started_at is not None and occupancy_fee_vnd_per_minute > 0:
-        grace_ends = _as_utc(occupancy_started_at) + timedelta(minutes=grace_period_minutes)
-        charge_from = max(grace_ends, _as_utc(occupancy_started_at))
+        occupancy_start_utc = _as_utc(occupancy_started_at)
+        grace_ends = occupancy_start_utc + timedelta(minutes=grace_period_minutes)
+        charge_from = max(grace_ends, occupancy_start_utc)
         if end_utc > charge_from:
             elapsed = end_utc - charge_from
             elapsed_seconds = elapsed.days * 86400 + elapsed.seconds + bool(elapsed.microseconds)
             billable_minutes = (elapsed_seconds + 59) // 60
-            segments.append(
-                {
-                    "kind": "occupancy_fee",
-                    "from": charge_from.astimezone(station_zone).isoformat(),
-                    "to": end_utc.astimezone(station_zone).isoformat(),
-                    "band": "Phí chiếm trụ",
-                    "duration_minutes": billable_minutes,
-                    "price_vnd_per_minute": occupancy_fee_vnd_per_minute,
-                    "amount_vnd": billable_minutes * occupancy_fee_vnd_per_minute,
-                }
-            )
+            occupancy_segment = {
+                "kind": "occupancy_fee",
+                "from": charge_from.astimezone(station_zone).isoformat(),
+                "to": end_utc.astimezone(station_zone).isoformat(),
+                "service_date": charge_from.astimezone(station_zone).date().isoformat(),
+                "band": "Phí chiếm trụ",
+                "duration_minutes": billable_minutes,
+                "price_vnd_per_minute": occupancy_fee_vnd_per_minute,
+                "amount_vnd": billable_minutes * occupancy_fee_vnd_per_minute,
+            }
+            if occupancy_version and occupancy_version["tariff_id"] is not None:
+                occupancy_segment["tariff_id"] = occupancy_version["tariff_id"]
+            if occupancy_version and occupancy_version["name"]:
+                occupancy_segment["tariff_name"] = occupancy_version["name"]
+            segments.append(occupancy_segment)
 
     return {
         "total_vnd": sum(segment["amount_vnd"] for segment in segments),
         "segments": segments,
         "rounding_rule": ROUNDING_RULE,
     }
+
+
+def _normalize_tariff_versions(
+    tariff_versions: list[dict] | None,
+    *,
+    bands,
+    started_at: datetime,
+    occupancy_fee_vnd_per_minute: int,
+    grace_period_minutes: int,
+) -> list[_TariffVersion]:
+    if tariff_versions is None:
+        return [
+            {
+                "effective_at": datetime.min.replace(tzinfo=timezone.utc),
+                "tariff_id": None,
+                "name": None,
+                "bands": sorted(bands, key=lambda band: _band_value(band, "start_minute")),
+                "occupancy_fee_vnd_per_minute": occupancy_fee_vnd_per_minute,
+                "grace_period_minutes": grace_period_minutes,
+            }
+        ]
+    if not tariff_versions:
+        raise ValueError("Cần ít nhất một phiên bản biểu giá")
+
+    versions: list[_TariffVersion] = []
+    for raw in tariff_versions:
+        if not isinstance(raw, dict):
+            raise TypeError("Phiên bản biểu giá không hợp lệ")
+        effective_at = _reading_time(raw.get("effective_from"))
+        version_bands = raw.get("bands")
+        if effective_at is None or not version_bands:
+            raise ValueError("Phiên bản biểu giá thiếu thời điểm hiệu lực hoặc khung giờ")
+        validate_daily_bands(version_bands)
+        fee = int(raw.get("occupancy_fee_vnd_per_minute", 0))
+        grace = int(raw.get("grace_period_minutes", 0))
+        if fee < 0 or grace < 0:
+            raise ValueError("Phí chiếm trụ và thời gian ân hạn không được âm")
+        tariff_id = raw.get("tariff_id", raw.get("id"))
+        versions.append(
+            {
+                "effective_at": effective_at,
+                "tariff_id": int(tariff_id) if tariff_id is not None else None,
+                "name": str(raw["name"]) if raw.get("name") is not None else None,
+                "bands": sorted(
+                    version_bands,
+                    key=lambda band: _band_value(band, "start_minute"),
+                ),
+                "occupancy_fee_vnd_per_minute": fee,
+                "grace_period_minutes": grace,
+            }
+        )
+    versions.sort(key=lambda version: version["effective_at"])
+    if any(
+        current["effective_at"] == following["effective_at"]
+        for current, following in pairwise(versions)
+    ):
+        raise ValueError("Hai phiên bản biểu giá không được cùng thời điểm hiệu lực")
+    if versions[0]["effective_at"] > started_at:
+        raise ValueError("Không có biểu giá hiệu lực tại thời điểm bắt đầu phiên")
+    return versions
+
+
+def _tariff_version_at(
+    timestamp: datetime, versions: list[_TariffVersion]
+) -> _TariffVersion:
+    for version in reversed(versions):
+        if version["effective_at"] <= timestamp:
+            return version
+    raise ValueError("Không tìm thấy biểu giá hiệu lực cho thời điểm tính tiền")
 
 
 def _band_value(band, key):

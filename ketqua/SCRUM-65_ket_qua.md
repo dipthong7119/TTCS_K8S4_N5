@@ -4,8 +4,9 @@ Ngày thực hiện: **09/10/2026**, UTC+7. Nhánh kiểm tra và bàn giao: `TR
 cập nhật từ `origin/sprint-3` tại `58a4c07` trước khi thêm SCRUM-65.
 
 Đã chuẩn bị **24 ca có đáp án tính tay** và bộ test tự động đối chiếu với hàm
-tính tiền hiện tại. **19 ca tính tiền đã đạt; 5 ca còn chờ phần nghiệp vụ phụ
-thuộc. SCRUM-65 chưa đủ điều kiện chuyển Done.**
+tính tiền hiện tại. Cập nhật **12/10/2026**: 20 ca tính tiền đạt, còn bốn ca
+phí chiếm trụ 21–24 chờ SCRUM-61/204. SCRUM-65 chưa đủ điều kiện chuyển Done.
+SCRUM-65-20 dùng các phiên bản biểu giá theo ngày và đạt đáp án 36.000 đồng.
 
 ## Phần đã thực hiện
 
@@ -27,18 +28,16 @@ từ tệp riêng, không sinh đáp án bằng thuật toán đang được ki�
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| Pytest riêng SCRUM-65 | **21 passed, 5 skipped**: 19 ca tiền, 1 test metadata/phạm vi, 1 test thông báo khi sai một đồng. |
-| Pytest cùng StopTransaction và tính kWh | **44 passed, 5 skipped**, 7 cảnh báo từ bộ test/phụ thuộc hiện có. |
-| Toàn bộ pytest theo bước CI, tách kịch bản Docker 20 trụ | **547 passed, 5 skipped**, 64 cảnh báo; 58,94 giây. Chỉ năm ca SCRUM-65 chờ phụ thuộc bị bỏ qua. |
-| JavaScript theo bước CI | **81/81 đạt**, không lỗi hoặc bỏ qua. |
-| Ruff toàn bộ app, tests, Alembic và scripts | Đạt. |
-| Mypy | Đạt, 48 file nguồn. |
-| `pip_audit --local` | Không phát hiện lỗ hổng đã biết. |
-| `git diff --check` | Đạt tại thời điểm kiểm tra. |
+| Pytest riêng SCRUM-65 | **23 passed, 4 skipped**: 20 ca tiền, test metadata/phạm vi và test thông báo khi sai một đồng. |
+| Hồi quy backend cho SCRUM-64/66/72/209/210 và luồng tính tiền, ví, StopTransaction | **169 passed, 4 skipped**, 13 cảnh báo; bốn ca bỏ qua là SCRUM65-21–24. |
+| JavaScript giao diện | **89/89 đạt**, gồm trạng thái ví thấp và mở hóa đơn từ API. |
+| Kiểm tra asset/frontend | **21 passed**. |
+| Ruff cho mã backend liên quan và Mypy toàn `app` | Đạt; Mypy kiểm tra 60 file nguồn. |
+| `git diff --check` | Đạt sau cập nhật. |
 
-Môi trường kiểm tra: Windows, Python **3.14.2**, pytest **9.1.1** trong `.venv`
-của repo. Đã chạy bộ pytest theo bước CI; chưa chạy bước Docker/PostgreSQL local
-cho task này vì Docker Engine chưa hoạt động, chưa nghiệm thu staging.
+Môi trường kiểm tra hiện tại: Windows, Python **3.14.2**, pytest **9.1.1** trong
+`.venv` của repo. Đã chạy các nhóm backend liên quan và kiểm tra giao diện; chưa
+chạy bộ CI đầy đủ, Docker/PostgreSQL hoặc nghiệm thu staging trong lượt rà soát này.
 CI hiện thu thập `backend/tests`, nên không cần thay workflow để chạy file mới.
 
 Log local được Git ignore tại `outputs/sprint3-ci/scrum65-ci-pytest.log`,
@@ -57,13 +56,12 @@ Lệnh và bảng chi tiết: [Kiểm thử SCRUM-65](../huongdan/kiem_thu_SCRUM
 
 | Ca | Đáp án | Phụ thuộc còn thiếu |
 | --- | ---: | --- |
-| SCRUM65-20 | 36.000 đồng | SCRUM-64/206: chọn phiên bản biểu giá theo từng ngày; pricing hiện chỉ nhận một bộ bands, billing chọn giá lúc bắt đầu. |
 | SCRUM65-21/22 | 10.000 đồng mỗi ca, gồm 2.000 phí chiếm trụ | SCRUM-61/204: phí theo phút, ân hạn và thời điểm rút súng. |
 | SCRUM65-23/24 | 8.000 đồng mỗi ca, phí chiếm trụ 0 | Cùng phụ thuộc phí chiếm trụ; chưa coi tổng tiền điện khớp là đã kiểm tra ân hạn. |
 
-Năm ca được đánh dấu skip có lý do rõ ràng, không được tính là pass. Bảng ca đã
-đủ các nhóm theo S-32, nhưng AC “mọi ca khớp đáp án” chưa đạt vì năm ca chưa chạy.
-Khi có hàm hỗ trợ, nối adapter thật và kiểm tra phí/số phút rồi chạy lại.
+Bốn ca 21–24 vẫn skip do phí chiếm trụ chưa được nối với dữ liệu thời điểm rút
+súng và ân hạn. Khi SCRUM-61/204 có đầu vào, nối adapter và kiểm tra riêng tiền
+phí/số phút rồi chạy lại.
 
 Tại thời điểm lập bằng chứng local, chưa có review của Tạ Như Vinh, kết quả GitHub
 CI cho thay đổi này hay nghiệm thu staging. Bộ dữ liệu có thể bàn giao cho

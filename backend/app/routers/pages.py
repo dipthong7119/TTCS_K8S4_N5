@@ -272,3 +272,12 @@ async def financial_reconciliation_page(
         "sessions/financial_reconciliation.html",
         _page_context(request, current_user),
     )
+
+
+# SCRUM-68 — Giao diện đăng ký gói thuê bao hàng tháng (Phạm Văn Tuấn)
+@router.get("/subscriptions", dependencies=[Depends(require_role("driver", "admin"))])
+async def subscriptions_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin")
+    return templates.TemplateResponse(
+        request, "subscriptions/subscriptions.html", _page_context(request, current_user)
+    )
