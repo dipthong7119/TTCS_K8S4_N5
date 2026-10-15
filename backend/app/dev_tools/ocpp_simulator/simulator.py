@@ -207,6 +207,8 @@ class SimpleSimulator:
                         await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
                         transaction_id = int(payload.get("transactionId", 1))
                         asyncio.create_task(self._trigger_remote_stop(transaction_id))
+                    elif action == "ReserveNow":
+                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
                     elif action == "ChangeConfiguration":
                         key = payload.get("key")
                         limits = {
