@@ -256,3 +256,19 @@ async def sandbox_checkout_page(request: Request, current_user: CurrentUser, ord
         _page_context(request, current_user, order_code=order_code),
     )
 
+
+# SCRUM-231 / SCRUM-85 — Giao diện đối soát cho kế toán
+@router.get(
+    "/sessions/financial-reconciliation",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def financial_reconciliation_page(
+    request: Request,
+    current_user: CurrentUser,
+):
+    _require_any_role(current_user, "admin", "accountant")
+    return templates.TemplateResponse(
+        request,
+        "sessions/financial_reconciliation.html",
+        _page_context(request, current_user),
+    )

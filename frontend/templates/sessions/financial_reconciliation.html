@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set active_page = "financial-reconciliation" %}
+
+{% block title %}Đối soát điện năng và tiền thu{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Đối soát điện năng và tiền thu</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header__info">
+        <h1 class="page-header__title">Đối soát điện năng và tiền thu</h1>
+        <p class="page-header__subtitle">
+            Kiểm tra điện năng đã cấp, tiền đã thu và các phiên cần xem xét theo kỳ.
+        </p>
+    </div>
+</div>
+
+<section class="card" aria-labelledby="financial-filter-title">
+    <div class="card__header">
+        <h2 class="card__title" id="financial-filter-title">Kỳ đối soát</h2>
+    </div>
+    <div class="card__body">
+        <form id="financial-filter-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="financial-from">Từ ngày</label>
+                    <input class="form-input" id="financial-from" name="from_date" type="date" required />
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="financial-to">Đến ngày</label>
+                    <input class="form-input" id="financial-to" name="to_date" type="date" required />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="financial-status">Loại kết quả</label>
+                <select class="form-select" id="financial-status">
+                    <option value="all">Tất cả phiên</option>
+                    <option value="review">Các phiên cần xem xét</option>
+                    <option value="missing_invoice">Có kWh nhưng thiếu hóa đơn</option>
+                    <option value="missing_ledger">Có hóa đơn nhưng thiếu dòng sổ cái</option>
+                    <option value="amount_mismatch">Hóa đơn lệch với tính lại từ biểu giá</option>
+                </select>
+            </div>
+
+            <button class="btn btn--primary" id="financial-apply" type="submit" disabled>Xem báo cáo</button>
+        </form>
+    </div>
+</section>
+
+<p class="alert alert--info" id="financial-message" role="status">
+    Chưa tải dữ liệu đối soát.
+</p>
+
+<section class="stats-grid" aria-label="Tổng hợp kỳ đối soát">
+    <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Điện năng đã cấp</div>
+        <div class="stat-card__value" id="financial-total-kwh">—</div>
+        <div class="stat-card__sub">kWh</div>
+    </div>
+    <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Tổng tiền hóa đơn</div>
+        <div class="stat-card__value" id="financial-total-invoiced">—</div>
+        <div class="stat-card__sub">VND</div>
+    </div>
+    <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Tiền đã thu</div>
+        <div class="stat-card__value" id="financial-total-collected">—</div>
+        <div class="stat-card__sub">VND</div>
+    </div>
+    <div class="stat-card stat-card--orange">
+        <div class="stat-card__label">Tổng lệch hóa đơn / biểu giá</div>
+        <div class="stat-card__value" id="financial-total-difference">—</div>
+        <div class="stat-card__sub">VND — theo kết quả đối soát</div>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="financial-review-title">
+    <div class="card__header">
+        <h2 class="card__title" id="financial-review-title">
+            Phiên cần xem xét: <span id="financial-review-count">—</span>
+        </h2>
+    </div>
+    <div class="card__body">
+        <ul id="financial-review-list">
+            <li>Chưa tải dữ liệu.</li>
+        </ul>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="financial-table-title">
+    <div class="card__header">
+        <h2 class="card__title" id="financial-table-title">Chi tiết đối soát</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <caption class="sr-only">Điện năng, hóa đơn và tiền thu từng phiên</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Mã phiên</th>
+                    <th scope="col">Trụ sạc</th>
+                    <th scope="col" class="text-right">kWh</th>
+                    <th scope="col" class="text-right">Tính lại theo biểu giá (VND)</th>
+                    <th scope="col" class="text-right">Hóa đơn (VND)</th>
+                    <th scope="col" class="text-right">Đã thu (VND)</th>
+                    <th scope="col" class="text-right">Lệch hóa đơn / biểu giá (VND)</th>
+                    <th scope="col">Kết quả kiểm tra</th>
+                </tr>
+            </thead>
+            <tbody id="financial-table-body">
+                <tr>
+                    <td colspan="8">Chưa tải dữ liệu đối soát.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="card__footer" id="financial-row-count">Chưa có báo cáo</div>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/financial_reconciliation_data.js') }}"></script>
+<script src="{{ asset_url('js/pages/financial_reconciliation.js') }}"></script>
+{% endblock %}
