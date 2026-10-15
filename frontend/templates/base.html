@@ -46,7 +46,7 @@
     <nav class="sidebar__nav" aria-label="Menu">
       <div class="sidebar__section-label">Tổng quan</div>
 
-      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'station_owner' in current_user.roles %}
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'station_owner' in current_user.roles or 'driver' in current_user.roles %}
       <a href="/monitoring" id="nav-monitoring"
          class="sidebar__link {% if active_page == 'monitoring' %}is-active{% endif %}"
          aria-current="{% if active_page == 'monitoring' %}page{% endif %}">
@@ -54,7 +54,7 @@
           <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
           <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
         </svg>
-        Giám sát thời gian thực
+        {% if 'driver' in current_user.roles and 'admin' not in current_user.roles and 'operator' not in current_user.roles and 'station_owner' not in current_user.roles %}Bắt đầu sạc{% else %}Giám sát thời gian thực{% endif %}
       </a>
       {% endif %}
 
@@ -131,6 +131,16 @@
           <polyline points="12 6 12 12 16 14"/>
         </svg>
         Lịch sử sạc của tôi
+      </a>
+      <a href="/subscriptions" id="nav-subscriptions"
+         class="sidebar__link {% if active_page == 'subscriptions' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'subscriptions' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+        Gói thuê bao tháng
       </a>
       {% endif %}
 

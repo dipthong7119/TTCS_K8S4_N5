@@ -1,4 +1,4 @@
-/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
+﻿/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
  * These tests check behavior, not browser layout or rendering performance.
  */
 const assert = require('node:assert/strict');
@@ -26,7 +26,7 @@ function element() {
     remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); },
     querySelector(selector) { if (!selectors.has(selector)) selectors.set(selector, element()); return selectors.get(selector); },
     querySelectorAll() { return []; },
-    setAttribute() {}, focus() {}, prepend() {},
+    setAttribute() { }, focus() { }, prepend() { },
   };
 }
 
@@ -54,6 +54,13 @@ function monitoring(getTree, clock = Date, options = {}) {
       remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
       listAllSessions: options.listSessions || (async () => ({ items: [] })),
       getCurrentSession: options.currentSession || (async () => null),
+      createDriverRemoteStart: options.createDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      getDriverRemoteStart: options.getDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      remoteStop: options.stop,
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
@@ -61,7 +68,7 @@ function monitoring(getTree, clock = Date, options = {}) {
       on: (name, fn) => { callbacks[name] = fn; },
       connect() { if (options.sseConnectError) throw Error('EventSource unavailable'); },
     },
-    RestartButton: { createMarkup: () => '', bindEvents() {} },
+    RestartButton: { createMarkup: () => '', bindEvents() { } },
     showToast: message => toasts.push(message),
   });
   if (options.realModules) {
@@ -70,9 +77,12 @@ function monitoring(getTree, clock = Date, options = {}) {
     const bind = context.window.RestartButton.bindEvents;
     context.window.RestartButton.bindEvents = (body, bindings) => { resetBindings.push(bindings); bind(body, bindings); };
   }
+  vm.runInContext(read('charge_point_configuration.js'), context);
+  context.ChargePointConfiguration = context.window.ChargePointConfiguration;
   vm.runInContext(read('pages/monitoring_grid.js'), context);
   document.handlers.DOMContentLoaded();
-  return { document, callbacks, toasts, apiResets, resetBindings, windowHandlers,
+  return {
+    document, callbacks, toasts, apiResets, resetBindings, windowHandlers,
     restart: context.window.RestartButton,
     confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click(),
     openDetail: () => document.getElementById('monitoring-grid').children[0].querySelector('.station-card__open').handlers.click(),
@@ -87,14 +97,19 @@ function monitoring(getTree, clock = Date, options = {}) {
     codes: () => [...document.getElementById('monitoring-grid').children.map(child => child.innerHTML).join('').matchAll(/data-cp-code="([^"]+)"/g)].map(match => match[1]),
     html: () => document.getElementById('monitoring-grid').children.map(child => child.innerHTML).join(''),
     pointHtml(code) { return this.html().match(/<section class="cp-tile"[\s\S]*?<\/section>/g).find(html => html.includes(`data-cp-code="${code}"`)); },
-    requests: () => requests, total: () => Number(document.getElementById('mon-total').textContent) };
+    requests: () => requests, total: () => Number(document.getElementById('mon-total').textContent)
+  };
 }
 
-const tree = [{ id: 42, name: 'Real station', address: '', status: 'active', charge_points: [
-  { id: 1, code: 'REAL-01', status: 'online', ocpp_status: 'Available', connectors: [
-    { connector_id: 1, status: 'rảnh', ocpp_status: 'Available' },
-  ] },
-] }];
+const tree = [{
+  id: 42, name: 'Real station', address: '', status: 'active', charge_points: [
+    {
+      id: 1, code: 'REAL-01', status: 'online', ocpp_status: 'Available', connectors: [
+        { connector_id: 1, status: 'rảnh', ocpp_status: 'Available' },
+      ]
+    },
+  ]
+}];
 
 test('empty API tree stays empty, without invented demo points', async () => {
   const page = monitoring(async () => []);
@@ -127,27 +142,39 @@ test('SSE reconnect reloads the complete tree and status events update connector
   page.callbacks._connected();
   await flush();
   assert.equal(page.requests(), 2);
-  page.callbacks.status_update({ station_id: 42, charge_points: [{ ...tree[0].charge_points[0], connectors: [
-    { connector_id: 1, status: 'bận', ocpp_status: 'Charging' },
-  ] }] });
+  page.callbacks.status_update({
+    station_id: 42, charge_points: [{
+      ...tree[0].charge_points[0], connectors: [
+        { connector_id: 1, status: 'bận', ocpp_status: 'Charging' },
+      ]
+    }]
+  });
   assert.equal(Number(page.document.getElementById('mon-charging').textContent), 1);
 });
 
 function mixedTree() {
-  const ready = { code: 'CP_AEON_01', status: 'online', ocpp_status: 'Available', connectors: [
-    { connector_id: 1, status: 'rảnh', ocpp_status: 'Available', error_code: 'NoError' },
-  ] };
-  const fault = { code: 'CP_AEON_FAULT', status: 'online', ocpp_status: 'Faulted', connectors: [
-    { connector_id: 1, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
-    { connector_id: 2, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
-  ] };
+  const ready = {
+    code: 'CP_AEON_01', status: 'online', ocpp_status: 'Available', connectors: [
+      { connector_id: 1, status: 'rảnh', ocpp_status: 'Available', error_code: 'NoError' },
+    ]
+  };
+  const fault = {
+    code: 'CP_AEON_FAULT', status: 'online', ocpp_status: 'Faulted', connectors: [
+      { connector_id: 1, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
+      { connector_id: 2, status: 'lỗi', ocpp_status: 'Faulted', error_code: 'GroundFailure' },
+    ]
+  };
   return [
     { id: 7, name: 'AEON Mall', status: 'active', charge_points: [ready, fault] },
-    { id: 8, name: 'Thủ Thiêm', status: 'maintenance', charge_points: [
-      { code: 'CP_DEMO_MAINT_01', status: 'online', ocpp_status: 'Unavailable', connectors: [
-        { connector_id: 1, status: 'lỗi', ocpp_status: 'Unavailable', error_code: 'NoError' },
-      ] },
-    ] },
+    {
+      id: 8, name: 'Thủ Thiêm', status: 'maintenance', charge_points: [
+        {
+          code: 'CP_DEMO_MAINT_01', status: 'online', ocpp_status: 'Unavailable', connectors: [
+            { connector_id: 1, status: 'lỗi', ocpp_status: 'Unavailable', error_code: 'NoError' },
+          ]
+        },
+      ]
+    },
     { id: 9, name: 'Vincom', status: 'active', charge_points: [{ ...structuredClone(ready), code: 'CP_VINCOM_01' }] },
   ];
 }
@@ -205,9 +232,11 @@ for (const [wanted, raw, connection] of [
 ]) {
   test(`${wanted} filter excludes other points in the same station`, async () => {
     const data = mixedTree();
-    const target = { code: 'MATCH', status: connection, ocpp_status: raw, connectors: [
-      { connector_id: 1, status: 'unknown', ocpp_status: raw },
-    ] };
+    const target = {
+      code: 'MATCH', status: connection, ocpp_status: raw, connectors: [
+        { connector_id: 1, status: 'unknown', ocpp_status: raw },
+      ]
+    };
     data[0].charge_points = [data[0].charge_points[1], target];
     data.splice(1);
     if (wanted === 'online') data[0].charge_points[0].status = 'offline';
@@ -387,12 +416,13 @@ function protectedForm(onSubmit) {
   button.textContent = 'Lưu';
   form.querySelector = () => button;
   const window = {};
-  const context = vm.createContext({ window, document: { createElement: element },
+  const context = vm.createContext({
+    window, document: { createElement: element },
     FormData: class { entries() { return [['name', 'Station']]; } },
   });
   vm.runInContext(read('form_guard.js'), context);
-  window.FormGuard.protect(form, onSubmit, { keepDisabledOnSuccess: true, onError() {} });
-  return { button, submit: () => form.handlers.submit({ preventDefault() {} }) };
+  window.FormGuard.protect(form, onSubmit, { keepDisabledOnSuccess: true, onError() { } });
+  return { button, submit: () => form.handlers.submit({ preventDefault() { } }) };
 }
 
 test('form rejects simultaneous submits and stays disabled after successful save', async () => {
@@ -420,14 +450,19 @@ test('form becomes usable again after save failure', async () => {
 });
 
 function restartClient(reset) {
-  const document = { body: element(), createElement: element, handlers: {},
-    addEventListener(name, fn) { this.handlers[name] = fn; } };
+  const document = {
+    body: element(), createElement: element, handlers: {},
+    addEventListener(name, fn) { this.handlers[name] = fn; }
+  };
   const window = {};
-  vm.runInContext(read('restart_button.js'), vm.createContext({ document, window,
-    ApiClient: { resetChargePoint: reset }, showToast() {},
+  vm.runInContext(read('restart_button.js'), vm.createContext({
+    document, window,
+    ApiClient: { resetChargePoint: reset }, showToast() { },
   }));
-  return { module: window.RestartButton, document,
-    confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click() };
+  return {
+    module: window.RestartButton, document,
+    confirm: () => document.body.children[0].querySelector('#restart-confirm-ok').handlers.click()
+  };
 }
 
 test('Reset requires confirmation and allows only one pending command per point', async () => {
@@ -523,7 +558,7 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
   class FakeEventSource {
     static CLOSED = 2;
     constructor(url, options) { this.url = url; this.options = options; this.readyState = 0; this.closes = 0; instances.push(this); }
-    addEventListener() {}
+    addEventListener() { }
     close() { this.closes++; this.readyState = FakeEventSource.CLOSED; }
   }
   const window = {};
@@ -547,8 +582,12 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
 
 function authClient(fetchResponse) {
   const redirects = [];
-  const window = { location: { origin: 'http://localhost:8000', pathname: '/monitoring',
-    search: '?status=fault', replace: url => redirects.push(url) } };
+  const window = {
+    location: {
+      origin: 'http://localhost:8000', pathname: '/monitoring',
+      search: '?status=fault', replace: url => redirects.push(url)
+    }
+  };
   const context = vm.createContext({ window, fetch: fetchResponse, URL, URLSearchParams });
   vm.runInContext(read('api_client.js'), context);
   return { api: window.ApiClient, redirects };
@@ -562,25 +601,32 @@ function auditPage(fetchResponse, filters = {}) {
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
   const toasts = [];
-  const window = { location: { pathname: '/audit', search: '', replace() {} } };
-  const context = vm.createContext({ document, window, fetch: fetchResponse, URLSearchParams,
+  const window = { location: { pathname: '/audit', search: '', replace() { } } };
+  const context = vm.createContext({
+    document, window, fetch: fetchResponse, URLSearchParams,
     FormData: class { entries() { return Object.entries(filters); } },
     showToast: message => toasts.push(message),
   });
   vm.runInContext(read('api_client.js'), context);
   vm.runInContext(read('pages/audit.js'), context);
-  return { document, api: window.ApiClient, toasts,
+  return {
+    document, api: window.ApiClient, toasts,
     load: () => document.handlers.DOMContentLoaded(),
-    html: () => document.getElementById('audit-tbody').innerHTML };
+    html: () => document.getElementById('audit-tbody').innerHTML
+  };
 }
 
-const auditResponse = data => ({ ok: true, status: 200,
-  headers: { get: () => 'application/json' }, json: async () => data });
+const auditResponse = data => ({
+  ok: true, status: 200,
+  headers: { get: () => 'application/json' }, json: async () => data
+});
 
 test('T-53 anomaly list uses server data and filters, without fabricated sessions', async () => {
   const requests = [];
-  const data = { items: [{ id: 731, charge_point_code: 'OFFLINE-REAL', anomaly_reason: 'offline' }],
-    total: 1, offline_count: 1, negative_kwh_count: 0 };
+  const data = {
+    items: [{ id: 731, charge_point_code: 'OFFLINE-REAL', anomaly_reason: 'offline' }],
+    total: 1, offline_count: 1, negative_kwh_count: 0
+  };
   const client = authClient(async (url, config) => {
     requests.push({ url, config });
     return auditResponse(data);
@@ -593,9 +639,26 @@ test('T-53 anomaly list uses server data and filters, without fabricated session
 });
 
 test('T-53 anomaly list propagates API errors instead of returning sample data', async () => {
-  const client = authClient(async () => ({ ok: false, status: 500,
-    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Anomalies unavailable' }) }));
+  const client = authClient(async () => ({
+    ok: false, status: 500,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Anomalies unavailable' })
+  }));
   await assert.rejects(client.api.listAnomalies(), error => error.status === 500 && error.message === 'Anomalies unavailable');
+});
+
+test('SCRUM-72: API errors preserve wallet blocking details for the start screen', async () => {
+  const client = authClient(async () => ({
+    ok: false, status: 409,
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      detail: 'Số dư ví cần tối thiểu 50,000 đồng.',
+      code: 'wallet_below_minimum', minimum_required_vnd: 50_000, top_up_url: '/wallet'
+    })
+  }));
+  await assert.rejects(client.api.remoteStartChargePoint('CP01', 1, 'TAG'), error =>
+    error.status === 409 && error.code === 'wallet_below_minimum' &&
+    error.minimum_required_vnd === 50_000 && error.top_up_url === '/wallet'
+  );
 });
 
 test('audit displays the real Reset event returned by the server', async () => {
@@ -605,10 +668,12 @@ test('audit displays the real Reset event returned by the server', async () => {
     requests.push({ url, config });
     if (config.method === 'POST') {
       const body = JSON.parse(config.body);
-      items.push({ id: 73, created_at: '2026-10-08T08:00:00Z',
+      items.push({
+        id: 73, created_at: '2026-10-08T08:00:00Z',
         actor_name: 'Operator real', actor_email: 'operator@example.test',
         action: 'charge_point.reset.accepted', object_type: 'charge_point', object_id: '31',
-        charge_point_code: 'RESET-NEW-03', details: { reset_type: body.type, outcome: 'Accepted' } });
+        charge_point_code: 'RESET-NEW-03', details: { reset_type: body.type, outcome: 'Accepted' }
+      });
       return auditResponse({ status: 'Accepted' });
     }
     return auditResponse({ items, total: items.length, page: 1, page_size: 50 });
@@ -622,10 +687,11 @@ test('audit displays the real Reset event returned by the server', async () => {
   assert.equal(requests[1].config.method, 'GET');
   assert.equal(requests[1].config.credentials, 'include');
   assert.match(page.html(), /RESET-NEW-03/);
-  assert.match(page.html(), /Reset trụ thành công/);
+  assert.match(page.html(), /Khởi động lại trụ \(Reset\)/);
+  assert.match(page.html(), /Chấp nhận/);
   assert.match(page.html(), /Operator real/);
   assert.match(page.html(), /operator@example.test/);
-  assert.match(page.html(), /Hard/);
+  assert.deepEqual(JSON.parse(requests[0].config.body), { type: 'Hard' });
   assert.equal(page.document.getElementById('audit-count').textContent, '1 sự kiện');
   assert.doesNotMatch(page.html(), /CP_VIN_01|CP_LOT_02/);
 });
@@ -647,7 +713,7 @@ test('audit sends filters and pagination to the server and resets page on filter
   assert.equal(requests[1].get('page'), '2');
   assert.equal(page.document.getElementById('audit-page-label').textContent, 'Trang 2 / 2');
   filters.charge_point_code = 'OTHER-POINT';
-  page.document.getElementById('audit-filters').handlers.submit({ preventDefault() {} }); await flush();
+  page.document.getElementById('audit-filters').handlers.submit({ preventDefault() { } }); await flush();
   assert.equal(requests[2].get('page'), '1');
   assert.equal(requests[2].get('charge_point_code'), 'OTHER-POINT');
 });
@@ -655,10 +721,12 @@ test('audit sends filters and pagination to the server and resets page on filter
 test('audit shows actual empty and failed API responses without sample events', async () => {
   const empty = auditPage(async () => auditResponse({ items: [], total: 0 }));
   empty.load(); await flush();
-  assert.match(empty.html(), /Chưa có nhật ký phù hợp/);
+  assert.match(empty.html(), /Không tìm thấy sự kiện phù hợp/);
   assert.equal(empty.document.getElementById('audit-count').textContent, '0 sự kiện');
-  const failed = auditPage(async () => ({ ok: false, status: 500,
-    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Audit unavailable' }) }));
+  const failed = auditPage(async () => ({
+    ok: false, status: 500,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Audit unavailable' })
+  }));
   failed.load(); await flush();
   assert.match(failed.html(), /Audit unavailable/);
   assert.deepEqual(failed.toasts, ['Audit unavailable']);
@@ -666,8 +734,10 @@ test('audit shows actual empty and failed API responses without sample events', 
 });
 
 test('protected API 401 preserves the requested page; failed login stays on the form', async () => {
-  const client = authClient(async () => ({ ok: false, status: 401,
-    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Unauthorized' }) }));
+  const client = authClient(async () => ({
+    ok: false, status: 401,
+    headers: { get: () => 'application/json' }, json: async () => ({ detail: 'Unauthorized' })
+  }));
   await assert.rejects(client.api.get('/auth/me'), error => error.status === 401);
   assert.deepEqual(client.redirects, ['/login?next=%2Fmonitoring%3Fstatus%3Dfault']);
   client.redirects.length = 0;
@@ -679,8 +749,10 @@ test('API 204 has no body and AbortSignal cancellation is preserved', async () =
   const controller = new AbortController();
   const client = authClient(async (_, config) => {
     assert.equal(config.signal, controller.signal);
-    return { ok: true, status: 204, headers: { get: () => '' },
-      text: async () => { throw Error('204 must not parse a body'); } };
+    return {
+      ok: true, status: 204, headers: { get: () => '' },
+      text: async () => { throw Error('204 must not parse a body'); }
+    };
   });
   assert.equal(await client.api.get('/sessions/current', { signal: controller.signal }), null);
   const aborted = new DOMException('Cancelled', 'AbortError');
@@ -709,17 +781,24 @@ function loginPage(login, search = '') {
   form.elements.password.value = 'ValidPassword123!'; form.elements.password.type = 'password';
   const button = element(); button.textContent = 'Đăng nhập'; form.querySelector = () => button;
   const destinations = [];
-  const window = { location: { origin: 'http://localhost:8000', pathname: '/login', search,
-    assign: url => destinations.push(url), replace: url => destinations.push(url) } };
-  const context = vm.createContext({ document, window, URL, URLSearchParams, ApiClient: { login },
+  const window = {
+    location: {
+      origin: 'http://localhost:8000', pathname: '/login', search,
+      assign: url => destinations.push(url), replace: url => destinations.push(url)
+    }
+  };
+  const context = vm.createContext({
+    document, window, URL, URLSearchParams, ApiClient: { login },
     FormData: class { entries() { return Object.entries(form.elements).map(([name, input]) => [name, input.value]); } },
   });
   vm.runInContext(read('auth_guard.js'), context);
   context.AuthGuard = window.AuthGuard;
   vm.runInContext(read('form_guard.js'), context);
   vm.runInContext(read('pages/login.js'), context);
-  return { document, button, destinations, guard: window.AuthGuard,
-    submit: () => form.handlers.submit({ preventDefault() {} }) };
+  return {
+    document, button, destinations, guard: window.AuthGuard,
+    submit: () => form.handlers.submit({ preventDefault() { } })
+  };
 }
 
 test('next accepts permitted local routes and rejects external or unauthorized destinations', () => {
@@ -806,6 +885,9 @@ async function startPage(options = {}) {
   const tag = controls.querySelector('[data-start-tag]');
   const message = controls.querySelector('[data-start-message]');
   button.dataset.cpCode = 'REAL-01';
+  select.selectedOptions = [
+    { dataset: { connectorDbId: '101' } }
+  ];
   const timers = new Map(); let timerId = 0; let now = Date.now();
   class Clock extends Date { static now() { return now; } }
   const calls = []; const redirects = [];
@@ -813,13 +895,16 @@ async function startPage(options = {}) {
     startControls: [controls], redirects,
     remoteStart: async (...args) => { calls.push(args); return options.remoteStart ? options.remoteStart(...args) : { status: 'Rejected' }; },
     listSessions: options.listSessions, currentSession: options.currentSession,
+    createDriverRemoteStart: options.createDriverRemoteStart,
+    getDriverRemoteStart: options.getDriverRemoteStart,
     setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, time: now + ms }); return id; },
     clearTimeout: id => timers.delete(id),
   });
-  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['driver'] });
+  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['operator'] });
   await flush(); page.openDetail();
   select.value = '1'; select.handlers.change(); tag.value = 'CARD-01'; tag.handlers.input();
-  return { ...page, select, button, tag, message, calls, timers, redirects,
+  return {
+    ...page, select, button, tag, message, calls, timers, redirects,
     click: () => button.handlers.click(),
     elapseWithoutTimers(ms) { now += ms; },
     async advance(ms) {
@@ -859,6 +944,26 @@ for (const [status, expected] of [[409, /đang bận/], [504, /Hết thời gian
   });
 }
 
+test('SCRUM-72: low wallet tells the driver why and links directly to top up', async () => {
+  const page = await startPage({ remoteStart: async () => {
+    throw {
+      status: 409,
+      code: 'wallet_below_minimum',
+      message: 'Số dư ví cần tối thiểu 50,000 đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.',
+      minimum_required_vnd: 50_000,
+      top_up_url: '/wallet',
+    };
+  } });
+
+  await page.click();
+
+  assert.match(page.message.textContent, /Số dư ví cần tối thiểu 50,000 đồng/);
+  assert.equal(page.message.children.length, 1);
+  assert.equal(page.message.children[0].href, '/wallet');
+  assert.equal(page.message.children[0].textContent, 'Nạp tiền vào ví');
+  assert.equal(page.button.disabled, false);
+});
+
 test('SCRUM-191: timeout ignores a late Accepted response and never navigates', async () => {
   let resolve;
   const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
@@ -868,24 +973,44 @@ test('SCRUM-191: timeout ignores a late Accepted response and never navigates', 
   assert.equal(page.timers.size, 0);
 });
 
-test('SCRUM-194: only a new session on the chosen point and connector navigates to T-48', async () => {
-  let session = { id: 1, charge_point_code: 'OTHER', connector_number: 1, started_at: new Date().toISOString() };
-  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }), currentSession: async () => session });
-  await page.click(); assert.deepEqual(page.redirects, []);
-  session = { ...session, charge_point_code: 'REAL-01', connector_number: 2 };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session = { ...session, connector_number: 1, started_at: '2000-01-01T00:00:00Z' };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session.started_at = new Date(Date.now() + 10000).toISOString();
-  await page.advance(2000); assert.deepEqual(page.redirects, ['/sessions/mine']);
-  assert.match(page.message.textContent, /đã bắt đầu/); assert.equal(page.timers.size, 0);
+test('SCRUM-95: driver waits for its remote-start request before navigating', async () => {
+  let request = {
+    id: 95, status: 'waiting_start', seconds_left: 60
+  };
+  const page = await startPage({
+    roles: ['driver'],
+    createDriverRemoteStart: async connectorId => {
+      assert.equal(connectorId, 101);
+      return request;
+    },
+    getDriverRemoteStart: async requestId => {
+      assert.equal(requestId, 95);
+      return request;
+    }
+  });
+
+  page.tag.value = '';
+  await page.click();
+  assert.deepEqual(page.redirects, []);
+  assert.equal(page.button.disabled, true);
+
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, []);
+
+  request = { id: 95, status: 'started', session_id: 123 };
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, ['/sessions/mine']);
+  assert.match(page.message.textContent, /đã bắt đầu/);
+  assert.equal(page.timers.size, 0);
 });
 
 test('SCRUM-191: delayed deadline timer cannot accept a response after 60 seconds', async () => {
   let resolve;
   let polls = 0;
-  const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }),
-    currentSession: async () => { polls++; return null; } });
+  const page = await startPage({
+    remoteStart: () => new Promise(done => { resolve = done; }),
+    currentSession: async () => { polls++; return null; }
+  });
   const pending = page.click();
   page.elapseWithoutTimers(60000);
   resolve({ status: 'Accepted' }); await pending;
@@ -897,8 +1022,10 @@ test('SCRUM-191: delayed deadline timer cannot accept a response after 60 second
 
 test('SCRUM-191: delayed session response after deadline cannot report success', async () => {
   let resolve;
-  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }),
-    currentSession: () => new Promise(done => { resolve = done; }) });
+  const page = await startPage({
+    remoteStart: async () => ({ status: 'Accepted' }),
+    listSessions: () => new Promise(done => { resolve = done; })
+  });
   const pending = page.click(); await flush();
   page.elapseWithoutTimers(60000);
   resolve({ charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() });
@@ -939,14 +1066,18 @@ test('SCRUM-191: an old response after timeout cannot finish or replace a retry'
 });
 
 test('SCRUM-194: operator uses visible session list and navigates to audit only after real session', async () => {
-  const page = await startPage({ roles: ['operator'], remoteStart: async () => ({ status: 'Accepted' }),
-    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] }) });
+  const page = await startPage({
+    roles: ['operator'], remoteStart: async () => ({ status: 'Accepted' }),
+    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] })
+  });
   await page.click(); assert.deepEqual(page.redirects, ['/audit']); assert.equal(page.timers.size, 0);
 });
 
 test('SCRUM-194: station owner stays on permitted detail page after session starts', async () => {
-  const page = await startPage({ roles: ['station_owner'], remoteStart: async () => ({ status: 'Accepted' }),
-    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] }) });
+  const page = await startPage({
+    roles: ['station_owner'], remoteStart: async () => ({ status: 'Accepted' }),
+    listSessions: async () => ({ items: [{ id: 2, charge_point_code: 'REAL-01', connector_number: 1, started_at: new Date().toISOString() }] })
+  });
   await page.click(); assert.deepEqual(page.redirects, []); assert.match(page.message.textContent, /đã bắt đầu/);
 });
 
@@ -1023,7 +1154,7 @@ test('SCRUM-194: closing and reopening drawer during pending request preserves c
 });
 
 test('SCRUM-194: leaving page (pagehide) clears pending timers and aborts in-flight request', async () => {
-  const page = await startPage({ remoteStart: () => new Promise(() => {}) });
+  const page = await startPage({ remoteStart: () => new Promise(() => { }) });
   page.click();
   await flush();
   assert.equal(page.timers.size, 1);
@@ -1035,28 +1166,56 @@ test('SCRUM-194: leaving page (pagehide) clears pending timers and aborts in-fli
   assert.equal(page.calls[0][3].signal.aborted, true);
 });
 
-function sessionPage(getSessions) {
+function sessionPage(getSessions, options = {}) {
   const ids = new Map();
   const document = {
     handlers: {},
     getElementById(id) {
-      if (!ids.has(id)) { const el = element(); el.style = {}; ids.set(id, el); }
+      if (!ids.has(id)) {
+        const el = element();
+        el.style = {};
+        ids.set(id, el);
+      }
       return ids.get(id);
     },
     createElement: element,
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
-  document.getElementById('sessions-page').dataset = { scope: 'mine', canRemoteStop: 'false', liveUpdates: 'false' };
+  document.getElementById('sessions-page').dataset = {
+    scope: 'mine',
+    canRemoteStop: options.stop ? 'true' : 'false',
+    liveUpdates: options.liveUpdates || options.stop ? 'true' : 'false',
+  };
+  const sessionRows = options.row ? [options.row] : [];
+  document.getElementById('sessions-tbody').querySelectorAll = selector =>
+    selector === '[data-session-id]' ? sessionRows : [];
+
   const calls = [], timers = [], toasts = [];
-  const api = { listMySessions: async params => { calls.push(params); return getSessions(); },
-    getCurrentSession: async () => null };
-  vm.runInContext(read('pages/my_session.js'), vm.createContext({ document, window: {}, ApiClient: api,
-    Date, Intl, console, setTimeout, clearTimeout, clearInterval() {},
+  const callbacks = {}, cleared = [];
+  const sse = {
+    connect() { },
+    on(name, fn) { callbacks[name] = fn; },
+  };
+  const api = {
+    listMySessions: async params => {
+      calls.push(params);
+      return getSessions();
+    },
+    getCurrentSession: options.currentSession || (async () => null),
+    getSessionInvoice: options.getSessionInvoice || (async () => ({
+      session_id: 0, status: 'pending', message: 'Hóa đơn sẽ có sau khi phiên sạc kết thúc.'
+    })),
+    remoteStop: options.stop,
+  };
+  vm.runInContext(read('pages/my_session.js'), vm.createContext({
+    document, window: { SseClient: sse }, SseClient: sse, ApiClient: api,
+    Date: options.clock || Date,
+    Intl, console, setTimeout, clearTimeout, clearInterval(id) { cleared.push(id); },
     setInterval: fn => { timers.push(fn); return timers.length; },
     showToast: message => toasts.push(message),
   }));
   document.handlers.DOMContentLoaded();
-  return { document, calls, timers, toasts };
+  return { document, calls, timers, toasts, callbacks, cleared };
 }
 
 test('driver session page uses the API and stays empty without fabricated sessions', async () => {
@@ -1070,8 +1229,10 @@ test('driver session page uses the API and stays empty without fabricated sessio
 });
 
 test('driver session banner displays API energy and never increments energy with a timer', async () => {
-  const session = { id: 123, station_name: 'API station', charge_point_code: 'API-01', connector_number: 1,
-    started_at: '2026-10-06T00:00:00Z', status: 'active', live_kwh: 1.234 };
+  const session = {
+    id: 123, station_name: 'API station', charge_point_code: 'API-01', connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z', status: 'active', live_kwh: 1.234
+  };
   const page = sessionPage(async () => ({ items: [session], total: 1 }));
   await flush();
   assert.match(page.document.getElementById('sessions-tbody').innerHTML, /API-01/);
@@ -1091,6 +1252,67 @@ test('driver session API failure reports the error without displaying sample ses
   assert.equal(page.timers.length, 0);
 });
 
+test('SCRUM-66: session detail reads the persisted invoice and renders line items and total', async () => {
+  const row = element();
+  row.dataset.sessionId = '123';
+  const invoiceCalls = [];
+  const page = sessionPage(async () => ({
+    items: [{ id: 123, status: 'completed', ended_at: '2026-10-12T01:00:00Z', cost_vnd: 36_000 }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => {
+      invoiceCalls.push(id);
+      return {
+        invoice_id: 10, session_id: id, status: 'issued', total_vnd: 36_000,
+        rounding_rule: 'Làm tròn từng đoạn.',
+        segments: [{
+          service_date: '2026-10-11', tariff_name: 'Tariff đêm', band: 'Thấp điểm',
+          from: '2026-10-11T23:00:00+07:00', to: '2026-10-12T00:00:00+07:00',
+          energy_kwh: '6', price_vnd_per_kwh: 3_000, amount_vnd: 18_000,
+        }, {
+          service_date: '2026-10-12', tariff_name: 'Tariff ngày', band: 'Cao điểm',
+          from: '2026-10-12T00:00:00+07:00', to: '2026-10-12T01:00:00+07:00',
+          energy_kwh: '4', price_vnd_per_kwh: 4_500, amount_vnd: 18_000,
+        }],
+      };
+    },
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const details = page.document.getElementById('session-detail-body');
+  assert.deepEqual(invoiceCalls, [123]);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /Tariff đêm/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /2026-10-12/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /36\.000/);
+});
+
+test('SCRUM-66: a session needing review shows its message without a provisional total', async () => {
+  const row = element();
+  row.dataset.sessionId = '124';
+  const page = sessionPage(async () => ({
+    items: [{ id: 124, status: 'needs_review', ended_at: '2026-10-12T01:00:00Z', cost_vnd: null }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => ({
+      session_id: id, status: 'pending_review',
+      message: 'Phiên sạc đang chờ xử lý; hóa đơn chưa sẵn sàng.',
+    }),
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const invoice = page.document.getElementById('session-detail-body').querySelector('#session-invoice-detail').innerHTML;
+  assert.match(invoice, /đang chờ xử lý/);
+  assert.doesNotMatch(invoice, /Tổng cộng|\d+\.\d{3} ₫/);
+});
+
 const reconciliationSample = JSON.parse(fs.readFileSync(
   path.join(root, 'frontend/static/data/kwh_reconciliation_sample.json'), 'utf8'));
 const inventoryTree = [
@@ -1098,9 +1320,11 @@ const inventoryTree = [
   { id: 20, name: 'AEON Mall', charge_points: ['CP_AEON_01', 'CP_AEON_FAULT'] },
   { id: 30, name: 'Thủ Thiêm', charge_points: ['CP_DEMO_MAINT_01'] },
   { id: 40, name: 'Thử nghiệm OCPP', charge_points: Array.from({ length: 20 }, (_, i) => `SIM-${String(i + 1).padStart(2, '0')}`) },
-].map(station => ({ ...station, charge_points: station.charge_points.map((code, i) => ({
-  id: station.id * 10 + i, code, connectors: [{ connector_id: 1 }],
-})) }));
+].map(station => ({
+  ...station, charge_points: station.charge_points.map((code, i) => ({
+    id: station.id * 10 + i, code, connectors: [{ connector_id: 1 }],
+  }))
+}));
 
 function reconciliationPage(tree = inventoryTree, options = {}) {
   const ids = new Map();
@@ -1113,24 +1337,35 @@ function reconciliationPage(tree = inventoryTree, options = {}) {
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
   const requests = [], downloads = [];
-  const context = vm.createContext({ document, console, Date, downloads,
+  const context = vm.createContext({
+    document, console, Date, downloads, URLSearchParams,
+    window: { location: { pathname: '/sessions/kwh-reconciliation', search: '', replace() { } } },
     fetch: async url => {
       requests.push(url);
       if (url === '/api/reconciliation/kwh') {
-        return { ok: Boolean(options.report), status: options.apiStatus ?? (options.report ? 200 : 404),
-          json: async () => options.report };
+        if (options.apiNetworkFailure) throw new Error('Network unavailable');
+        return {
+          ok: Boolean(options.report), status: options.apiStatus ?? (options.report ? 200 : 404),
+          headers: { get: () => 'application/json' },
+          json: async () => options.report ?? { detail: 'Không có quyền truy cập' }
+        };
       }
       if (url === '/static/data/kwh_reconciliation_sample.json') {
         return { ok: true, json: async () => structuredClone(options.sample ?? reconciliationSample) };
       }
       assert.equal(url, '/api/monitoring/tree');
-      return { ok: !options.inventoryFailure, json: async () => structuredClone(tree) };
+      return {
+        ok: !options.inventoryFailure, status: options.inventoryFailure ? 503 : 200,
+        headers: { get: () => 'application/json' }, json: async () => structuredClone(tree)
+      };
     },
   });
+  vm.runInContext(read('api_client.js'), context);
   vm.runInContext(read('pages/kwh_reconciliation.js'), context);
   vm.runInContext('downloadText = (text, filename, mime) => downloads.push({ text, filename, mime });', context);
   document.handlers.DOMContentLoaded();
-  return { document, requests, downloads, context,
+  return {
+    document, requests, downloads, context,
     state: name => JSON.parse(vm.runInContext(`JSON.stringify(${name})`, context)),
     html: () => document.getElementById('recon-tbody').innerHTML,
     filter(id) {
@@ -1162,11 +1397,13 @@ test('reconciliation synchronizes fixture codes and station names from the curre
 });
 
 test('renamed sample devices use registered codes and connector numbers without mutating inventory', async () => {
-  const tree = [{ id: 7, name: 'Trạm thực tế', charge_points: [
-    { id: 91, code: 'NEW-01', connectors: [{ connector_id: 3 }] },
-    { id: 92, code: 'NEW-02', connectors: [{ connector_id: 2 }] },
-    { id: 93, code: 'NO-CONNECTORS', connectors: [] },
-  ] }];
+  const tree = [{
+    id: 7, name: 'Trạm thực tế', charge_points: [
+      { id: 91, code: 'NEW-01', connectors: [{ connector_id: 3 }] },
+      { id: 92, code: 'NEW-02', connectors: [{ connector_id: 2 }] },
+      { id: 93, code: 'NO-CONNECTORS', connectors: [] },
+    ]
+  }];
   const original = JSON.stringify(tree);
   const page = reconciliationPage(tree);
   await flush();
@@ -1244,6 +1481,97 @@ test('reconciliation authorization failures do not fall back to sample data', as
   const page = reconciliationPage(inventoryTree, { apiStatus: 403 });
   await flush();
   assert.equal(page.requests.length, 1);
-  assert.match(page.html(), /đăng nhập lại/);
+  assert.match(page.html(), /Không có quyền truy cập/);
   assert.deepEqual(page.state('allSessions'), []);
+});
+
+test('reconciliation network failures do not turn sample energy into a successful report', async () => {
+  const page = reconciliationPage(inventoryTree, { apiNetworkFailure: true });
+  await flush();
+  assert.equal(page.requests.length, 1);
+  assert.match(page.html(), /Không thể kết nối đến máy chủ/);
+  assert.deepEqual(page.state('allSessions'), []);
+  assert.doesNotMatch(page.html(), /CP01|CP_VINCOM/);
+});
+test('SCRUM-94: reconnect refreshes active session energy', async () => {
+  let session = {
+    id: 123,
+    station_name: 'API station',
+    charge_point_code: 'API-01',
+    connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z',
+    status: 'active',
+    live_kwh: 1.234,
+  };
+  const page = sessionPage(
+    async () => ({ items: [session], total: 1 }),
+    { liveUpdates: true }
+  );
+  await flush();
+  assert.match(
+    page.document.getElementById('active-kwh').innerHTML,
+    /1\.234/
+  );
+
+  session = { ...session, live_kwh: 2.345 };
+  page.callbacks._connected();
+  await flush();
+
+  assert.equal(page.calls.length, 2);
+  assert.match(
+    page.document.getElementById('active-kwh').innerHTML,
+    /2\.345/
+  );
+});
+
+test('SCRUM-94: duration displays immediately and advances each second', async () => {
+  let now = Date.parse('2026-10-06T00:01:00Z');
+  class Clock extends Date {
+    static now() { return now; }
+  }
+  const session = {
+    id: 123,
+    station_name: 'API station',
+    charge_point_code: 'API-01',
+    connector_number: 1,
+    started_at: '2026-10-06T00:00:00Z',
+    status: 'active',
+    live_kwh: 1.234,
+  };
+  const page = sessionPage(
+    async () => ({ items: [session], total: 1 }),
+    { clock: Clock }
+  );
+  await flush();
+
+  const duration = page.document.getElementById('active-duration');
+  const initial = duration.textContent;
+  assert.ok(initial && initial.trim());
+  assert.equal(page.timers.length, 1);
+
+  now += 1000;
+  page.timers[0]();
+  assert.notEqual(duration.textContent, initial);
+});
+
+
+test('SCRUM-58: completion cancels countdown and ignores late command response', async () => {
+  let resolve;
+  const response = new Promise(done => { resolve = done; });
+  let session = { id: 123, status: 'active', live_kwh: 0 };
+  const page = sessionPage(async () => ({ items: [session], total: 1 }), { stop: () => response });
+  await flush();
+  page.document.getElementById('active-stop-btn').onclick();
+  const pending = page.document.getElementById('remote-stop-modal-confirm').handlers.click();
+  const countdownId = page.timers.length;
+  page.callbacks.session_update({ session_id: 999, status: 'completed' });
+  assert.ok(!page.cleared.includes(countdownId));
+  session = { ...session, status: 'completed' };
+  page.callbacks.session_update({ session_id: 123, status: 'completed' });
+  assert.ok(page.cleared.includes(countdownId));
+  resolve({ status: 'Accepted', message: 'Still waiting' });
+  await pending;
+  await flush();
+  assert.ok(!page.toasts.includes('Still waiting'));
+  assert.ok(!page.toasts.some(message => message.includes('quá 2 phút')));
 });

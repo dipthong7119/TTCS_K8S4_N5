@@ -1,57 +1,740 @@
-﻿/* pages/wallet.css */
+/* pages/wallet.css — Giao diện Ví điện tử, Nạp tiền Sandbox (SCRUM-195) & Lịch sử (SCRUM-200) */
+
 .wallet-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: var(--space-5);
   align-items: start;
 }
-@media (max-width: 900px) {
-  .wallet-layout { grid-template-columns: 1fr; }
-}
-.wallet-right { display: flex; flex-direction: column; gap: var(--space-5); }
-.wallet-tariff-note { margin-bottom: var(--space-5); padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
-.wallet-tariff-note__heading { display: flex; justify-content: space-between; color: var(--color-text-secondary); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: .06em; }
-.wallet-tariff-note__bands { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-3) 0; }
-.wallet-tariff-note__bands span { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); align-items: center; font-size: var(--font-size-sm); }
-.wallet-tariff-note__bands b { font-weight: 500; color: var(--color-text-secondary); }
-.wallet-tariff-note__bands em { color: var(--color-text); font-style: normal; font-weight: 700; }
-.wallet-tariff-note > p { color: var(--color-text-muted); font-size: var(--font-size-xs); }
 
+@media (max-width: 960px) {
+  .wallet-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wallet-left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.wallet-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.wallet-tariff-note {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.wallet-tariff-note__heading {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.wallet-tariff-note__bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin: var(--space-3) 0;
+}
+
+.wallet-tariff-note__bands span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+.wallet-tariff-note__bands b {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.wallet-tariff-note__bands em {
+  color: var(--color-text);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.wallet-tariff-note > p {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  margin: 0;
+}
+
+/* Balance Card */
 .wallet-balance-card {
-  background: linear-gradient(145deg, hsl(222,47%,14%) 0%, hsl(210,60%,22%) 100%);
+  background: linear-gradient(145deg, hsl(216, 78%, 31%) 0%, hsl(228, 72%, 43%) 100%);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   box-shadow: var(--shadow-lg);
-  display: flex; flex-direction: column; gap: var(--space-6);
-  position: relative; overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsla(210,90%,54%,.2);
 }
+
 .wallet-balance-card::before {
   content: '';
-  position: absolute; top: -60px; right: -60px;
-  width: 200px; height: 200px; border-radius: 50%;
-  background: hsla(210,90%,54%,.15);
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, hsla(195, 100%, 90%, 0.28) 0%, transparent 70%);
+  pointer-events: none;
 }
-.wallet-balance-card__inner { position: relative; z-index: 1; }
-.wallet-balance-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6); }
+
+.wallet-balance-card__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.wallet-balance-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
 .wallet-balance-card__icon {
-  width: 44px; height: 44px; border-radius: var(--radius-lg);
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
   background: hsla(210,90%,54%,.25);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-primary-light);
 }
-.wallet-balance-card__icon svg { width: 22px; height: 22px; }
+
+.wallet-balance-card__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
 .wallet-balance-card__badge {
   background: hsla(210,90%,54%,.2);
   color: var(--color-primary-light);
-  font-size: var(--font-size-xs); font-weight: 600;
-  padding: 3px 10px; border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
 }
-.wallet-balance-card__label { font-size: var(--font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: hsla(215,25%,75%,.8); margin-bottom: var(--space-2); }
-.wallet-balance-card__amount { font-size: 36px; font-weight: 800; color: white; letter-spacing: -.02em; margin-bottom: var(--space-1); }
-.wallet-balance-card__sub { font-size: var(--font-size-sm); color: hsla(215,25%,75%,.7); }
-.wallet-balance-card__actions { display: flex; gap: var(--space-3); }
-.wallet-topup-note { color: hsla(215,25%,85%,.8); font-size: var(--font-size-xs); margin: 0; flex: 1; }
 
-/* Ledger entry type */
+.wallet-balance-card__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: hsla(215,25%,75%,.8);
+  margin-bottom: var(--space-2);
+}
+
+.wallet-balance-card__amount {
+  font-size: 38px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: -.02em;
+  margin-bottom: var(--space-1);
+  transition: color var(--transition-fast);
+}
+
+.wallet-balance-card__sub {
+  font-size: var(--font-size-sm);
+  color: hsla(215,25%,75%,.8);
+}
+
+.wallet-balance-card__status {
+  padding-top: var(--space-2);
+}
+
+.wallet-balance-card__actions {
+  display: flex;
+  gap: var(--space-3);
+  position: relative;
+  z-index: 1;
+}
+
+.btn--topup {
+  flex: 1;
+  background: linear-gradient(135deg, hsl(160,84%,39%) 0%, hsl(160,84%,32%) 100%);
+  border-color: hsl(160,84%,36%);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px hsla(160,84%,39%,.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.btn--topup:hover {
+  background: linear-gradient(135deg, hsl(160,84%,44%) 0%, hsl(160,84%,36%) 100%);
+}
+
+/* Stat Card Colors */
+.wallet-right > .stats-grid .stat-card--green {
+  background: hsl(145, 65%, 96%);
+  border-color: hsl(145, 42%, 82%);
+}
+
+.wallet-right > .stats-grid .stat-card--blue {
+  background: hsl(210, 90%, 97%);
+  border-color: hsl(210, 55%, 82%);
+}
+
+.stat-card--purple {
+  background: hsl(270, 70%, 97%);
+  border-color: hsl(270, 45%, 84%);
+}
+.stat-card--purple .stat-card__value {
+  color: hsl(270, 65%, 43%);
+}
+
+.wallet-quick-info.card {
+  background: hsl(210, 55%, 97%);
+  border-color: hsl(210, 35%, 85%);
+}
+
+/* Subscription promotion uses a softer green palette to distinguish it from the blue wallet card. */
+.wallet-subscription-teaser {
+  background: linear-gradient(135deg, hsl(150, 55%, 94%), hsl(165, 60%, 90%));
+  color: hsl(160, 45%, 18%);
+  border: 1px solid hsl(155, 42%, 74%);
+  box-shadow: 0 6px 18px hsla(155, 55%, 28%, 0.12);
+}
+
+.wallet-subscription-teaser__title {
+  color: hsl(160, 65%, 26%);
+}
+
+.wallet-subscription-teaser__description {
+  color: hsl(160, 25%, 28%);
+}
+
+.wallet-subscription-teaser__button {
+  background: hsl(158, 72%, 34%);
+  border-color: hsl(158, 72%, 34%);
+  color: white;
+}
+
+.wallet-subscription-teaser__button:hover {
+  background: hsl(158, 72%, 29%);
+  border-color: hsl(158, 72%, 29%);
+  color: white;
+}
+
+/* Ledger & Status Badges */
 .ledger-credit { color: var(--color-online); font-weight: 700; }
 .ledger-debit  { color: var(--color-fault);  font-weight: 700; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+.status-badge--success {
+  background: hsla(142,71%,45%,.15);
+  color: hsl(142,76%,36%);
+}
+.status-badge--pending {
+  background: hsla(38,92%,50%,.15);
+  color: hsl(38,92%,40%);
+}
+.status-badge--failed {
+  background: hsla(0,84%,60%,.15);
+  color: hsl(0,84%,45%);
+}
+
+/* Tab Navigation */
+.wallet-tabs {
+  display: inline-flex;
+  background: var(--color-surface-sunken, hsl(215,20%,95%));
+  padding: 3px;
+  border-radius: var(--radius-md);
+  gap: 2px;
+}
+
+.wallet-tab-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+}
+
+.wallet-tab-btn:hover {
+  color: var(--color-text);
+}
+
+.wallet-tab-btn.is-active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+/* Modal styles (SCRUM-195) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast) ease-out;
+  padding: var(--space-4);
+}
+
+.modal-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-dialog {
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0,0,0,0.2));
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  transform: translateY(16px);
+  transition: transform var(--transition-fast) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-backdrop.is-open .modal-dialog {
+  transform: translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-close:hover {
+  color: var(--color-text);
+}
+
+.modal-body {
+  padding: var(--space-5);
+}
+
+.modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-sunken, hsl(215,20%,97%));
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
+
+/* Preset Pill Buttons */
+.topup-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.topup-preset-btn {
+  padding: var(--space-3) var(--space-2);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.topup-preset-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: hsla(210,90%,54%,.05);
+}
+
+.topup-preset-btn.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 2px 6px hsla(210,90%,54%,.3);
+}
+
+.input-with-suffix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-suffix .form-input {
+  padding-right: 36px;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.input-suffix {
+  position: absolute;
+  right: 12px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: var(--font-size-md);
+  pointer-events: none;
+}
+
+/* Step 2 in Modal */
+.order-created-card {
+  background: var(--color-surface-sunken, hsl(210,20%,96%));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.order-created-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.order-success-icon {
+  width: 32px;
+  height: 32px;
+  background: hsl(142,71%,45%);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.order-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.order-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-detail-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.order-detail-val {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.text-green {
+  color: hsl(142,76%,36%);
+}
+
+.step2-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Sandbox Checkout Screen */
+.sandbox-checkout-wrapper {
+  max-width: 600px;
+  margin: var(--space-4) auto var(--space-8);
+}
+
+.sandbox-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+}
+
+.sandbox-card__badge {
+  display: inline-block;
+  background: hsla(210,90%,54%,.15);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-2);
+}
+
+.sandbox-card__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+}
+
+.sandbox-card__subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0 0 var(--space-5);
+}
+
+.sandbox-order-box {
+  background: var(--color-surface-sunken, hsl(215,20%,97%));
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sandbox-order-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+.sandbox-order-label {
+  color: var(--color-text-secondary);
+}
+
+.sandbox-order-amount {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  color: hsl(142,76%,36%);
+}
+
+.sandbox-methods__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+}
+
+.sandbox-methods__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.sandbox-method-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: all var(--transition-fast);
+}
+
+.sandbox-method-item.is-selected {
+  border-color: var(--color-primary);
+  background: hsla(210,90%,54%,.04);
+}
+
+.sandbox-method-icon {
+  font-size: 24px;
+}
+
+.sandbox-method-name {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.sandbox-method-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.sandbox-qr-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: hsla(210,90%,54%,.04);
+  border: 1px solid hsla(210,90%,54%,.15);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-5);
+}
+
+.sandbox-qr-mock {
+  flex-shrink: 0;
+  background: white;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 6px rgba(0,0,0,.08);
+}
+
+.sandbox-qr-instruction strong {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.sandbox-qr-instruction p {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.sandbox-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid white;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* SCRUM-74: Advanced Ledger Toolbar & Transaction Details */
+.ledger-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .ledger-toolbar {
+    width: 100%;
+    margin-top: var(--space-2);
+  }
+  .ledger-toolbar input[type="search"] {
+    width: 100% !important;
+  }
+}
+
+.ledger-detail-hero {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+
+.ledger-detail-amount {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  margin-bottom: var(--space-2);
+}
+
+.ledger-detail-type {
+  display: inline-block;
+}
+
+.btn-ledger-detail {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.btn-ledger-detail:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.clickable-row:hover {
+  background-color: hsla(210, 90%, 54%, 0.04);
+}
+
+.link-session-detail {
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.link-session-detail:hover {
+  color: var(--color-primary-light);
+}
+

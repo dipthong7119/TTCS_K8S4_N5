@@ -220,8 +220,19 @@
   }
 
   // SCRUM-190: chọn đầu nối và nút bắt đầu sạc.
+  function isDriverAccount() {
+    try {
+      const user = JSON.parse(
+        document.getElementById('auth-context')?.textContent || '{}'
+      );
+      return user.roles?.includes('driver') === true;
+    } catch {
+      return false;
+    }
+  }
   function startChargingMarkup(point) {
     const connectors = point.connectors || [];
+    const driver = isDriverAccount();
 
     const options = connectors.map(connector => {
       const available = point.status === 'online' &&
@@ -231,6 +242,7 @@
 
       return `
         <option value="${escapeHtml(connector.connector_id)}"
+                        data-connector-db-id="${escapeHtml(connector.id)}"
                 ${available ? '' : 'disabled'}>
           Đầu nối ${escapeHtml(connector.connector_id)}
           — ${available ? 'Sẵn sàng' : 'Không khả dụng'}
@@ -239,6 +251,9 @@
 
     return `
       <div class="start-charging-controls">
+            <p class="muted-text">${driver
+        ? 'Cắm súng sạc vào xe và chọn đúng đầu nối. Hệ thống dùng thẻ sạc gắn với tài khoản của bạn.'
+        : 'Cắm súng sạc vào xe, chọn đúng đầu nối và nhập mã RFID được cấp để bắt đầu sạc từ ứng dụng.'}</p>
         <label>
           Chọn đầu nối
           <select class="form-select" data-start-connector>
@@ -247,7 +262,7 @@
           </select>
         </label>
 
-        <label>Mã thẻ RFID <input class="form-input" data-start-tag maxlength="20" autocomplete="off" placeholder="Nhập mã thẻ được cấp" /></label>
+              ${driver ? '' : '<label>Mã thẻ RFID <input class="form-input" data-start-tag maxlength="20" autocomplete="off" placeholder="Nhập mã thẻ được cấp" /></label>'}
         <button class="btn btn--primary"
                 type="button"
                 data-start-charging
@@ -261,25 +276,60 @@
   }
   function renderDetailBody(station, body = document.getElementById('detail-body')) {
     if (!body) return;
+
+    let canConfigure = false;
+    try {
+      const user = JSON.parse(document.getElementById('auth-context')?.textContent || '{}');
+      canConfigure = user.roles?.some(role => ['operator', 'admin'].includes(role)) || false;
+    } catch {
+      canConfigure = false;
+    }
+
     body.innerHTML = `<p class="detail-address">${escapeHtml(station.address || '')}</p>
       <div class="detail-points">${(station.charge_points || []).map(point => {
       const lastSeen = point.last_seen_at
-        ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>` : '';
+        ? `<p class="cp-tile__last-seen">Liên lạc lần cuối: ${escapeHtml(formatLastSeen(point.last_seen_at))}</p>`
+        : '';
       const restartMarkup = canReset ? RestartButton.createMarkup(point) : '';
-      return `<section class="detail-point"><div class="detail-point__heading"><strong>${escapeHtml(point.code)}</strong>${statusBadge(pointDisplayStatus(point))}</div>
-          <p class="detail-point__meta">${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}</p>
-          ${lastSeen}<div class="connector-list">${(point.connectors || []).map(connector => connectorMarkup(connector, point.status === 'offline')).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}</div>${startChargingMarkup(point)}${restartMarkup}</section>`;
+      const configurationMarkup = canConfigure
+        ? ChargePointConfiguration.createMarkup(point.code)
+        : '';
+
+      return `<section class="detail-point">
+          <div class="detail-point__heading">
+            <strong>${escapeHtml(point.code)}</strong>
+            ${statusBadge(pointDisplayStatus(point))}
+          </div>
+          <p class="detail-point__meta">
+            ${point.vendor ? `Nhà sản xuất: ${escapeHtml(point.vendor)}` : ''}
+            ${point.model ? ` · Model: ${escapeHtml(point.model)}` : ''}
+          </p>
+          ${lastSeen}
+          <div class="connector-list">
+            ${(point.connectors || []).map(connector =>
+        connectorMarkup(connector, point.status === 'offline')
+      ).join('') || '<span class="muted-text">Chưa khai báo đầu nối</span>'}
+          </div>
+          ${startChargingMarkup(point)}
+          ${configurationMarkup}
+          ${restartMarkup}
+        </section>`;
     }).join('') || '<p class="muted-text">Trạm chưa có trụ sạc.</p>'}</div>`;
+
     RestartButton.bindEvents(body);
     body.querySelectorAll('.start-charging-controls').forEach(bindStartControls);
+    if (canConfigure) ChargePointConfiguration.bindEvents(body);
   }
 
   function startState(code) {
-    if (!startRequests.has(code)) startRequests.set(code, { pending: false, message: '', selected: '', tag: '' });
+    if (!startRequests.has(code)) startRequests.set(code, {
+      pending: false, message: '', topUpUrl: null, topUpLink: null, selected: '', tag: ''
+    });
     return startRequests.get(code);
   }
 
   function bindStartControls(controls) {
+    const driver = isDriverAccount();
     const select = controls.querySelector('[data-start-connector]');
     const button = controls.querySelector('[data-start-charging]');
     const tag = controls.querySelector('[data-start-tag]');
@@ -292,23 +342,58 @@
         (connector.ocpp_status ? connector.ocpp_status === 'Available' : connector.status === 'rảnh');
     };
     const update = () => {
-      select.disabled = tag.disabled = state.pending;
-      button.disabled = state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20;
+      select.disabled = state.pending;
+      if (tag) tag.disabled = state.pending;
+      button.disabled = state.pending || !usable() ||
+        (!driver && (!tag?.value.trim() || tag.value.trim().length > 20));
       button.textContent = state.pending ? 'Đang chờ bắt đầu sạc…' : 'Bắt đầu sạc';
       message.textContent = state.message;
+      if (state.topUpLink) {
+        state.topUpLink.remove();
+        state.topUpLink = null;
+      }
+      if (state.topUpUrl === '/wallet') {
+        message.textContent = `${state.message} `;
+        const link = document.createElement('a');
+        link.href = '/wallet';
+        link.className = 'btn btn--primary btn--sm';
+        link.textContent = 'Nạp tiền vào ví';
+        state.topUpLink = link;
+        message.appendChild(link);
+      }
     };
     if (state.selected) select.value = state.selected;
-    if (state.tag !== undefined) tag.value = state.tag;
+    if (tag && state.tag !== undefined) tag.value = state.tag;
     state.update = update;
-    select.addEventListener('change', () => { if (!state.pending) { state.selected = select.value; state.message = ''; } update(); });
-    tag.addEventListener('input', () => { if (!state.pending) state.tag = tag.value; update(); });
+    select.addEventListener('change', () => {
+      if (!state.pending) { state.selected = select.value; state.message = ''; state.topUpUrl = null; }
+      update();
+    });
+    tag?.addEventListener('input', () => {
+      if (!state.pending) { state.tag = tag.value; state.topUpUrl = null; }
+      update();
+    });
     button.addEventListener('click', async () => {
-      if (state.pending || !usable() || !tag.value.trim() || tag.value.trim().length > 20) return;
+      if (state.pending || !usable() ||
+        (!driver && (!tag?.value.trim() || tag.value.trim().length > 20))) return;
       state.selected = select.value;
-      state.tag = tag.value.trim();
+      state.tag = driver ? '' : tag.value.trim();
+      const connectorDbId = Number(
+        select.selectedOptions?.[0]?.dataset.connectorDbId
+      );
+      if (driver && (!Number.isInteger(connectorDbId) || connectorDbId <= 0)) {
+        state.message = 'Không xác định được đầu nối. Vui lòng làm mới trang.';
+        update();
+        return;
+      }
       state.pending = true;
-      state.message = 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
+      state.message = driver
+        ? 'Đang gửi yêu cầu bắt đầu sạc bằng tài khoản của bạn…'
+        : 'Đang gửi yêu cầu bắt đầu sạc. Chờ tối đa 60 giây…';
+      state.topUpUrl = null;
       const started = Date.now();
+      let deadlineAt = started + 60000;
+      let driverRequestId = null;
       const controller = new AbortController();
       state.controller = controller;
       const active = () => state.pending && state.controller === controller;
@@ -318,11 +403,22 @@
         clearTimeout(state.deadline); clearTimeout(state.poll);
         controller.abort(); state.update();
       };
-      const expire = () => finish('Hết thời gian chờ 60 giây, chưa xác nhận được phiên sạc. Kiểm tra trạng thái trước khi thử lại.');
+      const expire = () => finish(
+        'Hết thời gian chờ, chưa xác nhận được phiên sạc. Kiểm tra trạng thái trước khi thử lại.'
+      );
       const withinDeadline = () => {
         if (!active()) return false;
-        if (Date.now() - started >= 60000) { expire(); return false; }
+        if (Date.now() >= deadlineAt) { expire(); return false; }
         return true;
+      };
+      const syncDriverDeadline = response => {
+        if (response?.status !== 'waiting_start' ||
+          !Number.isFinite(response.seconds_left)) return;
+
+        const remainingMs = Math.max(0, response.seconds_left) * 1000;
+        deadlineAt = Date.now() + remainingMs;
+        clearTimeout(state.deadline);
+        state.deadline = setTimeout(expire, remainingMs);
       };
       state.deadline = setTimeout(expire, 60000);
       update();
@@ -331,7 +427,28 @@
         try {
           let user = {};
           try { user = JSON.parse(document.getElementById('auth-context')?.textContent || '{}'); } catch (_) { }
-          const driver = user.roles?.includes('driver');
+          if (driver) {
+            const request = await ApiClient.getDriverRemoteStart(
+              driverRequestId, { signal: controller.signal }
+            );
+            if (!withinDeadline()) return;
+
+            if (request?.status === 'started' && request.session_id) {
+              finish('Phiên sạc đã bắt đầu.');
+              window.location.assign('/sessions/mine');
+              return;
+            }
+
+            if (!['sending', 'waiting_start', 'started'].includes(request?.status)) {
+              finish(request?.message || 'Yêu cầu bắt đầu sạc đã kết thúc.');
+              return;
+            }
+
+            state.message = request.message || 'Đang chờ phiên sạc bắt đầu…';
+            state.update();
+            if (active()) state.poll = setTimeout(poll, 2000);
+            return;
+          }
           const response = driver
             ? await ApiClient.getCurrentSession({ signal: controller.signal })
             : await ApiClient.listAllSessions({ status: 'active', page_size: 100 }, { signal: controller.signal });
@@ -353,14 +470,41 @@
         if (active()) state.poll = setTimeout(poll, 2000);
       };
       try {
-        const result = await ApiClient.remoteStartChargePoint(button.dataset.cpCode, Number(state.selected), tag.value.trim(), { signal: controller.signal });
+        const result = driver
+          ? await ApiClient.createDriverRemoteStart(
+            connectorDbId, { signal: controller.signal }
+          )
+          : await ApiClient.remoteStartChargePoint(
+            button.dataset.cpCode, Number(state.selected), state.tag,
+            { signal: controller.signal }
+          );
         if (!withinDeadline()) return;
-        if (result?.status !== 'Accepted') { finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.'); return; }
-        state.message = 'Trụ đã nhận lệnh. Đang chờ phiên sạc bắt đầu (tối đa 60 giây)…';
+        if (driver) {
+          driverRequestId = result?.id;
+          syncDriverDeadline(result);
+          if (!Number.isInteger(driverRequestId) || driverRequestId <= 0) {
+            finish('Không nhận được mã yêu cầu bắt đầu sạc. Vui lòng kiểm tra trạng thái trước khi thử lại.');
+            return;
+          }
+        } else if (result?.status !== 'Accepted') {
+          finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.');
+          return;
+        }
+        state.message = driver
+          ? (result.message || 'Đang theo dõi yêu cầu bắt đầu sạc…')
+          : 'Trụ đã nhận lệnh. Đang chờ phiên sạc bắt đầu (tối đa 60 giây)…';
         state.update();
         await poll();
       } catch (error) {
         if (!withinDeadline()) return;
+        if (error.code === 'wallet_below_minimum') {
+          state.topUpUrl = error.top_up_url === '/wallet' ? error.top_up_url : null;
+          finish(error.message || 'Số dư ví dưới ngưỡng tối thiểu để bắt đầu sạc.');
+          return;
+        } else if (driver && error.status === 409) {
+          finish(error.message || 'Không thể bắt đầu sạc bằng tài khoản của bạn.');
+          return;
+        }
         if (error.status === 409) finish(/ngoại tuyến|ngắt kết nối/i.test(error.message || '') ? error.message : 'Trụ hoặc đầu nối đang bận. Vui lòng chọn đầu nối khác.');
         else if (error.status === 504 || error.name === 'AbortError') finish('Hết thời gian chờ, trụ chưa phản hồi. Kiểm tra trạng thái trước khi thử lại.');
         else if (error.status === 502) finish('Trụ từ chối bắt đầu sạc. Vui lòng kiểm tra súng sạc đã cắm và mã thẻ.');

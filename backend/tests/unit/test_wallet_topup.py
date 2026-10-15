@@ -8,12 +8,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import Role, User
 from app.models.wallet_ledger import WalletLedgerEntry
+from app.services.payment_signatures import sandbox_webhook_signature
 from app.services.wallet import (
     create_sandbox_topup_request,
     deduct_session_charge,
@@ -40,6 +42,26 @@ def override_get_db() -> Generator[Session, None, None]:
 
 
 client = TestClient(app)
+WEBHOOK_SECRET = "test-sandbox-webhook-secret"
+
+
+def signed_webhook_payload(
+    order_code: str,
+    *,
+    status: str = "success",
+    failure_reason: str | None = None,
+) -> dict[str, str | None]:
+    return {
+        "order_code": order_code,
+        "status": status,
+        "failure_reason": failure_reason,
+        "signature": sandbox_webhook_signature(
+            order_code=order_code,
+            status=status,
+            failure_reason=failure_reason,
+            secret=WEBHOOK_SECRET,
+        ),
+    }
 
 
 class MockRole:
@@ -58,9 +80,10 @@ class MockUser:
 
 
 @pytest.fixture(autouse=True)
-def setup_database() -> Generator[None, None, None]:
+def setup_database(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     Base.metadata.create_all(bind=engine_test)
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr(settings, "SANDBOX_WEBHOOK_SECRET", WEBHOOK_SECRET)
 
     db = TestingSessionLocal()
     driver_user = User(
@@ -147,7 +170,7 @@ def test_sandbox_webhook_success_credits_wallet() -> None:
     # Cổng sandbox gọi webhook thông báo thanh toán thành công
     resp = client.post(
         "/api/wallet/topups/sandbox/webhook",
-        json={"order_code": order_code, "status": "success"},
+        json=signed_webhook_payload(order_code),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -181,7 +204,7 @@ def test_sandbox_webhook_idempotent() -> None:
     # Gọi lần 1
     resp1 = client.post(
         "/api/wallet/topups/sandbox/webhook",
-        json={"order_code": order_code, "status": "success"},
+        json=signed_webhook_payload(order_code),
     )
     assert resp1.status_code == 200
     assert resp1.json()["balance_vnd"] == 150_000
@@ -189,7 +212,7 @@ def test_sandbox_webhook_idempotent() -> None:
     # Gọi lần 2 (retry)
     resp2 = client.post(
         "/api/wallet/topups/sandbox/webhook",
-        json={"order_code": order_code, "status": "success"},
+        json=signed_webhook_payload(order_code),
     )
     assert resp2.status_code == 200
     assert resp2.json()["balance_vnd"] == 150_000
@@ -217,11 +240,11 @@ def test_sandbox_webhook_failed_does_not_credit() -> None:
 
     resp = client.post(
         "/api/wallet/topups/sandbox/webhook",
-        json={
-            "order_code": order_code,
-            "status": "failed",
-            "failure_reason": "Thẻ hết hạn hoặc không đủ số dư",
-        },
+        json=signed_webhook_payload(
+            order_code,
+            status="failed",
+            failure_reason="Thẻ hết hạn hoặc không đủ số dư",
+        ),
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "failed"
@@ -238,6 +261,112 @@ def test_sandbox_webhook_failed_does_not_credit() -> None:
     totals = wallet_totals(db_verify, user_id=10)
     assert totals["balance_vnd"] == 0
     db_verify.close()
+
+    late_success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code, status="success"),
+    )
+    assert late_success.status_code == 200
+    assert late_success.json()["status"] == "failed"
+    assert late_success.json()["balance_vnd"] == 0
+
+
+def test_sandbox_webhook_refund_reverses_a_successful_topup_once() -> None:
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=125_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code),
+    )
+    assert success.status_code == 200
+    assert success.json()["balance_vnd"] == 125_000
+
+    refund_payload = signed_webhook_payload(
+        order_code,
+        status="refunded",
+        failure_reason="Ngân hàng đã hoàn giao dịch",
+    )
+    first_refund = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    repeated_refund = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    assert first_refund.status_code == repeated_refund.status_code == 200
+    assert first_refund.json()["status"] == "refunded"
+    assert first_refund.json()["refund_reason"] == "Ngân hàng đã hoàn giao dịch"
+    assert first_refund.json()["balance_vnd"] == 0
+    assert repeated_refund.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    transaction = db_verify.query(PaymentTransaction).filter_by(order_code=order_code).one()
+    entries = db_verify.query(WalletLedgerEntry).filter_by(
+        reference_type="payment_transaction", reference_id=transaction.id
+    ).order_by(WalletLedgerEntry.id).all()
+    assert transaction.refunded_at is not None
+    assert [(entry.entry_type, entry.amount_vnd) for entry in entries] == [
+        ("sandbox_topup", 125_000),
+        ("payment_refund", -125_000),
+    ]
+    db_verify.close()
+
+
+def test_refund_before_delayed_success_does_not_credit_wallet() -> None:
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=80_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    refund_payload = signed_webhook_payload(order_code, status="refunded")
+    refunded = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    late_success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code, status="success"),
+    )
+    assert refunded.status_code == late_success.status_code == 200
+    assert refunded.json()["status"] == late_success.json()["status"] == "refunded"
+    assert late_success.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    assert db_verify.query(WalletLedgerEntry).filter_by(user_id=10).count() == 0
+    db_verify.close()
+
+
+def test_sandbox_webhook_rejects_invalid_signature_without_crediting_wallet() -> None:
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=75_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    payload = signed_webhook_payload(order_code)
+    payload["status"] = "failed"  # Status is part of the signed message.
+    response = client.post("/api/wallet/topups/sandbox/webhook", json=payload)
+
+    assert response.status_code == 401
+    db_verify = TestingSessionLocal()
+    tx_after = db_verify.query(PaymentTransaction).filter_by(order_code=order_code).one()
+    assert tx_after.status == "pending"
+    assert wallet_totals(db_verify, user_id=10)["balance_vnd"] == 0
+    db_verify.close()
+
+
+def test_sandbox_webhook_fails_closed_without_configured_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "SANDBOX_WEBHOOK_SECRET", "")
+    response = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json={"order_code": "TOPUP-UNKNOWN", "status": "success"},
+    )
+    assert response.status_code == 503
 
 
 def test_simulate_pay_driver() -> None:
@@ -275,6 +404,40 @@ def test_simulate_pay_forbidden_other_user() -> None:
         json={"order_code": order_code, "status": "success"},
     )
     assert resp.status_code == 403
+
+
+def test_driver_can_simulate_refund_for_own_completed_topup() -> None:
+    mock_driver = MockUser(user_id=10, roles=["driver"])
+    app.dependency_overrides[get_current_user] = lambda: mock_driver
+
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=60_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    paid = client.post(
+        "/api/wallet/topups/sandbox/simulate-pay",
+        json={"order_code": order_code, "status": "success"},
+    )
+    refunded = client.post(
+        "/api/wallet/topups/sandbox/simulate-pay",
+        json={"order_code": order_code, "status": "refunded"},
+    )
+    assert paid.status_code == refunded.status_code == 200
+    assert paid.json()["balance_vnd"] == 60_000
+    assert refunded.json()["status"] == "refunded"
+    assert refunded.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    history = client.get("/api/wallet/topups").json()["items"]
+    item = next(item for item in history if item["order_code"] == order_code)
+    assert item["status"] == "refunded"
+    assert item["refunded_at"] is not None
+    assert db_verify.query(WalletLedgerEntry).filter_by(
+        idempotency_key=f"payment-refund:{order_code}"
+    ).one().amount_vnd == -60_000
+    db_verify.close()
 
 
 def test_list_my_topup_history() -> None:

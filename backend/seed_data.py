@@ -14,6 +14,7 @@ from app.models.connector_error import ConnectorError
 from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
+from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.pricing import (
@@ -23,6 +24,30 @@ from app.services.pricing import (
 )
 
 SIMULATOR_CODES = tuple(f"SIM-{number:02d}" for number in range(1, 21))
+
+DEMO_SUBSCRIPTION_PLANS = (
+    {
+        "name": "Tiết kiệm",
+        "description": "Gói mẫu development, đơn giá ưu đãi áp dụng trên toàn hệ thống trong một tháng.",
+        "monthly_fee_vnd": 25_000,
+        "price_vnd_per_kwh": 2_000,
+        "is_active": True,
+    },
+    {
+        "name": "Đồng hành",
+        "description": "Gói mẫu development cho tài xế sạc thường xuyên, hiệu lực một tháng.",
+        "monthly_fee_vnd": 50_000,
+        "price_vnd_per_kwh": 1_800,
+        "is_active": True,
+    },
+    {
+        "name": "Pro",
+        "description": "Gói mẫu development với đơn giá sạc ưu đãi nhất, hiệu lực một tháng.",
+        "monthly_fee_vnd": 100_000,
+        "price_vnd_per_kwh": 1_500,
+        "is_active": True,
+    },
+)
 
 STATIONS = (
     {
@@ -435,6 +460,17 @@ def _ensure_demo_tariffs(db: Session, stations: list[Station], counts: dict[str,
         counts["tariffs"] += 1
 
 
+def _ensure_demo_subscription_plans(db: Session, counts: dict[str, int]) -> None:
+    """Create sample plans for the development UI without changing existing offers."""
+    for spec in DEMO_SUBSCRIPTION_PLANS:
+        exists = db.query(SubscriptionPlan.id).filter_by(name=spec["name"]).first()
+        if exists:
+            continue
+        db.add(SubscriptionPlan(**spec))
+        counts["subscription_plans"] += 1
+    db.flush()
+
+
 def _ensure_demo_wallet(
     db: Session, driver: User, sessions: list[ChargingSession], counts: dict[str, int]
 ) -> None:
@@ -556,6 +592,7 @@ def seed_data(db: Session | None = None) -> None:
         "sessions": 0,
         "audit_logs": 0,
         "tariffs": 0,
+        "subscription_plans": 0,
         "invoices": 0,
         "wallet_entries": 0,
     }
@@ -578,6 +615,7 @@ def seed_data(db: Session | None = None) -> None:
 
         active_tag = _ensure_driver_tags(db, driver, counts)
         _ensure_demo_tariffs(db, all_stations, counts)
+        _ensure_demo_subscription_plans(db, counts)
         sessions = _ensure_sessions(db, driver, active_tag, all_points, now, counts)
         _ensure_demo_wallet(db, driver, sessions, counts)
         _ensure_audit_samples(db, now, set(all_points), counts)

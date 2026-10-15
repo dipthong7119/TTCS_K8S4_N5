@@ -26,9 +26,11 @@
       <span id="sse-label">Đang kết nối...</span>
     </div>
     <button class="btn btn--secondary btn--sm" id="btn-refresh-monitoring" type="button">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
       </svg>
       Làm mới
     </button>
@@ -73,12 +75,15 @@
 <!-- View toggle + filter -->
 <div class="filters-bar" style="margin-bottom:var(--space-4);">
   <div class="search-input-wrap" style="max-width:280px;">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </svg>
     <input type="search" class="search-input" id="mon-search" placeholder="Tìm trạm, trụ..." aria-label="Tìm kiếm" />
   </div>
-  <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;" aria-label="Lọc trạng thái trụ sạc">
+  <select class="form-select" id="mon-status-filter" style="width:auto;min-width:150px;"
+    aria-label="Lọc trạng thái trụ sạc">
     <option value="">Tất cả trạng thái</option>
     <option value="online">Trực tuyến</option>
     <option value="offline">Ngoại tuyến</option>
@@ -91,22 +96,31 @@
   </select>
   <div class="view-toggle" role="group" aria-label="Chế độ xem">
     <button class="view-toggle__btn is-active" id="view-grid" type="button" aria-pressed="true" title="Xem dạng lưới">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
       </svg>
     </button>
     <button class="view-toggle__btn" id="view-list" type="button" aria-pressed="false" title="Xem dạng danh sách">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="8" y1="6" x2="21" y2="6" />
+        <line x1="8" y1="12" x2="21" y2="12" />
+        <line x1="8" y1="18" x2="21" y2="18" />
+        <line x1="3" y1="6" x2="3.01" y2="6" />
+        <line x1="3" y1="12" x2="3.01" y2="12" />
+        <line x1="3" y1="18" x2="3.01" y2="18" />
       </svg>
     </button>
   </div>
 </div>
 
 <!-- Grid container -->
-<div id="monitoring-grid" class="monitoring-grid" data-can-reset="{{ 'true' if can_reset else 'false' }}" aria-label="Lưới trạm sạc" aria-live="polite">
+<div id="monitoring-grid" class="monitoring-grid" data-can-reset="{{ 'true' if can_reset else 'false' }}"
+  aria-label="Lưới trạm sạc" aria-live="polite">
   <!-- Filled by JS from SSE or API -->
   <div class="loading-state" id="mon-loading">
     <div class="spinner spinner--lg" aria-hidden="true"></div>
@@ -115,13 +129,16 @@
 </div>
 
 <!-- Station detail drawer -->
-<div class="drawer-backdrop is-hidden" id="detail-backdrop" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+<div class="drawer-backdrop is-hidden" id="detail-backdrop" role="dialog" aria-modal="true"
+  aria-labelledby="detail-title">
   <div class="drawer" id="detail-drawer">
     <div class="drawer__header">
       <h2 class="drawer__title" id="detail-title">Chi tiết trạm</h2>
       <button class="modal__close" id="detail-close" type="button" aria-label="Đóng">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
     </div>
@@ -133,5 +150,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ asset_url('js/charge_point_configuration.js') }}"></script>
 <script src="{{ asset_url('js/pages/monitoring_grid.js') }}"></script>
 {% endblock %}

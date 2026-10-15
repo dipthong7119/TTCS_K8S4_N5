@@ -6,6 +6,10 @@
 
 **Người review theo phân công:** Tạ Như Vinh — chưa review.
 
+**Cập nhật 12/10/2026:** Ca 20 qua nửa đêm nay chạy với hai phiên bản biểu giá
+và đạt 36.000 đồng sau SCRUM-64/207/209. Bốn ca phí chiếm trụ 21–24 vẫn chờ
+SCRUM-61/204.
+
 Phạm vi lấy từ [phân công Sprint 3, 4, 5](phan-cong-sprint-345.md) và
 [S-32 trong đặc tả](../prompts/02_DAC_TA_DU_AN.md): ít nhất 12 ca, gồm một khung,
 cắt ranh giới, qua nửa đêm, phí chiếm trụ và số đo thưa. Khi sai phải chỉ ra
@@ -55,7 +59,7 @@ Giá trị dưới đây là đồng. Số Wh chi tiết, mốc số đo, điệ
 | 17 | Không tiêu thụ điện, vẫn cắt 22:00 | 0 × 5.000 + 0 × 3.000 | 0 | Đạt |
 | 18 | Số đo gần 06:00 tại 05:30 và 06:30 | Mốc 06:00 = 11.000 + 2.000 × 30/60 = 12.000 Wh; 2 × 3.000 + 4 × 4.000 | 22.000 | Đạt |
 | 19 | Nội suy ra 0,5 Wh mỗi ngày, đơn giá 3.333 | Mỗi đoạn 0,0005 × 3.333 = 1,6665 → 2; 2 + 2 | 4 | Đạt |
-| 20 | Qua nửa đêm, giá ngày mới đổi thành 6.000 | 4 × 3.000 + 4 × 6.000 | 36.000 | Chờ SCRUM-64/206 |
+| 20 | Qua nửa đêm, giá ngày mới đổi thành 6.000 | 4 × 3.000 + 4 × 6.000 | 36.000 | Đạt — SCRUM-64/207/209 |
 | 21 | Finishing 30 phút, ân hạn 10, phí 100/phút | Điện 8.000 + (30 − 10) × 100 | 10.000 | Chờ SCRUM-61/204 |
 | 22 | Đã sạc xong, SuspendedEV với cùng thời gian ca 21 | Điện 8.000 + 20 × 100 | 10.000 | Chờ SCRUM-61/204 |
 | 23 | Rút súng đúng hết 10 phút ân hạn | Điện 8.000 + 0 phút × 100 | 8.000 | Chờ SCRUM-61/204 |
@@ -70,9 +74,10 @@ Set-Location backend
 ..\.venv\Scripts\python.exe -m pytest tests/unit/test_scrum65_pricing.py -ra --tb=short
 ```
 
-Kết quả hiện tại: **21 passed, 5 skipped**. Trong 21 test đạt có **19 ca tính tiền**,
+Kết quả hiện tại: **23 passed, 4 skipped**. Trong 23 test đạt có **20 ca tính tiền**,
 một test kiểm tra phạm vi/metadata và một test cố ý đưa kết quả sai để kiểm tra
-thông báo. Năm ca skipped là 20–24; lý do được in bằng `-ra`. Skipped không phải đạt.
+thông báo; một test SCRUM-209 kiểm tra lại các ca nhiều khung giờ và qua ngày.
+Bốn ca skipped là 21–24; lý do được in bằng `-ra`. Skipped không phải đạt.
 
 Kiểm tra lại cùng luồng chốt phiên và tính kWh:
 
@@ -80,7 +85,7 @@ Kiểm tra lại cùng luồng chốt phiên và tính kWh:
 ..\.venv\Scripts\python.exe -m pytest tests/unit/test_scrum65_pricing.py tests/unit/test_stop_transaction.py tests/unit/test_session_energy.py -ra --tb=short
 ```
 
-Kết quả: **44 passed, 5 skipped**. CI hiện đã thu thập `backend/tests`, nên file
+Kết quả: **58 passed, 4 skipped**, 7 cảnh báo. CI hiện đã thu thập `backend/tests`, nên file
 test mới được chạy tự động khi kiểm tra PR; không cần thêm bước workflow.
 
 Ví dụ khi tiền ca 01 bị sai một đồng, test báo cả đoạn và tổng:
@@ -99,20 +104,20 @@ không cho phép sai số tiền bằng `approx` hoặc dùng số thực.
 ## 4. Bàn giao và điều kiện nghiệm thu
 
 **Bộ dữ liệu và test cho phần đã hỗ trợ đã được chuẩn bị; SCRUM-65 chưa đủ điều
-kiện chuyển Done.** Còn năm ca nghiệp vụ chưa chạy được, review chéo và nghiệm thu
-theo DoD. Đây là bộ ca mô phỏng để kiểm tra thuật toán, chưa phải dữ liệu phiên
-thu từ trụ ảo cho SCRUM-210.
+kiện chuyển Done.** Còn bốn ca phí chiếm trụ chưa chạy được, cùng review chéo và
+nghiệm thu theo DoD. Đây là bộ ca mô phỏng để kiểm tra thuật toán; SCRUM-210 có
+kiểm thử riêng qua luồng OCPP StartTransaction/MeterValues/StopTransaction.
 
-Ca 20 chờ SCRUM-64/206: `calculate_session_price` hiện chỉ nhận một bộ `bands`,
-còn `finalize_session_billing` chọn phiên bản có hiệu lực khi phiên bắt đầu cho
-cả phiên. Nửa đêm đã chia được đoạn, nhưng chưa áp hai phiên bản giá khác nhau.
+SCRUM65-20 từng chờ SCRUM-64/206: `calculate_session_price` hiện nhận các phiên
+bản theo `effective_from`; `finalize_session_billing` nạp các phiên bản hiệu lực
+tới lúc kết thúc. Bài test đối chiếu từng ngày và mã biểu giá với đáp án tính tay.
 
 Ca 21–24 chờ SCRUM-61/204: model/hàm hiện chưa có phí theo phút, ân hạn và mốc
 rút súng. Kể cả ca có phí bằng 0 cũng chưa được tính là đạt vì chưa chạy luồng
 phí chiếm trụ. Các trường `idle_input`, `tariff_versions`, `idle_fee_vnd` và
 `billable_idle_minutes` chỉ mô tả dữ liệu kiểm thử, không khai báo API mới.
 
-Khi các phần trên có hàm dùng được, nối đầu vào của năm ca vào hàm thật, bổ sung
+Khi SCRUM-61/204 có hàm dùng được, nối đầu vào của bốn ca vào hàm thật, bổ sung
 đối chiếu riêng tiền phí và số phút ở ca 21–24, rồi bỏ `blocked_by` và cập nhật
 kiểm tra adapter trong `test_manual_dataset_has_required_scope_and_author`.
 Không chỉ bỏ skip hoặc bỏ các đầu vào chưa được hỗ trợ để làm test xanh.

@@ -171,6 +171,12 @@ async def edit_station_page(
     )
 
 
+@router.get("/tariffs", dependencies=[Depends(require_role("admin", "station_owner"))])
+async def tariffs_page():
+    """Redirect to station management where station tariffs are configured."""
+    return RedirectResponse(url="/stations", status_code=status.HTTP_302_FOUND)
+
+
 @router.get("/sessions", dependencies=[Depends(require_role("admin", "operator", "accountant", "station_owner"))])
 async def sessions_page(request: Request, current_user: CurrentUser):
     roles = _require_any_role(current_user, "admin", "operator", "accountant", "station_owner")
@@ -238,4 +244,23 @@ async def wallet_page(request: Request, current_user: CurrentUser):
     template_name = "wallet/admin_drivers.html" if "admin" in roles or "accountant" in roles else "wallet/wallet.html"
     return templates.TemplateResponse(
         request, template_name, _page_context(request, current_user)
+    )
+
+
+@router.get("/wallet/sandbox-checkout", dependencies=[Depends(require_role("driver"))])
+async def sandbox_checkout_page(request: Request, current_user: CurrentUser, order_code: str = ""):
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "wallet/sandbox_checkout.html",
+        _page_context(request, current_user, order_code=order_code),
+    )
+
+
+# SCRUM-68 — Giao diện đăng ký gói thuê bao hàng tháng (Phạm Văn Tuấn)
+@router.get("/subscriptions", dependencies=[Depends(require_role("driver", "admin"))])
+async def subscriptions_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin")
+    return templates.TemplateResponse(
+        request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )

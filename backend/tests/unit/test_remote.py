@@ -8,12 +8,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.charge_point import ChargePoint, Connector
 from app.models.station import Station
 from app.models.user import User
+from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.connection_manager import manager
 
 engine_test = create_engine(
@@ -39,6 +42,7 @@ def setup_db():
     Base.metadata.create_all(bind=engine_test)
     db = SessionLocalTest()
     user = User(id=1, email="admin@test.com", password_hash="123", full_name="Admin")
+    driver = User(id=2, email="driver@test.com", password_hash="123", full_name="Driver")
     station = Station(id=1, name="Station", owner_id=1, status="active")
     point = ChargePoint(
         id=1,
@@ -47,7 +51,7 @@ def setup_db():
         status="offline",
         last_seen_at=datetime.now(UTC),
     )
-    db.add_all([user, station, point])
+    db.add_all([user, driver, station, point])
     db.commit()
     db.close()
     yield
@@ -141,6 +145,16 @@ def test_reset_online(monkeypatch):
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     assert point.status == "offline"
     assert point.connectors[0].status == "unknown"
+    audit = db.query(AuditLog).filter_by(
+        action="charge_point.reset.accepted", charge_point_code="CP01"
+    ).one()
+    assert audit.actor_id == 1
+    assert audit.actor_email == "admin@test.com"
+    assert audit.details == {
+        "reset_type": "Soft",
+        "command": "Reset",
+        "outcome": "Accepted",
+    }
     db.close()
 
 @pytest.fixture(scope="function", autouse=True)
@@ -309,12 +323,24 @@ def test_remote_start_online_accepted(monkeypatch):
             self.roles = [MockRole(r) for r in roles]
 
     app.dependency_overrides[get_current_user] = lambda: MockUser(2, ["driver"])
+    monkeypatch.setattr(settings, "WALLET_MINIMUM_BALANCE_VND", 50_000)
     db = SessionLocalTest()
     point = db.query(ChargePoint).filter_by(code="CP01").one()
     point.status = "online"
     point.last_seen_at = datetime.now(UTC)
+    db.add(
+        WalletLedgerEntry(
+            user_id=2,
+            entry_type="demo_topup",
+            amount_vnd=50_000,
+            idempotency_key="remote-start-exact-minimum",
+            receipt_code="REMOTE-START-EXACT-MINIMUM",
+            description="Test số dư đúng ngưỡng",
+        )
+    )
     db.commit()
     db.close()
+
     monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
 
     async def acknowledged(code, action, payload, timeout):
@@ -333,6 +359,58 @@ def test_remote_start_online_accepted(monkeypatch):
     data = resp.json()
     assert data["status"] == "Accepted"
     assert "chấp nhận" in data["message"]
+
+    db = SessionLocalTest()
+    audit = db.query(AuditLog).filter_by(
+        action="charge_point.remote_start.accepted", charge_point_code="CP01"
+    ).one()
+    assert audit.actor_id == 2
+    assert audit.actor_email == "driver@test.com"
+    assert audit.details == {
+        "connector_id": 1,
+        "command": "RemoteStartTransaction",
+        "outcome": "Accepted",
+    }
+    db.close()
+
+
+def test_remote_start_blocks_driver_below_wallet_minimum_with_top_up_details(monkeypatch):
+    class MockRole:
+        def __init__(self, name):
+            self.name = name
+
+    class MockUser:
+        def __init__(self, id, roles):
+            self.id = id
+            self.email = "driver@test.com"
+            self.full_name = "Driver User"
+            self.roles = [MockRole(role) for role in roles]
+
+    app.dependency_overrides[get_current_user] = lambda: MockUser(2, ["driver"])
+    monkeypatch.setattr(settings, "WALLET_MINIMUM_BALANCE_VND", 50_000)
+    db = SessionLocalTest()
+    point = db.query(ChargePoint).filter_by(code="CP01").one()
+    point.status = "online"
+    point.last_seen_at = datetime.now(UTC)
+    db.commit()
+    db.close()
+    monkeypatch.setitem(manager.active_connections, "CP01", mock.AsyncMock())
+    send_call = mock.AsyncMock()
+    monkeypatch.setattr(manager, "send_call", send_call)
+
+    response = client.post(
+        "/api/charge_points/CP01/remote-start",
+        json={"id_tag": "TAG12345", "connector_id": 1},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Số dư ví cần tối thiểu 50,000 đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.",
+        "code": "wallet_below_minimum",
+        "minimum_required_vnd": 50_000,
+        "top_up_url": "/wallet",
+    }
+    send_call.assert_not_awaited()
 
 
 def test_remote_start_online_rejected(monkeypatch):

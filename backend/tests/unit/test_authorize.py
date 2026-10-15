@@ -17,6 +17,7 @@ from app.models.charge_point import ChargePoint
 from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import Role, User
+from app.models.wallet_ledger import WalletLedgerEntry
 from app.ocpp.handlers.authorize import mask_id_tag
 from app.services.ocpp_handlers import handle_ocpp_message
 from app.services.ocpp_parser import pack_call, parse_message
@@ -69,11 +70,19 @@ def db_session():
     tag_inactive_user = IdTag(id_tag="INACTIVE-USR-4", user_id=2, is_blocked=False)
     tag_non_driver = IdTag(id_tag="NON-DRIVER-TAG", user_id=3, is_blocked=False)
 
+    wallet_funding = WalletLedgerEntry(
+        user_id=driver.id,
+        entry_type="manual_topup",
+        amount_vnd=50_000,
+        idempotency_key="authorize-test-wallet-funding",
+        description="Test wallet funding",
+    )
     db.add_all([
         admin_role, driver_role, driver, inactive_driver, non_driver,
         station, inactive_station, cp1, cp2,
         tag_valid, tag_no_expiry, tag_blocked, tag_expired, tag_blocked_expired, tag_inactive_user, tag_non_driver
     ])
+    db.add(wallet_funding)
     db.commit()
 
     yield db

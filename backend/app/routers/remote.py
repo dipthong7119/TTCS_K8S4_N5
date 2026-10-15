@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -12,11 +13,13 @@ from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
 from app.schemas.remote import RemoteCommandResponse, RemoteStartRequest, ResetRequest
-from app.services.audit import append_audit
+from app.schemas.remote_start import RemoteStartErrorResponse
+from app.services.audit import record_remote_command
 from app.services.connection_manager import manager
 from app.services.ocpp_handlers import publish_charge_point_status
 from app.services.ocpp_parser import OCPPError
 from app.services.ocpp_status import is_charge_point_stale
+from app.services.remote_start import RemoteStartFailure, check_start_policy
 
 router = APIRouter(dependencies=[Depends(deny_unannotated_route)])
 logger = logging.getLogger(__name__)
@@ -53,16 +56,16 @@ async def reset_charge_point(
     )
 
     def record_reset_outcome(action: str, outcome: str) -> None:
-        append_audit(
+        record_remote_command(
             db,
             action=action,
+            command="Reset",
             object_type="charge_point",
             object_id=point.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
+            actor=current_user,
             charge_point_code=point.code,
-            details={"reset_type": payload.type, "outcome": outcome},
+            outcome=outcome,
+            details={"reset_type": payload.type},
         )
         db.commit()
 
@@ -101,16 +104,16 @@ async def reset_charge_point(
     point.status = "offline"
     for connector in point.connectors:
         connector.status = "unknown"
-    append_audit(
+    record_remote_command(
         db,
         action="charge_point.reset.accepted",
+        command="Reset",
         object_type="charge_point",
         object_id=point.id,
-        actor_id=current_user.id,
-        actor_email=current_user.email,
-        actor_name=current_user.full_name,
+        actor=current_user,
         charge_point_code=point.code,
-        details={"reset_type": payload.type, "outcome": "Accepted"},
+        outcome="Accepted",
+        details={"reset_type": payload.type},
     )
     db.commit()
     publish_charge_point_status(db, point.id)
@@ -120,6 +123,9 @@ async def reset_charge_point(
 @router.post(
     "/charge_points/{code}/remote-start",
     response_model=RemoteCommandResponse,
+    responses={
+        409: {"model": RemoteStartErrorResponse, "description": "Ví dưới ngưỡng hoặc trụ không sẵn sàng"}
+    },
     dependencies=[
         Depends(require_role("admin", "operator", "station_owner", "driver"))
     ],
@@ -129,7 +135,7 @@ async def remote_start_transaction(
     payload: RemoteStartRequest,
     current_user: CurrentUser,
     db: Session = Depends(get_db),
-):
+) -> RemoteCommandResponse | JSONResponse:
     """API bắt đầu phiên sạc từ xa (T-51 / SCRUM-180 & SCRUM-193).
 
     Gửi lệnh RemoteStartTransaction xuống trụ sạc qua kết nối WebSocket OCPP 1.6.
@@ -150,6 +156,21 @@ async def remote_start_transaction(
             detail="Trụ sạc đang ngoại tuyến, không thể gửi lệnh.",
         )
 
+    roles = {role.name for role in current_user.roles}
+    if "driver" in roles and not {"admin", "operator", "station_owner"}.intersection(roles):
+        try:
+            check_start_policy(db, current_user.id, point.id)
+        except RemoteStartFailure as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=RemoteStartErrorResponse(
+                    detail=exc.detail,
+                    code=exc.code,
+                    minimum_required_vnd=exc.minimum_required_vnd,
+                    top_up_url=exc.top_up_url,
+                ).model_dump(mode="json"),
+            )
+
     masked_tag = payload.id_tag[-4:] if len(payload.id_tag) >= 4 else "****"
     logger.info(
         "User requested remote start: actor_id=%s charge_point=%s connector_id=%s id_tag_masked=%s",
@@ -160,20 +181,16 @@ async def remote_start_transaction(
     )
 
     def record_start_outcome(action: str, outcome: str) -> None:
-        append_audit(
+        record_remote_command(
             db,
             action=action,
+            command="RemoteStartTransaction",
             object_type="charge_point",
             object_id=point.id,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            actor_name=current_user.full_name,
+            actor=current_user,
             charge_point_code=point.code,
-            details={
-                "command": "RemoteStartTransaction",
-                "connector_id": payload.connector_id,
-                "outcome": outcome,
-            },
+            outcome=outcome,
+            details={"connector_id": payload.connector_id},
         )
         db.commit()
 

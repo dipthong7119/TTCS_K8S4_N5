@@ -70,8 +70,19 @@
 }
 
 @keyframes pulse-indicator {
-  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 8px hsl(150, 90%, 50%); }
-  50% { transform: scale(1.3); opacity: 0.75; box-shadow: 0 0 16px hsl(150, 90%, 50%); }
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 8px hsl(150, 90%, 50%);
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 0.75;
+    box-shadow: 0 0 16px hsl(150, 90%, 50%);
+  }
 }
 
 .active-session-banner__tag {
@@ -115,8 +126,15 @@
 }
 
 @keyframes pulse-timer {
-  0% { transform: scale(1); opacity: 0.9; }
-  100% { transform: scale(1.06); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
 }
 
 .active-session-banner__body {
@@ -190,8 +208,17 @@
 }
 
 @keyframes kwhHighlight {
-  0% { transform: scale(1.12); color: hsl(60, 100%, 75%); text-shadow: 0 0 12px hsl(60, 100%, 75%); }
-  100% { transform: scale(1); color: hsl(155, 95%, 65%); text-shadow: none; }
+  0% {
+    transform: scale(1.12);
+    color: hsl(60, 100%, 75%);
+    text-shadow: 0 0 12px hsl(60, 100%, 75%);
+  }
+
+  100% {
+    transform: scale(1);
+    color: hsl(155, 95%, 65%);
+    text-shadow: none;
+  }
 }
 
 .active-unit {
@@ -255,38 +282,86 @@
 }
 
 /* ── Audit and Tables ────────────────────────────────────────────────────── */
-.audit-filters { align-items: end; gap: var(--space-3); margin-bottom: var(--space-4); }
-.audit-filter { display: grid; gap: 6px; min-width: 160px; color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 600; }
-.audit-filter .form-input { min-width: 160px; }
-.audit-pagination { display: flex; align-items: center; justify-content: space-between; }
-.audit-subtext { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: var(--font-size-xs); }
-.audit-nowrap { white-space: nowrap; }
-.audit-details { min-width: 220px; max-width: 420px; overflow-wrap: anywhere; color: var(--color-text-secondary); font-family: monospace; font-size: var(--font-size-xs); }
+.audit-filters {
+  align-items: end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.audit-filter {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.audit-filter .form-input {
+  min-width: 160px;
+}
+
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.audit-subtext {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.audit-nowrap {
+  white-space: nowrap;
+}
+
+.audit-details {
+  min-width: 220px;
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+}
 
 /* ── Mobile Responsive (NFR E-11: 360px & landscape) ─────────────────────── */
 @media (max-width: 720px) {
   .active-session-banner {
     padding: var(--space-4);
   }
+
   .active-session-banner__body {
     flex-direction: column;
     gap: var(--space-3);
   }
+
+  .active-session-banner__info {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
   .active-session-banner__metrics {
     width: 100%;
     justify-content: space-between;
   }
+
   .active-metric-box {
     flex: 1 1 120px;
     text-align: left;
   }
+
   .no-active-session-card {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .no-active-session-card__action {
     width: 100%;
   }
+
   .no-active-session-card__action .btn {
     width: 100%;
     justify-content: center;
@@ -298,18 +373,551 @@
     padding: var(--space-3);
     border-radius: var(--radius-md);
   }
+
   .active-session-banner__location {
     font-size: var(--font-size-base);
   }
+
   .active-session-banner__kwh {
     font-size: var(--font-size-lg);
   }
+
   .active-metric-box {
     padding: var(--space-2) var(--space-3);
     min-width: 100%;
   }
+
   .active-session-banner__actions {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+/* ── SCRUM-208: Modal chi tiết phiên – layout dl/field ─────────────────────── */
+.session-detail-dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+
+.session-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-detail-field--full {
+  grid-column: 1 / -1;
+}
+
+.session-detail-field dt {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.session-detail-field dd {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.field-highlight {
+  font-weight: 700 !important;
+  font-size: var(--font-size-base) !important;
+}
+
+.field-cost {
+  color: var(--color-primary, hsl(210, 90%, 54%));
+}
+
+.status-charging {
+  color: var(--color-charging, hsl(155, 80%, 40%));
+  font-weight: 600;
+}
+
+.mono-code {
+  font-family: monospace;
+  font-size: 0.85em;
+  background: var(--color-surface-alt);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* ── SCRUM-208: Bảng phân rã hóa đơn theo khung giờ ────────────────────────── */
+.invoice-breakdown {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+}
+
+.invoice-breakdown__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.invoice-breakdown__header h3 {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.invoice-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
+}
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.invoice-table thead th {
+  background: var(--color-surface-alt);
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.invoice-seg-row td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.invoice-seg-row:last-child td {
+  border-bottom: none;
+}
+
+.invoice-occupancy-row {
+  background: hsla(38, 80%, 50%, 0.06);
+}
+
+.invoice-band-chip {
+  display: inline-flex;
+  align-items: center;
+  background: hsla(210, 90%, 54%, 0.12);
+  color: var(--color-primary, hsl(210, 90%, 54%));
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.invoice-band-chip--occupancy {
+  background: hsla(38, 80%, 50%, 0.15);
+  color: hsl(38, 70%, 35%);
+}
+
+.invoice-time-cell {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: nowrap;
+  color: var(--color-text-secondary);
+}
+
+.invoice-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-time-sep {
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+.invoice-hint {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.invoice-num-cell {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.invoice-unit {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.invoice-amount-cell {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.invoice-total-row td {
+  padding: 10px;
+  background: var(--color-surface-alt);
+  font-weight: 700;
+  font-size: var(--font-size-xs);
+}
+
+.invoice-grand-total {
+  color: var(--color-primary, hsl(210, 90%, 54%));
+  font-size: var(--font-size-sm) !important;
+}
+
+.invoice-rounding-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-3) 0;
+  line-height: 1.5;
+}
+
+.invoice-rounding-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.invoice-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  margin-top: var(--space-1);
+  transition: all 0.2s ease;
+}
+
+.invoice-view-btn:hover {
+  background: hsla(210, 90%, 54%, 0.08);
+}
+
+/* ── SCRUM-66: Modal hoá đơn E-Receipt ────────────────────────────────────── */
+.invoice-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.invoice-modal-body {
+  overflow-y: auto;
+  padding: var(--space-5) !important;
+}
+
+.receipt-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Header: logo + tên thương hiệu */
+.receipt-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: linear-gradient(135deg, hsl(218, 55%, 16%) 0%, hsl(190, 75%, 20%) 100%);
+  padding: var(--space-4) var(--space-5);
+  margin: calc(-1 * var(--space-5));
+  margin-bottom: var(--space-4);
+}
+
+.receipt-logo {
+  width: 40px;
+  height: 40px;
+  background: hsla(0, 0%, 100%, 0.15);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.receipt-brand {
+  flex: 1;
+}
+
+.receipt-brand-name {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  color: white;
+  letter-spacing: -0.01em;
+}
+
+.receipt-brand-sub {
+  font-size: var(--font-size-xs);
+  color: hsla(0, 0%, 100%, 0.7);
+}
+
+.receipt-status-badge {
+  background: hsla(150, 80%, 40%, 0.25);
+  border: 1px solid hsla(150, 80%, 50%, 0.4);
+  color: hsl(150, 90%, 70%);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Meta grid (mã phiên, ngày, trạm…) */
+.receipt-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.receipt-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.receipt-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+}
+
+.receipt-meta-value {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.receipt-session-id {
+  font-family: monospace;
+  font-size: var(--font-size-base);
+  color: var(--color-primary, hsl(210, 90%, 54%));
+}
+
+.receipt-kwh-val {
+  color: hsl(150, 70%, 35%);
+}
+
+/* Divider */
+.receipt-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-4) 0;
+  position: relative;
+}
+
+.receipt-divider::before {
+  content: '✦';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--color-surface);
+  padding: 0 var(--space-2);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+/* Tiêu đề section chi tiết */
+.receipt-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+/* Dòng chi tiết từng đoạn */
+.receipt-line-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.receipt-line-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-primary, hsl(210, 90%, 54%));
+  transition: background 0.15s ease;
+}
+
+.receipt-line-item:hover {
+  background: hsla(210, 90%, 54%, 0.06);
+}
+
+.receipt-occupancy {
+  border-left-color: hsl(38, 75%, 50%);
+}
+
+.receipt-occupancy:hover {
+  background: hsla(38, 80%, 50%, 0.06);
+}
+
+.receipt-line-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.receipt-band {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-primary, hsl(210, 90%, 54%));
+}
+
+.receipt-band--occupancy {
+  color: hsl(38, 70%, 35%);
+}
+
+.receipt-timerange {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt-detail {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.receipt-line-amount {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+
+.receipt-no-segments {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+/* Tổng thanh toán */
+.receipt-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-2);
+}
+
+.receipt-total-label {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.receipt-total-amount {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  color: var(--color-primary, hsl(210, 90%, 54%));
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phương thức thanh toán */
+.receipt-wallet-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.receipt-wallet-note--sub {
+  background: hsla(262, 83%, 58%, 0.08);
+  color: hsl(262, 70%, 40%);
+}
+
+/* Làm tròn */
+.receipt-rounding {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+  line-height: 1.5;
+}
+
+/* Footer */
+.receipt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  background: linear-gradient(135deg, hsl(218, 55%, 16%) 0%, hsl(190, 75%, 20%) 100%);
+  color: hsla(0, 0%, 100%, 0.8);
+  font-size: var(--font-size-xs);
+  margin: var(--space-4) calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.receipt-footer svg {
+  flex-shrink: 0;
+  color: hsl(150, 80%, 60%);
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+  .session-detail-dl {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-header {
+    flex-wrap: wrap;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    padding: 6px 7px;
   }
 }

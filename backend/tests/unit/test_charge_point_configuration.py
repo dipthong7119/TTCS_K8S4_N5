@@ -508,6 +508,7 @@ async def test_concurrent_changes_serialize_and_store_last_accepted(
 
     async def send_call(_code, _action, payload, timeout):
         nonlocal active_calls, max_active_calls
+        assert timeout == settings.OCPP_REMOTE_CALL_TIMEOUT_SECONDS
         active_calls += 1
         max_active_calls = max(max_active_calls, active_calls)
         accepted_order.append(payload["value"])

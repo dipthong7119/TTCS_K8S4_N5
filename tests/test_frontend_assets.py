@@ -31,6 +31,8 @@ def test_asset_url_changes_for_same_size_file_update(tmp_path, monkeypatch):
         ("admin", "/monitoring"),
         ("operator", "/monitoring"),
         ("station_owner", "/monitoring"),
+        ("driver", "/monitoring"),
+        ("driver", "/stations"),
         ("admin", "/stations"),
         ("admin", "/stations/new"),
         ("admin", "/sessions"),
@@ -59,6 +61,11 @@ def test_rendered_pages_use_loadable_versioned_assets(client, user_factory, role
     if page == "/monitoring":
         assert "realtime_status.js" not in response.text
         assert any("pages/monitoring_grid.js?v=" in url for url in assets)
+    if role == "driver":
+        assert 'href="/monitoring" id="nav-monitoring"' in response.text
+        assert "Bắt đầu sạc" in response.text
+        if page == "/stations":
+            assert 'id="btn-find-charger"' in response.text
     if page in {"/sessions", "/sessions/mine"}:
         assert "btn-toggle-session-mock" not in response.text
 

@@ -10,6 +10,7 @@ from app.models.id_tag import IdTag
 from app.models.station import Station
 from app.models.user import User
 from app.services.ocpp_parser import pack_call_error, pack_call_result
+from app.services.wallet import has_minimum_balance
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,8 @@ def authorize_tag(db: Session, point: ChargePoint, id_tag_value: str) -> tuple[I
     station = db.query(Station).filter(Station.id == point.station_id).first()
     
     status = decide_authorize_status(tag, user, is_driver, station)
+    if status == "Accepted" and user is not None and not has_minimum_balance(db, user.id):
+        status = "Blocked"
     
     masked_tag = mask_id_tag(id_tag_value)
     if status == "Invalid":

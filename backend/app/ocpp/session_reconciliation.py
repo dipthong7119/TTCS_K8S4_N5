@@ -10,13 +10,10 @@ from sqlalchemy.sql import Select
 
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
+from app.ocpp.session_statuses import OPEN_SESSION_STATUSES
 from app.services.ocpp_status import is_charge_point_stale
 
 logger = logging.getLogger(__name__)
-
-# Ba trạng thái chưa có StopTransaction và còn cần theo dõi khi trụ nối lại.
-OPEN_SESSION_STATUSES: tuple[str, ...] = ("active", "needs_review", "anomaly")
-
 
 class ReconciliationDecision(Enum):
     KEEP = "KEEP"
@@ -33,6 +30,16 @@ class ReconciliationContext:
     missing_session_logged: set[int] = field(default_factory=set)
     initialized: bool = False
     offline_reconciled: bool = False
+
+
+def forget_reconciled_transaction(
+    connection_ctx: ReconciliationContext, transaction_id: int
+) -> None:
+    """Bỏ phiên đã được StopTransaction kết thúc khỏi hàng đợi kết nối."""
+    for connector_id, pending_id in tuple(connection_ctx.waiting.items()):
+        if pending_id == transaction_id:
+            connection_ctx.waiting.pop(connector_id, None)
+            connection_ctx.decided.add(connector_id)
 
 
 def decide_reconciliation(status: str) -> ReconciliationDecision:

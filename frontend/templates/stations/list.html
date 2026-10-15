@@ -21,6 +21,9 @@
     <h1 class="page-header__title">Trạm sạc</h1>
     <p class="page-header__subtitle">{% if is_driver_view %}Danh sách các trạm đang hoạt động{% else %}Quản lý toàn bộ trạm và trụ sạc của bạn{% endif %}</p>
   </div>
+  {% if is_driver_view %}
+  <a href="/monitoring" class="btn btn--primary" id="btn-find-charger">Chọn trụ để sạc</a>
+  {% endif %}
   {% if can_manage_stations %}
   <a href="/stations/new" class="btn btn--primary" id="btn-add-station">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"

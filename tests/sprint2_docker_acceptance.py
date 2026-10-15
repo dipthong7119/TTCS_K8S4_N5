@@ -43,6 +43,18 @@ def docker_stack(request):
     engine = create_engine(f"postgresql+psycopg2://csms_acceptance:acceptance_only@127.0.0.1:{db_port}/csms_acceptance")
     try:
         assert httpx.get(f"{url}/health", timeout=5).status_code == 200
+        with engine.begin() as db:
+            driver_id = db.execute(text(
+                "SELECT id FROM users WHERE email='driver@csms.local'"
+            )).scalar_one()
+            db.execute(text(
+                "INSERT INTO wallet_ledger "
+                "(user_id, entry_type, amount_vnd, idempotency_key, description) "
+                "VALUES (:user_id, 'demo_topup', 250000, "
+                "'sprint2-docker-acceptance-funding', "
+                "'Funded balance for Docker acceptance tests') "
+                "ON CONFLICT (user_id, idempotency_key) DO NOTHING"
+            ), {"user_id": driver_id})
         yield {"http": url, "ws": url.replace("http://", "ws://") + "/ocpp", "db": engine, "compose": compose}
     finally:
         compose("rm", "-sf", "simulator")

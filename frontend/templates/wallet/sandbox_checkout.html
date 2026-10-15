@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% set active_page = "wallet" %}
+
+{% block title %}Cổng thanh toán Sandbox — Ví điện tử{% endblock %}
+{% block meta_description %}Môi trường giả lập thanh toán sandbox cho tài xế nạp ví{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/wallet">Ví của tôi</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Thanh toán Sandbox</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/wallet.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="sandbox-checkout-wrapper">
+  <div class="sandbox-card">
+    <div class="sandbox-card__header">
+      <div class="sandbox-card__badge">Môi trường kiểm thử (Sandbox Gateway)</div>
+      <h1 class="sandbox-card__title">Cổng thanh toán giả lập</h1>
+      <p class="sandbox-card__subtitle">Mô phỏng quy trình nạp tiền vào ví tài xế qua cổng thanh toán số</p>
+    </div>
+
+    <!-- Order summary box -->
+    <div class="sandbox-order-box" id="sandbox-order-box">
+      <div class="sandbox-order-row">
+        <span class="sandbox-order-label">Mã đơn nạp:</span>
+        <strong class="sandbox-order-value" id="checkout-order-code">{{ order_code or '—' }}</strong>
+      </div>
+      <div class="sandbox-order-row">
+        <span class="sandbox-order-label">Cổng xử lý:</span>
+        <span class="sandbox-order-value badge badge--available">Sandbox Provider (Tự động)</span>
+      </div>
+      <div class="sandbox-order-row">
+        <span class="sandbox-order-label">Số tiền thanh toán:</span>
+        <span class="sandbox-order-amount" id="checkout-amount">Đang kiểm tra đơn...</span>
+      </div>
+      <div class="sandbox-order-row">
+        <span class="sandbox-order-label">Trạng thái hiện tại:</span>
+        <span class="sandbox-order-status badge badge--warning" id="checkout-status">Chờ thanh toán (Pending)</span>
+      </div>
+    </div>
+
+    <!-- Payment simulation options -->
+    <div class="sandbox-methods">
+      <div class="sandbox-methods__title">Phương thức thanh toán mô phỏng</div>
+      <div class="sandbox-methods__grid">
+        <label class="sandbox-method-item is-selected">
+          <input type="radio" name="payment_method" value="qr" checked />
+          <div class="sandbox-method-icon">📱</div>
+          <div class="sandbox-method-info">
+            <div class="sandbox-method-name">Quét mã QR Code</div>
+            <div class="sandbox-method-desc">Ứng dụng Ngân hàng / Ví điện tử</div>
+          </div>
+        </label>
+        <label class="sandbox-method-item">
+          <input type="radio" name="payment_method" value="atm" />
+          <div class="sandbox-method-icon">💳</div>
+          <div class="sandbox-method-info">
+            <div class="sandbox-method-name">Thẻ ATM nội địa (Napas)</div>
+            <div class="sandbox-method-desc">Thẻ thanh toán các ngân hàng</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Simulated QR View -->
+    <div class="sandbox-qr-box" id="sandbox-qr-box">
+      <div class="sandbox-qr-mock" aria-hidden="true">
+        <svg viewBox="0 0 100 100" width="120" height="120">
+          <rect width="100" height="100" fill="#ffffff" rx="8"/>
+          <path d="M10 10h30v30h-30zM15 15h20v20h-20zM20 20h10v10h-10z" fill="#0f172a"/>
+          <path d="M60 10h30v30h-30zM65 15h20v20h-20zM70 20h10v10h-10z" fill="#0f172a"/>
+          <path d="M10 60h30v30h-30zM15 65h20v20h-20zM20 70h10v10h-10z" fill="#0f172a"/>
+          <path d="M50 15h5v20h-5zM60 50h15v5h-15zM75 60h15v10h-15zM55 70h10v20h-10zM80 80h10v10h-10z" fill="#0f172a"/>
+        </svg>
+      </div>
+      <div class="sandbox-qr-instruction">
+        <strong>Quét mã QR để thanh toán</strong>
+        <p>Trong môi trường Sandbox, bấm nút giả lập bên dưới để kích hoạt kết quả mong muốn.</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="sandbox-actions">
+      <button class="btn btn--primary btn--lg" id="btn-simulate-success" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Xác nhận thanh toán thành công
+      </button>
+      <button class="btn btn--danger" id="btn-simulate-fail" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+        Mô phỏng thanh toán thất bại
+      </button>
+      <a href="/wallet" class="btn btn--secondary">
+        Quay lại trang ví
+      </a>
+    </div>
+
+    <!-- Result display -->
+    <div class="sandbox-result alert alert--info" id="sandbox-result" style="display:none;margin-top:var(--space-4);" role="status">
+      <div id="sandbox-result-text"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  'use strict';
+  const urlParams = new URLSearchParams(window.location.search);
+  const orderCode = urlParams.get('order_code') || '{{ order_code }}';
+  const btnSuccess = document.getElementById('btn-simulate-success');
+  const btnFail = document.getElementById('btn-simulate-fail');
+  const resBox = document.getElementById('sandbox-result');
+  const resText = document.getElementById('sandbox-result-text');
+
+  function fmtVND(amount) {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  }
+
+  async function checkOrder() {
+    if (!orderCode) {
+      document.getElementById('checkout-amount').textContent = 'Thiếu mã đơn';
+      return;
+    }
+    try {
+      const topups = await ApiClient.listTopupHistory({ page: 1, page_size: 20 });
+      const found = (topups.items || []).find(it => it.order_code === orderCode);
+      if (found) {
+        document.getElementById('checkout-amount').textContent = fmtVND(found.amount_vnd);
+        const statusEl = document.getElementById('checkout-status');
+        if (found.status === 'success') {
+          statusEl.className = 'sandbox-order-status badge badge--available';
+          statusEl.textContent = 'Đã thanh toán thành công';
+          btnSuccess.disabled = true;
+          btnFail.disabled = true;
+        } else if (found.status === 'refunded') {
+          statusEl.className = 'sandbox-order-status badge badge--fault';
+          statusEl.textContent = 'Đã hoàn tiền';
+          btnSuccess.disabled = true;
+          btnFail.disabled = true;
+        } else if (found.status === 'failed' || found.status === 'cancelled') {
+          statusEl.className = 'sandbox-order-status badge badge--fault';
+          statusEl.textContent = found.status === 'cancelled' ? 'Đã hủy' : 'Thanh toán thất bại';
+          btnSuccess.disabled = true;
+          btnFail.disabled = true;
+        }
+      } else {
+        document.getElementById('checkout-amount').textContent = 'Đơn mới (Chưa thanh toán)';
+      }
+    } catch (e) {
+      document.getElementById('checkout-amount').textContent = 'Sẵn sàng thanh toán';
+    }
+  }
+
+  async function handleSimulate(status) {
+    if (!orderCode) {
+      alert('Không tìm thấy mã đơn cần thanh toán.');
+      return;
+    }
+    btnSuccess.disabled = true;
+    btnFail.disabled = true;
+    resBox.style.display = 'block';
+    resBox.className = 'sandbox-result alert alert--info';
+    resText.textContent = 'Đang xử lý giao dịch qua cổng Sandbox...';
+
+    try {
+      const res = await ApiClient.simulateSandboxPay(orderCode, status);
+      const statusEl = document.getElementById('checkout-status');
+      if (res.status === 'success') {
+        statusEl.className = 'sandbox-order-status badge badge--available';
+        statusEl.textContent = 'Đã thanh toán thành công';
+        resBox.className = 'sandbox-result alert alert--success';
+        resText.innerHTML = `<strong>Thanh toán thành công!</strong> Đã nạp <strong>${fmtVND(res.amount_vnd)}</strong> vào ví. Số dư mới: <strong>${fmtVND(res.balance_vnd)}</strong>.<br>Hệ thống sẽ chuyển về trang ví trong giây lát...`;
+        setTimeout(() => {
+          window.location.replace('/wallet?topup_success=1&order_code=' + encodeURIComponent(orderCode));
+        }, 1500);
+      } else if (res.status === 'refunded') {
+        statusEl.className = 'sandbox-order-status badge badge--fault';
+        statusEl.textContent = 'Đã hoàn tiền';
+        resBox.className = 'sandbox-result alert alert--info';
+        resText.textContent = res.refund_reason || 'Giao dịch đã được hoàn tiền; ví không nhận khoản nạp này.';
+        btnSuccess.disabled = true;
+        btnFail.disabled = true;
+      } else {
+        statusEl.className = 'sandbox-order-status badge badge--fault';
+        statusEl.textContent = res.status === 'cancelled' ? 'Đã hủy' : 'Thanh toán thất bại';
+        resBox.className = 'sandbox-result alert alert--danger';
+        resText.textContent = res.failure_reason || 'Cổng sandbox đã ghi nhận giao dịch không thành công. Khoản nạp chưa được cộng vào ví.';
+        btnFail.disabled = true;
+        btnSuccess.disabled = true;
+      }
+    } catch (err) {
+      resBox.className = 'sandbox-result alert alert--danger';
+      resText.textContent = err.message || 'Lỗi khi gửi yêu cầu thanh toán sandbox';
+      btnSuccess.disabled = false;
+      btnFail.disabled = false;
+    }
+  }
+
+  btnSuccess?.addEventListener('click', () => handleSimulate('success'));
+  btnFail?.addEventListener('click', () => handleSimulate('failed'));
+
+  checkOrder();
+})();
+</script>
+{% endblock %}

@@ -5,6 +5,7 @@ import pytest
 
 from app.dev_tools.ocpp_simulator.simulator import (
     DEMO_POINT_PROFILES,
+    BootNotificationRejected,
     SimpleSimulator,
     charge_point_uri,
     main,
@@ -232,6 +233,25 @@ def test_device_reports_every_declared_connector_and_preserves_demo_conditions(c
     assert all(payload["status"] == status and payload["errorCode"] == error for payload in notifications)
 
 
+def test_rejected_boot_uses_server_retry_interval_and_identifies_charge_point():
+    async def scenario():
+        simulator = SimpleSimulator(code="CP_VINCOM_01")
+        sent = []
+
+        async def call(action, payload=None):
+            sent.append(action)
+            return {"status": "Rejected", "interval": 300} if action == "BootNotification" else {}
+
+        simulator._call = call
+        with pytest.raises(BootNotificationRejected, match="CP_VINCOM_01") as exc:
+            await simulator._run_loop()
+        return exc.value, sent
+
+    rejected, sent = asyncio.run(scenario())
+    assert rejected.retry_after == 300
+    assert sent == ["BootNotification"]
+
+
 def test_cli_can_opt_into_demo_stations_without_changing_default_sim_count(monkeypatch):
     observed = []
 
@@ -292,20 +312,54 @@ def test_cli_rejects_invalid_fleet_before_connecting(argv, capsys):
     assert "error:" in capsys.readouterr().err
 
 
-def test_fleet_connects_concurrently_and_cleans_up_on_failure(monkeypatch):
+def test_fleet_isolates_rejected_point_and_keeps_healthy_points_connected(monkeypatch):
     async def scenario():
-        codes = simulator_codes(20)
-        started = set()
-        stopped = set()
-        ready = asyncio.Event()
+        rejected_calls = 0
+        healthy_calls = 0
+        healthy_started = asyncio.Event()
+        healthy_stopped = asyncio.Event()
 
         async def connect(simulator):
-            started.add(simulator.code)
-            if len(started) == 20:
-                ready.set()
+            nonlocal rejected_calls, healthy_calls
+            if simulator.code == "SIM-01":
+                rejected_calls += 1
+                raise BootNotificationRejected(simulator.code, {"status": "Rejected", "interval": 300})
+            healthy_calls += 1
+            healthy_started.set()
             try:
-                await ready.wait()
-                if simulator.code == "SIM-20":
+                await asyncio.Event().wait()
+            finally:
+                healthy_stopped.set()
+
+        monkeypatch.setattr(SimpleSimulator, "connect", connect)
+        fleet = asyncio.create_task(
+            run_fleet(
+                ("SIM-01", "SIM-02"),
+                "ws://app:8000/ocpp",
+                isolate_boot_rejections=True,
+            )
+        )
+        try:
+            await asyncio.wait_for(healthy_started.wait(), timeout=1)
+            await asyncio.sleep(0.02)
+            assert rejected_calls == 1
+            assert healthy_calls == 1
+        finally:
+            fleet.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await fleet
+        assert healthy_stopped.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_fleet_still_fails_fast_when_isolation_is_not_enabled(monkeypatch):
+    async def scenario():
+        stopped = set()
+
+        async def connect(simulator):
+            try:
+                if simulator.code == "SIM-01":
                     raise RuntimeError("device failed")
                 await asyncio.Event().wait()
             finally:
@@ -313,27 +367,96 @@ def test_fleet_connects_concurrently_and_cleans_up_on_failure(monkeypatch):
 
         monkeypatch.setattr(SimpleSimulator, "connect", connect)
         with pytest.raises(RuntimeError, match="device failed"):
-            await asyncio.wait_for(run_fleet(codes, "ws://app:8000/ocpp"), timeout=1)
-        assert started == stopped == set(codes)
+            await asyncio.wait_for(run_fleet(("SIM-01", "SIM-02"), "ws://app:8000/ocpp"), timeout=1)
+        assert stopped == {"SIM-01", "SIM-02"}
 
     asyncio.run(scenario())
-
-
-def test_fleet_fails_if_one_connection_ends_and_cancels_the_rest(monkeypatch):
+@pytest.mark.parametrize("key,value,status", [
+    ("HeartbeatInterval", "60", "Accepted"),
+    ("MeterValueSampleInterval", "5", "Accepted"),
+    ("HeartbeatInterval", "29", "Rejected"),
+    ("MeterValueSampleInterval", "901", "Rejected"),
+    ("MeterValueSampleInterval", "5.5", "Rejected"),
+    ("UnknownSetting", "60", "NotSupported"),
+])
+def test_configuration_change_and_readback(key, value, status):
     async def scenario():
-        stopped = set()
+        sim = SimpleSimulator(code="SIM-01")
+        original = dict(sim.configuration)
+        replies = []
 
-        async def connect(simulator):
-            try:
-                if simulator.code == "SIM-01":
-                    return
-                await asyncio.Event().wait()
-            finally:
-                stopped.add(simulator.code)
+        class FakeWebSocket:
+            def __aiter__(self):
+                async def messages():
+                    yield json.dumps([2, "change", "ChangeConfiguration", {
+                        "key": key, "value": value,
+                    }])
+                    yield json.dumps([2, "read", "GetConfiguration", {
+                        "key": [key],
+                    }])
+                return messages()
 
-        monkeypatch.setattr(SimpleSimulator, "connect", connect)
-        with pytest.raises(RuntimeError, match="SIM-01: connection ended"):
-            await run_fleet(("SIM-01", "SIM-02"), "ws://app:8000/ocpp")
-        assert stopped == {"SIM-01", "SIM-02"}
+            async def send(self, message):
+                replies.append(json.loads(message))
+
+        sim.ws = FakeWebSocket()
+        await sim._receive_loop()
+
+        assert replies[0] == [3, "change", {"status": status}]
+        if status == "Accepted":
+            assert sim.configuration[key] == int(value)
+            assert replies[1][2]["configurationKey"] == [{
+                "key": key, "readonly": False, "value": value,
+            }]
+            assert replies[1][2]["unknownKey"] == []
+        else:
+            assert sim.configuration == original
+            if key not in original:
+                assert replies[1][2]["unknownKey"] == [key]
+
+    asyncio.run(scenario())
+def test_meter_interval_and_stop(monkeypatch):
+    from app.dev_tools.ocpp_simulator import simulator as module
+
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    async def scenario():
+        sim = SimpleSimulator(code="SIM-01")
+        sim.connected = True
+        calls = []
+
+        async def fake_call(action, payload=None):
+            calls.append((action, payload))
+            if action == "StartTransaction":
+                return {
+                    "transactionId": 73,
+                    "idTagInfo": {"status": "Accepted"},
+                }
+            return {}
+
+        sim._call = fake_call
+        await sim._trigger_remote_start(2, "TEST")
+        assert sim._active_transactions[2]["transaction_id"] == 73
+
+        clock[0] = 29
+        await sim.send_meter_values()
+        assert not any(action == "MeterValues" for action, _ in calls)
+
+        sim.configuration["MeterValueSampleInterval"] = 5
+        await sim.send_meter_values()
+        meters = [payload for action, payload in calls if action == "MeterValues"]
+        assert len(meters) == 1
+        assert meters[0]["connectorId"] == 2
+        assert meters[0]["transactionId"] == 73
+        sample = meters[0]["meterValue"][0]["sampledValue"][0]
+        assert sample["value"] == "1100"
+        assert sample["unit"] == "Wh"
+
+        await sim._trigger_remote_stop(73)
+        assert sim._active_transactions == {}
+        clock[0] = 60
+        await sim.send_meter_values()
+        assert sum(action == "MeterValues" for action, _ in calls) == 1
 
     asyncio.run(scenario())
