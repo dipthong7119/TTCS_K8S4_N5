@@ -262,6 +262,82 @@ def test_sandbox_webhook_failed_does_not_credit() -> None:
     assert totals["balance_vnd"] == 0
     db_verify.close()
 
+    late_success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code, status="success"),
+    )
+    assert late_success.status_code == 200
+    assert late_success.json()["status"] == "failed"
+    assert late_success.json()["balance_vnd"] == 0
+
+
+def test_sandbox_webhook_refund_reverses_a_successful_topup_once() -> None:
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=125_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code),
+    )
+    assert success.status_code == 200
+    assert success.json()["balance_vnd"] == 125_000
+
+    refund_payload = signed_webhook_payload(
+        order_code,
+        status="refunded",
+        failure_reason="Ngân hàng đã hoàn giao dịch",
+    )
+    first_refund = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    repeated_refund = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    assert first_refund.status_code == repeated_refund.status_code == 200
+    assert first_refund.json()["status"] == "refunded"
+    assert first_refund.json()["refund_reason"] == "Ngân hàng đã hoàn giao dịch"
+    assert first_refund.json()["balance_vnd"] == 0
+    assert repeated_refund.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    transaction = db_verify.query(PaymentTransaction).filter_by(order_code=order_code).one()
+    entries = db_verify.query(WalletLedgerEntry).filter_by(
+        reference_type="payment_transaction", reference_id=transaction.id
+    ).order_by(WalletLedgerEntry.id).all()
+    assert transaction.refunded_at is not None
+    assert [(entry.entry_type, entry.amount_vnd) for entry in entries] == [
+        ("sandbox_topup", 125_000),
+        ("payment_refund", -125_000),
+    ]
+    db_verify.close()
+
+
+def test_refund_before_delayed_success_does_not_credit_wallet() -> None:
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=80_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    refund_payload = signed_webhook_payload(order_code, status="refunded")
+    refunded = client.post(
+        "/api/wallet/topups/sandbox/webhook", json=refund_payload
+    )
+    late_success = client.post(
+        "/api/wallet/topups/sandbox/webhook",
+        json=signed_webhook_payload(order_code, status="success"),
+    )
+    assert refunded.status_code == late_success.status_code == 200
+    assert refunded.json()["status"] == late_success.json()["status"] == "refunded"
+    assert late_success.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    assert db_verify.query(WalletLedgerEntry).filter_by(user_id=10).count() == 0
+    db_verify.close()
+
 
 def test_sandbox_webhook_rejects_invalid_signature_without_crediting_wallet() -> None:
     db = TestingSessionLocal()
@@ -328,6 +404,40 @@ def test_simulate_pay_forbidden_other_user() -> None:
         json={"order_code": order_code, "status": "success"},
     )
     assert resp.status_code == 403
+
+
+def test_driver_can_simulate_refund_for_own_completed_topup() -> None:
+    mock_driver = MockUser(user_id=10, roles=["driver"])
+    app.dependency_overrides[get_current_user] = lambda: mock_driver
+
+    db = TestingSessionLocal()
+    tx = create_sandbox_topup_request(db, user_id=10, amount_vnd=60_000)
+    db.commit()
+    order_code = tx.order_code
+    db.close()
+
+    paid = client.post(
+        "/api/wallet/topups/sandbox/simulate-pay",
+        json={"order_code": order_code, "status": "success"},
+    )
+    refunded = client.post(
+        "/api/wallet/topups/sandbox/simulate-pay",
+        json={"order_code": order_code, "status": "refunded"},
+    )
+    assert paid.status_code == refunded.status_code == 200
+    assert paid.json()["balance_vnd"] == 60_000
+    assert refunded.json()["status"] == "refunded"
+    assert refunded.json()["balance_vnd"] == 0
+
+    db_verify = TestingSessionLocal()
+    history = client.get("/api/wallet/topups").json()["items"]
+    item = next(item for item in history if item["order_code"] == order_code)
+    assert item["status"] == "refunded"
+    assert item["refunded_at"] is not None
+    assert db_verify.query(WalletLedgerEntry).filter_by(
+        idempotency_key=f"payment-refund:{order_code}"
+    ).one().amount_vnd == -60_000
+    db_verify.close()
 
 
 def test_list_my_topup_history() -> None:
