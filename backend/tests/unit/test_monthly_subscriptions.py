@@ -20,6 +20,7 @@ from app.services.subscriptions import (
     list_owner_revenue_share,
     purchase_subscription,
 )
+from seed_data import DEMO_SUBSCRIPTION_PLANS, _ensure_demo_subscription_plans
 
 
 def _utc_naive(year: int, month: int, day: int, hour: int = 0) -> datetime:
@@ -34,6 +35,29 @@ def _user(user_id: int, email: str) -> User:
         full_name=f"User {user_id}",
         is_active=True,
     )
+
+
+def test_development_offer_plans_are_seeded_once_without_overwriting_edits(db_session) -> None:
+    counts = {"subscription_plans": 0}
+
+    _ensure_demo_subscription_plans(db_session, counts)
+    db_session.flush()
+    plans = db_session.query(SubscriptionPlan).order_by(SubscriptionPlan.monthly_fee_vnd).all()
+
+    assert len(plans) == len(DEMO_SUBSCRIPTION_PLANS) == 3
+    assert [plan.name for plan in plans] == ["Tiết kiệm", "Đồng hành", "Pro"]
+    assert plans[0].monthly_fee_vnd == 25_000
+    assert plans[0].price_vnd_per_kwh == 2_000
+    assert all(plan.is_active and plan.description for plan in plans)
+    assert counts["subscription_plans"] == 3
+
+    plans[0].monthly_fee_vnd = 30_000
+    _ensure_demo_subscription_plans(db_session, counts)
+    db_session.flush()
+
+    assert db_session.query(SubscriptionPlan).count() == 3
+    assert db_session.query(SubscriptionPlan).filter_by(name="Tiết kiệm").one().monthly_fee_vnd == 30_000
+    assert counts["subscription_plans"] == 3
 
 
 def test_purchase_charges_once_and_expires_after_one_calendar_month(db_session) -> None:

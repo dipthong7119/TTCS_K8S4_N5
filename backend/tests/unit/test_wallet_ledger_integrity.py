@@ -223,7 +223,7 @@ def test_ac3_detects_negative_credit_violation() -> None:
 
 def test_ac4_detects_positive_debit_violation() -> None:
     """
-    AC4: Logic phát hiện vi phạm dấu debit (amount_vnd >= 0 với loại session_charge).
+    AC4: Logic phát hiện vi phạm dấu debit (amount_vnd >= 0 với các loại debit).
 
     SQLite enforce CheckConstraint nên không thể insert bản ghi xấu vào DB trực tiếp.
     Test này kiểm tra logic phân loại vi phạm trực tiếp trên object giả.
@@ -234,10 +234,10 @@ def test_ac4_detects_positive_debit_violation() -> None:
     fake_entry = MagicMock(spec=WalletLedgerEntry)
     fake_entry.id = 9002
     fake_entry.user_id = 101
-    fake_entry.entry_type = "session_charge"
-    fake_entry.amount_vnd = 30_000  # sai: phải âm
+    fake_entry.entry_type = "payment_refund"
+    fake_entry.amount_vnd = 30_000  # sai: khoản hoàn nạp phải âm
 
-    DEBIT_TYPES = ("session_charge",)
+    DEBIT_TYPES = ("session_charge", "subscription_charge", "payment_refund")
     violations = []
     for e in [fake_entry]:
         if e.entry_type in DEBIT_TYPES and e.amount_vnd >= 0:
@@ -253,7 +253,7 @@ def test_ac4_detects_positive_debit_violation() -> None:
     assert len(violations) == 1
     v = violations[0]
     assert v["type"] == "sign_violation"
-    assert v["entry_type"] == "session_charge"
+    assert v["entry_type"] == "payment_refund"
     assert v["amount_vnd"] == 30_000
 
 

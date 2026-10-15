@@ -119,6 +119,10 @@ def docker_stack(request):
 
     try:
         with engine.connect() as connection:
+            driver_id = connection.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": "driver@csms.local"},
+            ).scalar_one()
             id_tag = connection.execute(
                 text(
                     "SELECT tags.id_tag FROM id_tags tags "
@@ -130,6 +134,15 @@ def docker_stack(request):
                 {"email": "driver@csms.local"},
             ).scalar_one_or_none()
         assert id_tag, "Acceptance seed did not create a valid driver RFID tag"
+        with engine.begin() as connection:
+            connection.execute(text(
+                "INSERT INTO wallet_ledger "
+                "(user_id, entry_type, amount_vnd, idempotency_key, description) "
+                "VALUES (:user_id, 'demo_topup', 250000, "
+                "'scrum182-acceptance-funding', "
+                "'Funded balance for the 20-charger scenario') "
+                "ON CONFLICT (user_id, idempotency_key) DO NOTHING"
+            ), {"user_id": driver_id})
         yield {"http": http_url, "ws": ws_url, "db": engine, "id_tag": id_tag}
     finally:
         engine.dispose()
