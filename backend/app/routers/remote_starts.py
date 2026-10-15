@@ -32,7 +32,10 @@ def _error_response(error: RemoteStartFailure) -> JSONResponse:
     return JSONResponse(
         status_code=error.status_code,
         content=RemoteStartErrorResponse(
-            detail=error.detail, code=error.code
+            detail=error.detail,
+            code=error.code,
+            minimum_required_vnd=error.minimum_required_vnd,
+            top_up_url=error.top_up_url,
         ).model_dump(mode="json"),
     )
 

@@ -54,7 +54,13 @@ function monitoring(getTree, clock = Date, options = {}) {
       remoteStartChargePoint: options.remoteStart || (async () => ({ status: 'Rejected' })),
       listAllSessions: options.listSessions || (async () => ({ items: [] })),
       getCurrentSession: options.currentSession || (async () => null),
-    remoteStop: options.stop,
+      createDriverRemoteStart: options.createDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      getDriverRemoteStart: options.getDriverRemoteStart || (async () => ({
+        id: 95, status: 'waiting_start', seconds_left: 60
+      })),
+      remoteStop: options.stop,
       getMonitoringTree: () => { requests++; return getTree(); },
       resetChargePoint: async (code, type) => { apiResets.push({ code, type }); return { status: 'Accepted' }; },
     },
@@ -640,6 +646,21 @@ test('T-53 anomaly list propagates API errors instead of returning sample data',
   await assert.rejects(client.api.listAnomalies(), error => error.status === 500 && error.message === 'Anomalies unavailable');
 });
 
+test('SCRUM-72: API errors preserve wallet blocking details for the start screen', async () => {
+  const client = authClient(async () => ({
+    ok: false, status: 409,
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      detail: 'Số dư ví cần tối thiểu 50,000 đồng.',
+      code: 'wallet_below_minimum', minimum_required_vnd: 50_000, top_up_url: '/wallet'
+    })
+  }));
+  await assert.rejects(client.api.remoteStartChargePoint('CP01', 1, 'TAG'), error =>
+    error.status === 409 && error.code === 'wallet_below_minimum' &&
+    error.minimum_required_vnd === 50_000 && error.top_up_url === '/wallet'
+  );
+});
+
 test('audit displays the real Reset event returned by the server', async () => {
   const items = [];
   const requests = [];
@@ -666,10 +687,11 @@ test('audit displays the real Reset event returned by the server', async () => {
   assert.equal(requests[1].config.method, 'GET');
   assert.equal(requests[1].config.credentials, 'include');
   assert.match(page.html(), /RESET-NEW-03/);
-  assert.match(page.html(), /Reset trụ thành công/);
+  assert.match(page.html(), /Khởi động lại trụ \(Reset\)/);
+  assert.match(page.html(), /Chấp nhận/);
   assert.match(page.html(), /Operator real/);
   assert.match(page.html(), /operator@example.test/);
-  assert.match(page.html(), /Hard/);
+  assert.deepEqual(JSON.parse(requests[0].config.body), { type: 'Hard' });
   assert.equal(page.document.getElementById('audit-count').textContent, '1 sự kiện');
   assert.doesNotMatch(page.html(), /CP_VIN_01|CP_LOT_02/);
 });
@@ -699,7 +721,7 @@ test('audit sends filters and pagination to the server and resets page on filter
 test('audit shows actual empty and failed API responses without sample events', async () => {
   const empty = auditPage(async () => auditResponse({ items: [], total: 0 }));
   empty.load(); await flush();
-  assert.match(empty.html(), /Chưa có nhật ký phù hợp/);
+  assert.match(empty.html(), /Không tìm thấy sự kiện phù hợp/);
   assert.equal(empty.document.getElementById('audit-count').textContent, '0 sự kiện');
   const failed = auditPage(async () => ({
     ok: false, status: 500,
@@ -863,6 +885,9 @@ async function startPage(options = {}) {
   const tag = controls.querySelector('[data-start-tag]');
   const message = controls.querySelector('[data-start-message]');
   button.dataset.cpCode = 'REAL-01';
+  select.selectedOptions = [
+    { dataset: { connectorDbId: '101' } }
+  ];
   const timers = new Map(); let timerId = 0; let now = Date.now();
   class Clock extends Date { static now() { return now; } }
   const calls = []; const redirects = [];
@@ -870,10 +895,12 @@ async function startPage(options = {}) {
     startControls: [controls], redirects,
     remoteStart: async (...args) => { calls.push(args); return options.remoteStart ? options.remoteStart(...args) : { status: 'Rejected' }; },
     listSessions: options.listSessions, currentSession: options.currentSession,
+    createDriverRemoteStart: options.createDriverRemoteStart,
+    getDriverRemoteStart: options.getDriverRemoteStart,
     setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, time: now + ms }); return id; },
     clearTimeout: id => timers.delete(id),
   });
-  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['driver'] });
+  page.document.getElementById('auth-context').textContent = JSON.stringify({ roles: options.roles || ['operator'] });
   await flush(); page.openDetail();
   select.value = '1'; select.handlers.change(); tag.value = 'CARD-01'; tag.handlers.input();
   return {
@@ -917,6 +944,26 @@ for (const [status, expected] of [[409, /đang bận/], [504, /Hết thời gian
   });
 }
 
+test('SCRUM-72: low wallet tells the driver why and links directly to top up', async () => {
+  const page = await startPage({ remoteStart: async () => {
+    throw {
+      status: 409,
+      code: 'wallet_below_minimum',
+      message: 'Số dư ví cần tối thiểu 50,000 đồng. Hãy nạp thêm tiền để bắt đầu phiên sạc.',
+      minimum_required_vnd: 50_000,
+      top_up_url: '/wallet',
+    };
+  } });
+
+  await page.click();
+
+  assert.match(page.message.textContent, /Số dư ví cần tối thiểu 50,000 đồng/);
+  assert.equal(page.message.children.length, 1);
+  assert.equal(page.message.children[0].href, '/wallet');
+  assert.equal(page.message.children[0].textContent, 'Nạp tiền vào ví');
+  assert.equal(page.button.disabled, false);
+});
+
 test('SCRUM-191: timeout ignores a late Accepted response and never navigates', async () => {
   let resolve;
   const page = await startPage({ remoteStart: () => new Promise(done => { resolve = done; }) });
@@ -926,17 +973,35 @@ test('SCRUM-191: timeout ignores a late Accepted response and never navigates', 
   assert.equal(page.timers.size, 0);
 });
 
-test('SCRUM-194: only a new session on the chosen point and connector navigates to T-48', async () => {
-  let session = { id: 1, charge_point_code: 'OTHER', connector_number: 1, started_at: new Date().toISOString() };
-  const page = await startPage({ remoteStart: async () => ({ status: 'Accepted' }), currentSession: async () => session });
-  await page.click(); assert.deepEqual(page.redirects, []);
-  session = { ...session, charge_point_code: 'REAL-01', connector_number: 2 };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session = { ...session, connector_number: 1, started_at: '2000-01-01T00:00:00Z' };
-  await page.advance(2000); assert.deepEqual(page.redirects, []);
-  session.started_at = new Date(Date.now() + 10000).toISOString();
-  await page.advance(2000); assert.deepEqual(page.redirects, ['/sessions/mine']);
-  assert.match(page.message.textContent, /đã bắt đầu/); assert.equal(page.timers.size, 0);
+test('SCRUM-95: driver waits for its remote-start request before navigating', async () => {
+  let request = {
+    id: 95, status: 'waiting_start', seconds_left: 60
+  };
+  const page = await startPage({
+    roles: ['driver'],
+    createDriverRemoteStart: async connectorId => {
+      assert.equal(connectorId, 101);
+      return request;
+    },
+    getDriverRemoteStart: async requestId => {
+      assert.equal(requestId, 95);
+      return request;
+    }
+  });
+
+  page.tag.value = '';
+  await page.click();
+  assert.deepEqual(page.redirects, []);
+  assert.equal(page.button.disabled, true);
+
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, []);
+
+  request = { id: 95, status: 'started', session_id: 123 };
+  await page.advance(2000);
+  assert.deepEqual(page.redirects, ['/sessions/mine']);
+  assert.match(page.message.textContent, /đã bắt đầu/);
+  assert.equal(page.timers.size, 0);
 });
 
 test('SCRUM-191: delayed deadline timer cannot accept a response after 60 seconds', async () => {
@@ -959,7 +1024,7 @@ test('SCRUM-191: delayed session response after deadline cannot report success',
   let resolve;
   const page = await startPage({
     remoteStart: async () => ({ status: 'Accepted' }),
-    currentSession: () => new Promise(done => { resolve = done; })
+    listSessions: () => new Promise(done => { resolve = done; })
   });
   const pending = page.click(); await flush();
   page.elapseWithoutTimers(60000);
@@ -1121,6 +1186,9 @@ function sessionPage(getSessions, options = {}) {
     canRemoteStop: options.stop ? 'true' : 'false',
     liveUpdates: options.liveUpdates || options.stop ? 'true' : 'false',
   };
+  const sessionRows = options.row ? [options.row] : [];
+  document.getElementById('sessions-tbody').querySelectorAll = selector =>
+    selector === '[data-session-id]' ? sessionRows : [];
 
   const calls = [], timers = [], toasts = [];
   const callbacks = {}, cleared = [];
@@ -1134,6 +1202,9 @@ function sessionPage(getSessions, options = {}) {
       return getSessions();
     },
     getCurrentSession: options.currentSession || (async () => null),
+    getSessionInvoice: options.getSessionInvoice || (async () => ({
+      session_id: 0, status: 'pending', message: 'Hóa đơn sẽ có sau khi phiên sạc kết thúc.'
+    })),
     remoteStop: options.stop,
   };
   vm.runInContext(read('pages/my_session.js'), vm.createContext({
@@ -1179,6 +1250,67 @@ test('driver session API failure reports the error without displaying sample ses
   assert.doesNotMatch(page.document.getElementById('sessions-tbody').innerHTML, /8888|EcoCharge/);
   assert.equal(page.document.getElementById('session-count').textContent, 'Lỗi kết nối');
   assert.equal(page.timers.length, 0);
+});
+
+test('SCRUM-66: session detail reads the persisted invoice and renders line items and total', async () => {
+  const row = element();
+  row.dataset.sessionId = '123';
+  const invoiceCalls = [];
+  const page = sessionPage(async () => ({
+    items: [{ id: 123, status: 'completed', ended_at: '2026-10-12T01:00:00Z', cost_vnd: 36_000 }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => {
+      invoiceCalls.push(id);
+      return {
+        invoice_id: 10, session_id: id, status: 'issued', total_vnd: 36_000,
+        rounding_rule: 'Làm tròn từng đoạn.',
+        segments: [{
+          service_date: '2026-10-11', tariff_name: 'Tariff đêm', band: 'Thấp điểm',
+          from: '2026-10-11T23:00:00+07:00', to: '2026-10-12T00:00:00+07:00',
+          energy_kwh: '6', price_vnd_per_kwh: 3_000, amount_vnd: 18_000,
+        }, {
+          service_date: '2026-10-12', tariff_name: 'Tariff ngày', band: 'Cao điểm',
+          from: '2026-10-12T00:00:00+07:00', to: '2026-10-12T01:00:00+07:00',
+          energy_kwh: '4', price_vnd_per_kwh: 4_500, amount_vnd: 18_000,
+        }],
+      };
+    },
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const details = page.document.getElementById('session-detail-body');
+  assert.deepEqual(invoiceCalls, [123]);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /Tariff đêm/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /2026-10-12/);
+  assert.match(details.querySelector('#session-invoice-detail').innerHTML, /36\.000/);
+});
+
+test('SCRUM-66: a session needing review shows its message without a provisional total', async () => {
+  const row = element();
+  row.dataset.sessionId = '124';
+  const page = sessionPage(async () => ({
+    items: [{ id: 124, status: 'needs_review', ended_at: '2026-10-12T01:00:00Z', cost_vnd: null }],
+    total: 1,
+  }), {
+    row,
+    getSessionInvoice: async id => ({
+      session_id: id, status: 'pending_review',
+      message: 'Phiên sạc đang chờ xử lý; hóa đơn chưa sẵn sàng.',
+    }),
+  });
+
+  await flush();
+  row.handlers.click();
+  await flush();
+
+  const invoice = page.document.getElementById('session-detail-body').querySelector('#session-invoice-detail').innerHTML;
+  assert.match(invoice, /đang chờ xử lý/);
+  assert.doesNotMatch(invoice, /Tổng cộng|\d+\.\d{3} ₫/);
 });
 
 const reconciliationSample = JSON.parse(fs.readFileSync(

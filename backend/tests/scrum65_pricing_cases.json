@@ -260,7 +260,6 @@
       "case_id": "SCRUM65-20",
       "description": "Qua nửa đêm, ngày hôm sau có phiên bản biểu giá mới",
       "category": "tariff_version",
-      "blocked_by": "SCRUM-64/SCRUM-206: pricing hiện chỉ nhận một bộ bands; billing chọn giá tại lúc bắt đầu cho cả phiên. Chờ hàm nhận nhiều phiên bản giá theo thời điểm áp dụng.",
       "tariff": "daily",
       "tariff_versions": [
         {"effective_from": "2026-10-09T00:00:00+07:00", "tariff": "daily"},

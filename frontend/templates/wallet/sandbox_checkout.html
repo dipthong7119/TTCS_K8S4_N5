@@ -143,9 +143,16 @@
           statusEl.textContent = 'Đã thanh toán thành công';
           btnSuccess.disabled = true;
           btnFail.disabled = true;
-        } else if (found.status === 'failed') {
+        } else if (found.status === 'refunded') {
           statusEl.className = 'sandbox-order-status badge badge--fault';
-          statusEl.textContent = 'Thanh toán thất bại';
+          statusEl.textContent = 'Đã hoàn tiền';
+          btnSuccess.disabled = true;
+          btnFail.disabled = true;
+        } else if (found.status === 'failed' || found.status === 'cancelled') {
+          statusEl.className = 'sandbox-order-status badge badge--fault';
+          statusEl.textContent = found.status === 'cancelled' ? 'Đã hủy' : 'Thanh toán thất bại';
+          btnSuccess.disabled = true;
+          btnFail.disabled = true;
         }
       } else {
         document.getElementById('checkout-amount').textContent = 'Đơn mới (Chưa thanh toán)';
@@ -168,17 +175,29 @@
 
     try {
       const res = await ApiClient.simulateSandboxPay(orderCode, status);
-      if (status === 'success') {
+      const statusEl = document.getElementById('checkout-status');
+      if (res.status === 'success') {
+        statusEl.className = 'sandbox-order-status badge badge--available';
+        statusEl.textContent = 'Đã thanh toán thành công';
         resBox.className = 'sandbox-result alert alert--success';
         resText.innerHTML = `<strong>Thanh toán thành công!</strong> Đã nạp <strong>${fmtVND(res.amount_vnd)}</strong> vào ví. Số dư mới: <strong>${fmtVND(res.balance_vnd)}</strong>.<br>Hệ thống sẽ chuyển về trang ví trong giây lát...`;
         setTimeout(() => {
           window.location.replace('/wallet?topup_success=1&order_code=' + encodeURIComponent(orderCode));
         }, 1500);
+      } else if (res.status === 'refunded') {
+        statusEl.className = 'sandbox-order-status badge badge--fault';
+        statusEl.textContent = 'Đã hoàn tiền';
+        resBox.className = 'sandbox-result alert alert--info';
+        resText.textContent = res.refund_reason || 'Giao dịch đã được hoàn tiền; ví không nhận khoản nạp này.';
+        btnSuccess.disabled = true;
+        btnFail.disabled = true;
       } else {
+        statusEl.className = 'sandbox-order-status badge badge--fault';
+        statusEl.textContent = res.status === 'cancelled' ? 'Đã hủy' : 'Thanh toán thất bại';
         resBox.className = 'sandbox-result alert alert--danger';
-        resText.innerHTML = `<strong>Giao dịch không thành công!</strong> Cổng sandbox đã ghi nhận trạng thái thất bại.`;
-        btnFail.disabled = false;
-        btnSuccess.disabled = false;
+        resText.textContent = res.failure_reason || 'Cổng sandbox đã ghi nhận giao dịch không thành công. Khoản nạp chưa được cộng vào ví.';
+        btnFail.disabled = true;
+        btnSuccess.disabled = true;
       }
     } catch (err) {
       resBox.className = 'sandbox-result alert alert--danger';

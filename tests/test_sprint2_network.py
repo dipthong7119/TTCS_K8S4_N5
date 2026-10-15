@@ -73,6 +73,16 @@ def network_server(tmp_path_factory, unused_tcp_port_factory):
         start()
         with sqlite_connection(database) as db:
             owner = db.execute("SELECT id FROM users WHERE email='owner@csms.local'").fetchone()[0]
+            driver_id = db.execute(
+                "SELECT id FROM users WHERE email='driver@csms.local'"
+            ).fetchone()[0]
+            db.execute(
+                "INSERT INTO wallet_ledger "
+                "(user_id, entry_type, amount_vnd, idempotency_key, description) "
+                "VALUES (?, 'manual_topup', 250000, 'ocpp-network-test-funding', "
+                "'Funded balance for OCPP network tests')",
+                (driver_id,),
+            )
             station_id = db.execute(
                 "INSERT INTO stations(name,address,status,owner_id) VALUES('Network test','Test','active',?)", (owner,)
             ).lastrowid

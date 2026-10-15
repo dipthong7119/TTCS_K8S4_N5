@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% set active_page = "subscriptions" %}
+
+{% block title %}Gói thuê bao hàng tháng{% endblock %}
+{% block meta_description %}Đăng ký gói thuê bao tháng để nhận biểu giá sạc ưu đãi cố định trên toàn mạng lưới trạm sạc{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Gói thuê bao tháng</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/subscriptions.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="sub-header-banner">
+  <h1 class="sub-header-banner__title">Gói thuê bao tháng</h1>
+  <p class="sub-header-banner__desc">
+    Tiết kiệm vượt trội cho tài xế sạc thường xuyên. Đăng ký gói tháng để áp dụng biểu giá điện ưu đãi cố định (đ/kWh) trên mọi trụ sạc của hệ thống trong 1 tháng dương lịch.
+  </p>
+</div>
+
+<!-- Trạng thái gói hiện tại của tài xế -->
+<section id="active-subscription-section" aria-labelledby="active-sub-heading">
+  <div class="active-sub-card" id="active-sub-card" style="display: none;">
+    <div class="active-sub-card__header">
+      <h2 class="active-sub-card__title" id="active-sub-heading">
+        <span id="active-plan-name">Gói đang hoạt động</span>
+        <span class="badge badge--available" id="active-badge">Đang hiệu lực</span>
+      </h2>
+      <span class="tag" id="active-time-remaining">—</span>
+    </div>
+
+    <div class="active-sub-card__grid">
+      <div class="active-sub-metric">
+        <span class="active-sub-metric__label">Biểu giá ưu đãi</span>
+        <span class="active-sub-metric__val active-sub-metric__val--highlight" id="active-rate">—</span>
+        <span class="active-sub-metric__sub">Cố định theo kWh</span>
+      </div>
+
+      <div class="active-sub-metric">
+        <span class="active-sub-metric__label">Phí thuê bao tháng</span>
+        <span class="active-sub-metric__val" id="active-fee">—</span>
+        <span class="active-sub-metric__sub">Đã trừ từ ví</span>
+      </div>
+
+      <div class="active-sub-metric">
+        <span class="active-sub-metric__label">Ngày bắt đầu</span>
+        <span class="active-sub-metric__val" id="active-starts">—</span>
+        <span class="active-sub-metric__sub">Thời điểm kích hoạt</span>
+      </div>
+
+      <div class="active-sub-metric">
+        <span class="active-sub-metric__label">Ngày hết hạn</span>
+        <span class="active-sub-metric__val" id="active-expires">—</span>
+        <span class="active-sub-metric__sub">Hết 1 tháng dương lịch</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="no-active-sub-card" style="display: none; padding: var(--space-6); text-align: center; margin-bottom: var(--space-6);">
+    <div style="font-size: 2rem; margin-bottom: var(--space-2);">⚡</div>
+    <h2 style="font-size: var(--font-size-lg); margin: 0 0 var(--space-2);">Bạn chưa đăng ký gói thuê bao nào</h2>
+    <p style="color: var(--color-text-secondary); max-width: 520px; margin: 0 auto var(--space-4);">
+      Hiện tại các phiên sạc của bạn được tính theo biểu giá tiêu chuẩn của từng trạm. Chọn một trong các gói bên dưới để nhận ngay giá ưu đãi!
+    </p>
+    <a href="#plans-heading" class="btn btn--primary" style="display: inline-flex;">Xem các gói ưu đãi</a>
+  </div>
+</section>
+
+<!-- Danh sách các gói đang mở đăng ký -->
+<h2 class="plans-heading" id="plans-heading">Chọn gói thuê bao phù hợp</h2>
+<div class="plans-grid" id="plans-grid">
+  <div class="text-center" style="grid-column: 1 / -1; padding: var(--space-6); color: var(--color-text-secondary);">
+    Đang tải danh sách gói thuê bao...
+  </div>
+</div>
+
+<!-- Lịch sử đăng ký gói -->
+<section class="card sub-history-card" aria-labelledby="history-heading">
+  <div class="card__header">
+    <div>
+      <h2 class="card__title" id="history-heading">Lịch sử đăng ký gói</h2>
+      <p class="driver-wallet-hint">Danh sách các chu kỳ gói thuê bao đã từng đăng ký và sử dụng.</p>
+    </div>
+    <span class="tag" id="history-count">—</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" aria-label="Lịch sử gói thuê bao">
+      <thead>
+        <tr>
+          <th scope="col">Gói thuê bao</th>
+          <th scope="col" class="text-right">Phí tháng</th>
+          <th scope="col" class="text-right">Biểu giá ưu đãi</th>
+          <th scope="col">Ngày kích hoạt</th>
+          <th scope="col">Ngày hết hạn</th>
+          <th scope="col">Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody id="history-tbody">
+        <tr><td colspan="6" class="text-center">Đang tải lịch sử thuê bao...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Modal Dialog xác nhận đăng ký gói -->
+<dialog class="sub-dialog" id="subscribe-dialog" aria-labelledby="dialog-title">
+  <div class="sub-dialog__content">
+    <div class="sub-dialog__header">
+      <h2 class="sub-dialog__title" id="dialog-title">Xác nhận đăng ký gói</h2>
+      <button class="btn btn--ghost btn--sm" id="btn-dialog-close" type="button" aria-label="Đóng">✕</button>
+    </div>
+
+    <p style="margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+      Bạn đang chọn đăng ký gói <strong id="modal-plan-name" style="color: var(--color-text);">—</strong>.
+      Gói sẽ có hiệu lực ngay trong vòng 1 tháng dương lịch và tự động áp dụng biểu giá <strong id="modal-plan-rate" style="color: var(--color-success, #16a34a);">— đ/kWh</strong> cho mọi phiên sạc.
+    </p>
+
+    <div class="sub-balance-box">
+      <div class="sub-balance-row">
+        <span>Số dư ví hiện tại:</span>
+        <strong id="modal-wallet-balance">—</strong>
+      </div>
+      <div class="sub-balance-row">
+        <span>Phí gói cần thanh toán:</span>
+        <strong id="modal-plan-fee" style="color: var(--color-primary, #0284c7);">—</strong>
+      </div>
+      <div class="sub-balance-row" id="modal-balance-after-row">
+        <span>Số dư còn lại dự kiến:</span>
+        <strong id="modal-balance-after">—</strong>
+      </div>
+      <div class="sub-balance-row sub-balance-row--warning" id="modal-insufficient-warning" style="display: none;">
+        <span>⚠ Số dư ví không đủ để thanh toán gói này.</span>
+      </div>
+    </div>
+
+    <div class="sub-dialog__actions">
+      <button class="btn btn--ghost" id="btn-dialog-cancel" type="button">Hủy</button>
+      <a href="/wallet" class="btn btn--secondary" id="btn-go-topup" style="display: none;">Nạp thêm ví</a>
+      <button class="btn btn--primary" id="btn-confirm-subscribe" type="button">Xác nhận thanh toán</button>
+    </div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/subscriptions.js') }}"></script>
+{% endblock %}

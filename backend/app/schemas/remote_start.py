@@ -10,6 +10,8 @@ from app.models.remote_start_request import RemoteStartStatus
 class RemoteStartErrorResponse(BaseModel):
     detail: str
     code: str
+    minimum_required_vnd: int | None = None
+    top_up_url: str | None = None
 
 
 class RemoteStartResponse(BaseModel):
