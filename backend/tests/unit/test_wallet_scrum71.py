@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.database import Base
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_invoice import ChargingInvoice
@@ -21,6 +22,7 @@ from app.services.billing import finalize_session_billing
 from app.services.wallet import (
     deduct_session_charge,
     has_minimum_balance,
+    minimum_wallet_balance_vnd,
     wallet_totals,
 )
 
@@ -114,6 +116,48 @@ def _topup_wallet(db, user_id: int, amount_vnd: int) -> WalletLedgerEntry:
     db.add(entry)
     db.commit()
     return entry
+
+
+def test_wallet_minimum_defaults_to_five_kwh_at_highest_effective_tariff(db, monkeypatch):
+    monkeypatch.setattr(settings, "WALLET_MINIMUM_BALANCE_VND", None)
+    assert minimum_wallet_balance_vnd(db) == 15_000
+
+    older_tariff = StationTariff(
+        station_id=1,
+        name="Expired higher rate",
+        timezone_name="UTC",
+        effective_from=_dt(2026, 10, 8, 8, 0),
+        bands=[
+            TariffBand(
+                label="All day",
+                start_minute=0,
+                end_minute=1440,
+                price_vnd_per_kwh=20_000,
+            )
+        ],
+    )
+    higher_tariff = StationTariff(
+        station_id=1,
+        name="Higher effective rate",
+        timezone_name="UTC",
+        effective_from=_dt(2026, 10, 11, 8, 0),
+        bands=[
+            TariffBand(
+                label="All day",
+                start_minute=0,
+                end_minute=1440,
+                price_vnd_per_kwh=9000,
+            )
+        ],
+    )
+    db.add_all([older_tariff, higher_tariff])
+    db.flush()
+    assert minimum_wallet_balance_vnd(db) == 45_000
+
+
+def test_wallet_minimum_global_configuration_overrides_derived_value(db, monkeypatch):
+    monkeypatch.setattr(settings, "WALLET_MINIMUM_BALANCE_VND", 70_000)
+    assert minimum_wallet_balance_vnd(db) == 70_000
 
 
 # ---------------------------------------------------------------------------

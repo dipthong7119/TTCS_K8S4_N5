@@ -74,6 +74,20 @@ def _serialize_session(
         live_kwh = _calculate_live_kwh(item, latest_energy)
     elif ended is None:
         live_kwh = _calculate_live_kwh(item, latest_meter)
+    invoice_ready = item.status == "completed" and not item.needs_review
+    invoice = item.invoice if invoice_ready else None
+    if invoice is not None:
+        invoice_status = "issued"
+        invoice_message = None
+    elif item.status in {"anomaly", "needs_review"} or item.needs_review:
+        invoice_status = "pending_review"
+        invoice_message = "Phiên sạc đang chờ xử lý; hóa đơn chưa sẵn sàng."
+    elif item.status == "completed":
+        invoice_status = "unavailable"
+        invoice_message = "Chưa có đủ dữ liệu để lập hóa đơn cho phiên sạc này."
+    else:
+        invoice_status = "pending"
+        invoice_message = "Hóa đơn sẽ có sau khi phiên sạc kết thúc."
     return {
         "id": item.id,
         "charge_point_code": item.charge_point_code,
@@ -88,11 +102,13 @@ def _serialize_session(
         "meter_stop_wh": item.meter_stop_wh,
         "kwh": float(item.energy_kwh) if item.energy_kwh is not None else None,
         "live_kwh": live_kwh,
-        "cost_vnd": item.invoice.total_vnd if item.invoice else None,
-        "invoice_segments": item.invoice.segments if item.invoice else None,
-        "invoice_rounding_rule": item.invoice.rounding_rule if item.invoice else None,
-        "invoice_subscription_id": item.invoice.subscription_id if item.invoice else None,
-        "invoice_package_name": item.invoice.package_name if item.invoice else None,
+        "cost_vnd": invoice.total_vnd if invoice else None,
+        "invoice_segments": invoice.segments if invoice else None,
+        "invoice_rounding_rule": invoice.rounding_rule if invoice else None,
+        "invoice_subscription_id": invoice.subscription_id if invoice else None,
+        "invoice_package_name": invoice.package_name if invoice else None,
+        "invoice_status": invoice_status,
+        "invoice_message": invoice_message,
         "status": item.status,
         "stop_reason": item.stop_reason,
         "remote_stop_requested_at": item.remote_stop_requested_at.isoformat() + "Z"
@@ -112,6 +128,27 @@ def _apply_visibility(query, user: User):
             Station.owner_id == user.id
         )
     return query.filter(ChargingSession.user_id == user.id)
+
+
+def _get_visible_session(db: Session, session_id: int, user: User) -> ChargingSession:
+    item = (
+        _session_query(db)
+        .options(joinedload(ChargingSession.invoice))
+        .filter(ChargingSession.id == session_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên sạc")
+    roles = _role_names(user)
+    if roles.intersection(GLOBAL_SESSION_ROLES):
+        return item
+    if "station_owner" in roles:
+        station = db.query(Station).filter(Station.id == item.station_id).first()
+        if station is None or station.owner_id != user.id:
+            raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
+    elif item.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
+    return item
 
 
 def _list_sessions(
@@ -284,19 +321,52 @@ async def get_session(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    item = _session_query(db).filter(ChargingSession.id == session_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy phiên sạc")
-    roles = _role_names(current_user)
-    if roles.intersection(GLOBAL_SESSION_ROLES):
-        return _serialize_session(db, item)
-    if "station_owner" in roles:
-        station = db.query(Station).filter(Station.id == item.station_id).first()
-        if station is None or station.owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
-    elif item.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Không có quyền xem phiên sạc này")
+    item = _get_visible_session(db, session_id, current_user)
     return _serialize_session(db, item)
+
+
+@router.get("/{session_id}/invoice", dependencies=[Depends(require_role(*SESSION_VIEW_ROLES))])
+async def get_session_invoice(
+    session_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Trả hóa đơn đã lưu, không tính lại theo biểu giá hiện tại (SCRUM-207/66)."""
+    item = _get_visible_session(db, session_id, current_user)
+    if item.status in {"anomaly", "needs_review"} or item.needs_review:
+        return {
+            "session_id": item.id,
+            "status": "pending_review",
+            "message": "Phiên sạc đang chờ xử lý; hóa đơn chưa sẵn sàng.",
+        }
+    if item.ended_at is None or item.status != "completed":
+        return {
+            "session_id": item.id,
+            "status": "pending",
+            "message": "Hóa đơn sẽ có sau khi phiên sạc kết thúc.",
+        }
+    invoice = item.invoice
+    if invoice is None:
+        return {
+            "session_id": item.id,
+            "status": "unavailable",
+            "message": "Chưa có đủ dữ liệu để lập hóa đơn cho phiên sạc này.",
+        }
+    return {
+        "invoice_id": invoice.id,
+        "session_id": item.id,
+        "status": "issued",
+        "currency": "VND",
+        "total_vnd": invoice.total_vnd,
+        "segments": invoice.segments,
+        "rounding_rule": invoice.rounding_rule,
+        "calculation_version": invoice.calculation_version,
+        "tariff_id": invoice.tariff_id,
+        "subscription_id": invoice.subscription_id,
+        "package_name": invoice.package_name,
+        "is_demo": invoice.is_demo,
+        "created_at": invoice.created_at.isoformat() + "Z",
+    }
 
 
 @router.post(

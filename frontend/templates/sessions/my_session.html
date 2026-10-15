@@ -219,6 +219,23 @@
     </div>
   </div>
 </div>
+
+<!-- SCRUM-66: Modal hoá đơn E-Receipt đầy đủ -->
+<div class="modal-backdrop is-hidden" id="invoice-modal" role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title">
+  <div class="modal invoice-modal-content" style="max-width:520px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="invoice-modal-title">Hoá đơn phiên sạc</h2>
+      <button class="modal__close" id="invoice-modal-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body invoice-modal-body" id="invoice-modal-body">
+      <!-- Filled by JS (openInvoice) -->
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

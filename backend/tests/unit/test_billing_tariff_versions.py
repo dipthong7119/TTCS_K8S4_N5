@@ -89,3 +89,60 @@ def test_future_tariff_only_applies_to_sessions_started_after_effective_time(
     assert tomorrow_invoice is not None
     assert tomorrow_invoice.tariff_id == future_tariff.id
     assert tomorrow_invoice.total_vnd == 2000
+
+
+def test_completed_session_uses_each_tariff_version_across_midnight(db_session) -> None:
+    owner = User(
+        id=1,
+        email="midnight-tariff-owner@example.test",
+        password_hash="test-hash",
+        full_name="Tariff Owner",
+        is_active=True,
+    )
+    station = Station(id=1, name="Midnight tariff station", owner_id=owner.id)
+    old_tariff = _tariff(1, _utc_naive(2026, 10, 9), 3000, "Previous day")
+    next_day_tariff = _tariff(1, _utc_naive(2026, 10, 10), 6000, "Next day")
+    session = ChargingSession(
+        id=3,
+        charge_point_code="CP-MIDNIGHT-TARIFF",
+        station_id=station.id,
+        station_name=station.name,
+        connector_number=1,
+        meter_start_wh=10_000,
+        meter_stop_wh=18_000,
+        started_at=_utc_naive(2026, 10, 9, 23),
+        ended_at=_utc_naive(2026, 10, 10, 1),
+        status="completed",
+    )
+    db_session.add_all([owner, station, old_tariff, next_day_tariff, session])
+    db_session.commit()
+
+    invoice = finalize_session_billing(db_session, session, meter_readings=[])
+
+    assert invoice is not None
+    assert invoice.tariff_id == old_tariff.id
+    assert invoice.total_vnd == 36_000
+    assert invoice.segments == [
+        {
+            "from": "2026-10-09T23:00:00+00:00",
+            "to": "2026-10-10T00:00:00+00:00",
+            "service_date": "2026-10-09",
+            "band": "All day",
+            "energy_kwh": "4.000000",
+            "price_vnd_per_kwh": 3000,
+            "amount_vnd": 12_000,
+            "tariff_id": old_tariff.id,
+            "tariff_name": "Previous day",
+        },
+        {
+            "from": "2026-10-10T00:00:00+00:00",
+            "to": "2026-10-10T01:00:00+00:00",
+            "service_date": "2026-10-10",
+            "band": "All day",
+            "energy_kwh": "4.000000",
+            "price_vnd_per_kwh": 6000,
+            "amount_vnd": 24_000,
+            "tariff_id": next_day_tariff.id,
+            "tariff_name": "Next day",
+        },
+    ]

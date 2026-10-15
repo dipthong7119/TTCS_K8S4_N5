@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
 
+    # Optional global override for SCRUM-72. If omitted, the wallet service
+    # derives the floor from 5 kWh at the highest effective station tariff.
+    WALLET_MINIMUM_BALANCE_VND: int | None = Field(default=None, ge=0)
+
     # Giới hạn nạp tiền thủ công
     MANUAL_TOPUP_MIN: int = Field(1000, ge=1)
     MANUAL_TOPUP_MAX: int = Field(20_000_000, ge=1)

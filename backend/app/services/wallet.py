@@ -2,6 +2,7 @@
 
 import re
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -11,9 +12,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.charging_session import ChargingSession
 from app.models.payment_transaction import PaymentTransaction
+from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.audit import append_audit
+from app.services.pricing import DEMO_TARIFF_BANDS
 
 
 def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
@@ -26,6 +29,9 @@ def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
         db.query(func.coalesce(func.sum(WalletLedgerEntry.amount_vnd), 0))
         .filter(
             WalletLedgerEntry.user_id == user_id,
+            WalletLedgerEntry.entry_type.in_(
+                ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup")
+            ),
             WalletLedgerEntry.amount_vnd > 0,
         )
         .scalar()
@@ -34,6 +40,7 @@ def wallet_totals(db: Session, user_id: int) -> dict[str, int]:
         db.query(func.coalesce(-func.sum(WalletLedgerEntry.amount_vnd), 0))
         .filter(
             WalletLedgerEntry.user_id == user_id,
+            WalletLedgerEntry.entry_type.in_(("session_charge", "subscription_charge")),
             WalletLedgerEntry.amount_vnd < 0,
         )
         .scalar()
@@ -90,6 +97,8 @@ def list_wallet_entries(
             display_type = "topup"
         elif entry_type in ("session_charge", "subscription_charge"):
             display_type = "charge"
+        elif entry_type in ("refund", "payment_refund"):
+            display_type = "refund"
         else:
             display_type = "adjustment"
 
@@ -224,26 +233,80 @@ def process_sandbox_webhook(
     status: str,
     failure_reason: str | None = None,
 ) -> tuple[PaymentTransaction | None, WalletLedgerEntry | None]:
-    """Xử lý webhook callback từ cổng sandbox với cơ chế idempotent (SCRUM-198)."""
+    """Apply sandbox payment, failure, cancellation, or refund callbacks once."""
+    if status not in {"success", "failed", "cancelled", "refunded"}:
+        raise ValueError("Trạng thái giao dịch sandbox không hợp lệ")
+
     tx = db.query(PaymentTransaction).filter_by(order_code=order_code).first()
     if not tx:
         return None, None
 
-    # Idempotent: nếu giao dịch đã hoàn tất trước đó thì không cộng tiền lại
+    if tx.status == "refunded":
+        refund_entry = (
+            db.query(WalletLedgerEntry)
+            .filter_by(idempotency_key=f"payment-refund:{tx.order_code}")
+            .first()
+        )
+        return tx, refund_entry
+
+    if tx.status in ("failed", "cancelled"):
+        return tx, None
+
     if tx.status == "success":
-        existing_entry = (
+        topup_entry = (
             db.query(WalletLedgerEntry)
             .filter_by(idempotency_key=f"sandbox-topup:{tx.order_code}")
             .first()
         )
-        return tx, existing_entry
+        if status != "refunded":
+            # A late failure or duplicate success must not undo a settled payment.
+            return tx, topup_entry
 
-    if tx.status in ("failed", "cancelled"):
+        if topup_entry is None:
+            # Do not debit a wallet when the corresponding credit is missing.
+            tx.status = "refunded"
+            tx.failure_reason = None
+            tx.refund_reason = (
+                (failure_reason or "Cổng thanh toán đã hoàn lại giao dịch")[:255]
+            )
+            tx.refunded_at = datetime.now(UTC).replace(tzinfo=None)
+            db.flush()
+            return tx, None
+
+        refund_entry = (
+            db.query(WalletLedgerEntry)
+            .filter_by(idempotency_key=f"payment-refund:{tx.order_code}")
+            .first()
+        )
+        if refund_entry is None:
+            refund_entry = WalletLedgerEntry(
+                user_id=tx.user_id,
+                entry_type="payment_refund",
+                amount_vnd=-abs(tx.amount_vnd),
+                idempotency_key=f"payment-refund:{tx.order_code}",
+                receipt_code=f"TOPUP-REFUND-{tx.order_code}",
+                reference_type="payment_transaction",
+                reference_id=tx.id,
+                description=f"Hoàn giao dịch nạp ví ({tx.order_code})",
+            )
+            db.add(refund_entry)
+        tx.status = "refunded"
+        tx.failure_reason = None
+        tx.refund_reason = (
+            (failure_reason or "Cổng thanh toán đã hoàn lại giao dịch")[:255]
+        )
+        tx.refunded_at = datetime.now(UTC).replace(tzinfo=None)
+        db.flush()
+        return tx, refund_entry
+
+    if tx.status != "pending":
         return tx, None
 
     if status == "success":
         tx.status = "success"
         tx.failure_reason = None
+        tx.refund_reason = None
+        tx.refunded_at = None
         entry = WalletLedgerEntry(
             user_id=tx.user_id,
             entry_type="sandbox_topup",
@@ -258,11 +321,20 @@ def process_sandbox_webhook(
         db.flush()
         return tx, entry
 
-    # Trường hợp thất bại hoặc hủy
-    tx.status = status if status in ("failed", "cancelled") else "failed"
-    tx.failure_reason = (
-        failure_reason or "Giao dịch thanh toán bị hủy hoặc không thành công"
-    )
+    if status == "refunded":
+        # A refund can arrive before a delayed success callback. In that case,
+        # the wallet was never credited and needs no compensating ledger entry.
+        tx.status = "refunded"
+        tx.refund_reason = (failure_reason or "Cổng thanh toán đã hoàn lại giao dịch")[:255]
+        tx.refunded_at = datetime.now(UTC).replace(tzinfo=None)
+        tx.failure_reason = None
+        db.flush()
+        return tx, None
+
+    tx.status = status
+    tx.failure_reason = (failure_reason or "Giao dịch thanh toán thất bại hoặc bị hủy")[:255]
+    tx.refund_reason = None
+    tx.refunded_at = None
     db.flush()
     return tx, None
 
@@ -292,6 +364,10 @@ def list_user_payment_transactions(
                 "provider": tx.provider,
                 "payment_url": tx.payment_url,
                 "failure_reason": tx.failure_reason,
+                "refund_reason": tx.refund_reason,
+                "refunded_at": (
+                    tx.refunded_at.isoformat() + "Z" if tx.refunded_at else None
+                ),
                 "created_at": (
                     tx.created_at.isoformat() + "Z" if tx.created_at else None
                 ),
@@ -307,12 +383,47 @@ def list_user_payment_transactions(
     }
 
 
+def minimum_wallet_balance_vnd(db: Session) -> int:
+    """Ngưỡng toàn hệ thống: cấu hình tường minh hoặc 5 kWh theo giá cao nhất."""
+    if settings.WALLET_MINIMUM_BALANCE_VND is not None:
+        return settings.WALLET_MINIMUM_BALANCE_VND
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    latest_effective_by_station = (
+        db.query(
+            StationTariff.station_id.label("station_id"),
+            func.max(StationTariff.effective_from).label("effective_from"),
+        )
+        .filter(StationTariff.effective_from <= now)
+        .group_by(StationTariff.station_id)
+        .subquery()
+    )
+    highest_effective_rate = cast(
+        int | None,
+        db.query(func.max(TariffBand.price_vnd_per_kwh))
+        .join(StationTariff, TariffBand.tariff_id == StationTariff.id)
+        .join(
+            latest_effective_by_station,
+            (latest_effective_by_station.c.station_id == StationTariff.station_id)
+            & (latest_effective_by_station.c.effective_from == StationTariff.effective_from),
+        )
+        .scalar(),
+    )
+    if highest_effective_rate is None:
+        highest_effective_rate = max(
+            cast(int, band["price_vnd_per_kwh"]) for band in DEMO_TARIFF_BANDS
+        )
+    return int(highest_effective_rate) * 5
+
+
 def has_minimum_balance(
     db: Session,
     user_id: int,
-    min_amount_vnd: int = 50_000,
+    min_amount_vnd: int | None = None,
 ) -> bool:
     """Kiểm tra số dư đạt ngưỡng tối thiểu trước khi sạc (SCRUM-199, 72)."""
+    if min_amount_vnd is None:
+        min_amount_vnd = minimum_wallet_balance_vnd(db)
     totals = wallet_totals(db, user_id)
     return totals["balance_vnd"] >= min_amount_vnd
 
@@ -499,7 +610,7 @@ def verify_ledger_integrity(
 
     # --- 3. Kiểm tra vi phạm ràng buộc dấu số (phần mềm, bổ sung CheckConstraint DB) ---
     CREDIT_TYPES = ("manual_topup", "demo_topup", "gateway_topup", "sandbox_topup", "refund")
-    DEBIT_TYPES = ("session_charge", "subscription_charge")
+    DEBIT_TYPES = ("session_charge", "subscription_charge", "payment_refund")
 
     bad_credits = (
         base_q.filter(

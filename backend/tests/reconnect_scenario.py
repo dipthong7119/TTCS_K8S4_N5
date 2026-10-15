@@ -540,6 +540,7 @@ def _seed_local_database(database_url: str, codes: tuple[str, ...]) -> str:
     from app.models.id_tag import IdTag
     from app.models.station import Station
     from app.models.user import Role, User
+    from app.models.wallet_ledger import WalletLedgerEntry
 
     id_tag = f"SIM{uuid.uuid4().hex[:17]}"
     try:
@@ -567,6 +568,13 @@ def _seed_local_database(database_url: str, codes: tuple[str, ...]) -> str:
             db.add(station)
             db.flush()
             db.add(IdTag(id_tag=id_tag, user_id=driver.id, is_blocked=False))
+            db.add(WalletLedgerEntry(
+                user_id=driver.id,
+                entry_type="demo_topup",
+                amount_vnd=250_000,
+                idempotency_key="reconnect-scenario-funding",
+                description="Funded wallet for the reconnect scenario",
+            ))
             for code in codes:
                 point = ChargePoint(code=code, station_id=station.id, status="offline")
                 db.add(point)
