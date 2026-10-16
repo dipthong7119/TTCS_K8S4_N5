@@ -20,12 +20,14 @@ from app.models.payment_transaction import PaymentTransaction
 from app.services.audit import append_audit
 from app.services.payment_signatures import verify_sandbox_webhook_signature
 from app.services.wallet import (
+    adjust_wallet_balance,
     create_sandbox_topup_request,
     list_driver_wallet_summaries,
     list_user_payment_transactions,
     list_wallet_entries,
     manual_topup,
     process_sandbox_webhook,
+    set_driver_wallet_lock,
     verify_ledger_integrity,
     wallet_totals,
 )
@@ -47,6 +49,16 @@ class LegacyManualTopUpRequest(BaseModel):
     amount_vnd: StrictInt
     receipt_code: str
     note: str = ""
+
+
+class WalletAdjustmentRequest(BaseModel):
+    amount_vnd: int = Field(..., description="Số tiền điều chỉnh (dương để cộng, âm để trừ)")
+    reason: str = Field(..., min_length=3, max_length=200, description="Lý do điều chỉnh (bắt buộc)")
+    reference_code: str | None = Field(default=None, max_length=80, description="Mã tham chiếu tùy chọn")
+
+
+class WalletLockRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=200, description="Lý do thao tác khóa/mở khóa ví")
 
 
 
@@ -87,6 +99,107 @@ async def manually_top_up_driver(
         "amount_vnd": entry.amount_vnd,
         "balance_vnd": balance_after,
         "receipt_code": entry.receipt_code,
+    }
+
+
+@router.post(
+    "/admin/wallets/{driver_user_id}/adjust",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def adjust_driver_wallet(
+    driver_user_id: int,
+    body: WalletAdjustmentRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    try:
+        entry = adjust_wallet_balance(
+            db=db,
+            admin_user=current_user,
+            driver_user_id=driver_user_id,
+            amount_vnd=body.amount_vnd,
+            reason=body.reason,
+            reference_code=body.reference_code,
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Mã tham chiếu điều chỉnh đã tồn tại") from exc
+
+    balance_after = wallet_totals(db, driver_user_id)["balance_vnd"]
+    return {
+        "ledger_entry_id": entry.id,
+        "driver_id": driver_user_id,
+        "amount_vnd": entry.amount_vnd,
+        "balance_after_vnd": balance_after,
+        "receipt_code": entry.receipt_code,
+        "reason": entry.description,
+    }
+
+
+@router.post(
+    "/admin/wallets/{driver_user_id}/lock",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def lock_driver_wallet_endpoint(
+    driver_user_id: int,
+    body: WalletLockRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    try:
+        driver = set_driver_wallet_lock(
+            db=db,
+            admin_user=current_user,
+            driver_user_id=driver_user_id,
+            locked=True,
+            reason=body.reason,
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return {
+        "driver_id": driver.id,
+        "is_active": driver.is_active,
+        "status": "locked",
+        "message": f"Ví của tài xế {driver.email} đã được khóa",
+    }
+
+
+@router.post(
+    "/admin/wallets/{driver_user_id}/unlock",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def unlock_driver_wallet_endpoint(
+    driver_user_id: int,
+    body: WalletLockRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    try:
+        driver = set_driver_wallet_lock(
+            db=db,
+            admin_user=current_user,
+            driver_user_id=driver_user_id,
+            locked=False,
+            reason=body.reason,
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return {
+        "driver_id": driver.id,
+        "is_active": driver.is_active,
+        "status": "active",
+        "message": f"Ví của tài xế {driver.email} đã được mở khóa",
     }
 
 

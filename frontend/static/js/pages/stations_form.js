@@ -624,6 +624,7 @@
         address:   (formData.address || '').trim(),
         latitude:  formData.latitude  ? parseFloat(formData.latitude)  : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        no_show_fee_vnd: formData.no_show_fee_vnd === '' ? 0 : parseInt(formData.no_show_fee_vnd, 10),
       };
       if (isEdit && formData.status) payload.status = formData.status;
 

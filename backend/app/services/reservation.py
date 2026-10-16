@@ -39,8 +39,8 @@ def resolve_driver_id_tag(
     db: Session,
     user: User,
     requested_tag: str | None = None,
-) -> str:
-    """Xác định mã thẻ sạc hợp lệ cho tài xế."""
+) -> IdTag:
+    """Xác định bản ghi thẻ sạc hợp lệ cho tài xế."""
     if requested_tag:
         tag_record = (
             db.query(IdTag)
@@ -68,7 +68,7 @@ def resolve_driver_id_tag(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bạn không có quyền sử dụng thẻ sạc này.",
             )
-        return tag_record.id_tag
+        return tag_record
 
     # Không truyền tag -> tìm thẻ của user (ưu tiên thẻ ảo is_virtual=True hoặc thẻ chưa bị khóa)
     tag_record = (
@@ -82,7 +82,7 @@ def resolve_driver_id_tag(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tài xế chưa có thẻ sạc (idTag) khả dụng để thực hiện đặt chỗ.",
         )
-    return tag_record.id_tag
+    return tag_record
 
 
 def validate_reservation_times(
@@ -169,16 +169,17 @@ def lock_connector_for_reservation(db: Session, connector_pk: int) -> None:
 
 
 def expire_stale_reservations(db: Session, now: datetime) -> int:
-    """Tự động chuyển các đặt chỗ đã quá hạn sang trạng thái 'expired' tại CSDL (SCRUM-77)."""
+    """Expire unconfirmed ReserveNow requests without charging a no-show fee."""
     result = db.execute(
         update(Reservation)
         .where(
-            Reservation.status.in_(["accepted", "pending"]),
+            Reservation.status == "pending",
             Reservation.expiry_date <= now,
         )
         .values(
             status="expired",
             reject_reason="expired",
+            expired_at=now,
         )
         .execution_options(synchronize_session="fetch")
     )
@@ -426,15 +427,20 @@ async def create_reservation(
         )
 
     # 6. Xác thực id_tag & thời gian
-    id_tag = resolve_driver_id_tag(db, user, payload.id_tag)
+    id_tag_record = resolve_driver_id_tag(db, user, payload.id_tag)
+    id_tag = id_tag_record.id_tag
     start_time, expiry_date = validate_reservation_times(
         payload.start_time, payload.expiry_date, payload.expiry_minutes
     )
 
     # 7. Khóa đầu nối tại CSDL và kiểm tra trùng lịch đặt chỗ đã có hiệu lực (SCRUM-77 / S-49)
-    lock_connector_for_reservation(db, connector.id)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    from app.services.reservations import expire_due_for_connector, snapshot_no_show_fee
+
+    expire_due_for_connector(db, connector.id, now)
     expire_stale_reservations(db, now)
+    db.commit()
+    lock_connector_for_reservation(db, connector.id)
 
     existing_reservation = (
         db.query(Reservation)
@@ -456,11 +462,14 @@ async def create_reservation(
     reservation = Reservation(
         charge_point_id=point.id,
         connector_id=payload.connector_id,
+        connector_db_id=connector.id,
         user_id=user.id,
         id_tag=id_tag,
+        id_tag_id=id_tag_record.id,
         start_time=start_time,
         expiry_date=expiry_date,
         status="pending",
+        no_show_fee_vnd=snapshot_no_show_fee(db, point.station_id),
     )
     db.add(reservation)
     try:
@@ -564,6 +573,10 @@ async def create_reservation(
             status="accepted",
             reject_reason=None,
             created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            expired_at=reservation.expired_at,
+            cancelled_at=reservation.cancelled_at,
+            no_show_fee_vnd=reservation.no_show_fee_vnd,
+            cancel_status=reservation.cancel_status,
         )
         return ReservationCreateResponse(
             status="Accepted",
@@ -625,6 +638,10 @@ def get_user_reservations(
                 status=res.status,
                 reject_reason=res.reject_reason,
                 created_at=res.created_at,
+                expired_at=res.expired_at,
+                cancelled_at=res.cancelled_at,
+                no_show_fee_vnd=res.no_show_fee_vnd,
+                cancel_status=res.cancel_status,
             )
         )
     return items
@@ -667,4 +684,8 @@ def get_reservation_by_id(
         status=res.status,
         reject_reason=res.reject_reason,
         created_at=res.created_at,
+        expired_at=res.expired_at,
+        cancelled_at=res.cancelled_at,
+        no_show_fee_vnd=res.no_show_fee_vnd,
+        cancel_status=res.cancel_status,
     )

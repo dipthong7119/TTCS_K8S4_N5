@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% set active_page = "driver-session" %}
+
+{% block title %}Phiên sạc của tôi{% endblock %}
+{% block meta_description %}Theo dõi trạng thái phiên sạc hiện tại và nhận thông báo khi phiên kết thúc{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Phiên sạc của tôi</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/driver_session.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header__info">
+    <h1 class="page-header__title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+        style="color:var(--color-primary);vertical-align:-4px;">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      Phiên sạc của tôi
+    </h1>
+    <p class="page-header__subtitle">Theo dõi tiến trình sạc và nhận thông báo tức thì — SCRUM-98</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:var(--space-3);">
+    <div class="sse-indicator" id="ds-sse-indicator" aria-live="polite">
+      <span class="sse-dot" aria-hidden="true"></span>
+      <span id="ds-sse-label">Đang kết nối...</span>
+    </div>
+  </div>
+</div>
+
+<!-- Notification banner (hiện khi có event từ SSE) -->
+<div class="ds-notif-banner is-hidden" id="ds-notif-banner" role="alert" aria-live="assertive">
+  <div class="ds-notif-banner__icon" id="ds-notif-icon" aria-hidden="true">⚡</div>
+  <div class="ds-notif-banner__text" id="ds-notif-text">Thông báo từ hệ thống</div>
+  <button class="ds-notif-banner__close" id="ds-notif-close" type="button" aria-label="Đóng thông báo">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Loading state -->
+<div class="loading-state" id="ds-loading">
+  <div class="spinner spinner--lg" aria-hidden="true"></div>
+  <p style="margin-top:var(--space-4);color:var(--color-text-secondary);">Đang kiểm tra phiên sạc...</p>
+</div>
+
+<!-- No active session state -->
+<div class="ds-no-session is-hidden" id="ds-no-session" role="status">
+  <div class="ds-no-session__icon" aria-hidden="true">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+  </div>
+  <h2 class="ds-no-session__title">Không có phiên sạc đang hoạt động</h2>
+  <p class="ds-no-session__sub">Tìm trạm sạc gần bạn để bắt đầu sạc ngay.</p>
+  <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;justify-content:center;">
+    <a href="/driver/stations" class="btn btn--primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      Tìm trạm sạc
+    </a>
+    <a href="/sessions/mine" class="btn btn--secondary">Lịch sử sạc</a>
+  </div>
+</div>
+
+<!-- Active session card -->
+<div class="ds-session-wrap is-hidden" id="ds-session-wrap">
+
+  <!-- Live charging card -->
+  <div class="ds-live-card" id="ds-live-card" aria-label="Phiên sạc đang hoạt động">
+    <!-- Animated charging header -->
+    <div class="ds-live-card__header">
+      <div class="ds-charging-anim" aria-hidden="true">
+        <div class="ds-charging-bolt">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <div class="ds-live-card__status-text" id="ds-status-text">Đang sạc</div>
+        <div class="ds-live-card__station" id="ds-station-name">—</div>
+      </div>
+      <div class="ds-live-actions">
+        <button class="btn btn--danger btn--sm" id="ds-stop-btn" type="button" aria-label="Dừng phiên sạc hiện tại">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+          <span id="ds-stop-btn-label">Dừng sạc</span>
+        </button>
+        <div class="ds-live-badge" id="ds-live-badge">
+          <span class="ds-live-dot" aria-hidden="true"></span>
+          LIVE
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics grid -->
+    <div class="ds-metrics-grid">
+      <!-- Energy -->
+      <div class="ds-metric">
+        <div class="ds-metric__icon ds-metric__icon--energy" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div>
+          <div class="ds-metric__value" id="ds-kwh">—</div>
+          <div class="ds-metric__label">kWh đã nạp</div>
+        </div>
+      </div>
+      <!-- Duration -->
+      <div class="ds-metric">
+        <div class="ds-metric__icon ds-metric__icon--time" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div>
+          <div class="ds-metric__value" id="ds-duration">—</div>
+          <div class="ds-metric__label">Thời gian sạc</div>
+        </div>
+      </div>
+      <!-- Cost estimate -->
+      <div class="ds-metric">
+        <div class="ds-metric__icon ds-metric__icon--cost" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div>
+          <div class="ds-metric__value" id="ds-cost">—</div>
+          <div class="ds-metric__label">Ước tính chi phí</div>
+        </div>
+      </div>
+      <!-- Connector -->
+      <div class="ds-metric">
+        <div class="ds-metric__icon ds-metric__icon--plug" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13h-1V7h1a2 2 0 0 0 0-4H5a2 2 0 0 0 0 4h1v6H5a2 2 0 0 0 0 4h13a2 2 0 0 0 0-4z"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <div>
+          <div class="ds-metric__value" id="ds-connector">—</div>
+          <div class="ds-metric__label">Đầu nối đang dùng</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="ds-progress-section">
+      <div class="ds-progress-label">
+        <span>Tiến trình phiên</span>
+        <span id="ds-progress-pct">—</span>
+      </div>
+      <div class="ds-progress-bar" role="progressbar" aria-label="Tiến trình phiên sạc"
+        aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+        <div class="ds-progress-fill" id="ds-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="ds-progress-meta" id="ds-start-time">Bắt đầu: —</div>
+    </div>
+
+    <!-- Session info -->
+    <div class="ds-session-info">
+      <div class="ds-info-row">
+        <span class="ds-info-label">Trụ sạc</span>
+        <span class="ds-info-value" id="ds-cp-code">—</span>
+      </div>
+      <div class="ds-info-row">
+        <span class="ds-info-label">ID phiên</span>
+        <span class="ds-info-value" id="ds-session-id">—</span>
+      </div>
+      <div class="ds-info-row">
+        <span class="ds-info-label">Trạng thái</span>
+        <span class="ds-info-value" id="ds-session-status-badge">—</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Confirmation before asking the charge point to stop the driver's own session -->
+<div class="modal-backdrop is-hidden" id="ds-stop-modal" role="dialog" aria-modal="true" aria-labelledby="ds-stop-modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="ds-stop-modal-title">Dừng phiên sạc?</h2>
+      <button class="modal__close" id="ds-stop-modal-close" type="button" aria-label="Đóng">&times;</button>
+    </div>
+    <div class="modal__body">
+      <p>Bạn muốn gửi lệnh dừng phiên sạc hiện tại tới trụ không? Phiên chỉ kết thúc khi trụ xác nhận.</p>
+      <div class="ds-stop-error" id="ds-stop-modal-error" role="alert" aria-live="polite"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="ds-stop-modal-cancel" type="button">Tiếp tục sạc</button>
+      <button class="btn btn--danger" id="ds-stop-modal-confirm" type="button">Xác nhận dừng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Session ended overlay (shown by SSE event) -->
+<div class="ds-ended-overlay is-hidden" id="ds-ended-overlay" role="dialog" aria-modal="true"
+  aria-labelledby="ds-ended-title">
+  <div class="ds-ended-card">
+    <div class="ds-ended-card__icon ds-ended-card__icon--done" id="ds-ended-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <h2 class="ds-ended-card__title" id="ds-ended-title">Phiên sạc đã kết thúc</h2>
+    <p class="ds-ended-card__sub" id="ds-ended-sub">Cảm ơn bạn đã sử dụng dịch vụ!</p>
+    <div class="ds-ended-summary" id="ds-ended-summary">
+      <!-- Injected by JS -->
+    </div>
+    <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;justify-content:center;margin-top:var(--space-5);">
+      <button class="btn btn--primary" id="ds-ended-view-invoice">Xem hoá đơn</button>
+      <a href="/driver/stations" class="btn btn--secondary">Tìm trạm sạc mới</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/driver_session.js') }}"></script>
+{% endblock %}
