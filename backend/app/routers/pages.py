@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.deps import CurrentUser, public_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
-from app.services.ownership import get_station_for_user
+from app.models.station import Station
+from app.services.ownership import filter_by_owner, get_station_for_user
 
 router = APIRouter()
 
@@ -138,6 +139,28 @@ async def new_station_page(request: Request, current_user: CurrentUser):
             current_user,
             can_manage_stations=True,
             can_lock_stations="admin" in [role.name for role in current_user.roles],
+        ),
+    )
+
+
+@router.get("/stations/revenue", dependencies=[Depends(require_role("admin", "station_owner"))])
+async def station_revenue_page(
+    request: Request,
+    current_user: CurrentUser,
+    station_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    roles = _require_any_role(current_user, "admin", "station_owner")
+    q = filter_by_owner(db.query(Station), current_user.id, roles)
+    stations = q.order_by(Station.name.asc()).all()
+    return templates.TemplateResponse(
+        request,
+        "stations/revenue.html",
+        _page_context(
+            request,
+            current_user,
+            stations=stations,
+            selected_station_id=station_id,
         ),
     )
 

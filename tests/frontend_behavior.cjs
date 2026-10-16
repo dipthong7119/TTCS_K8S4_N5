@@ -1,4 +1,4 @@
-﻿/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
+/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
  * These tests check behavior, not browser layout or rendering performance.
  */
 const assert = require('node:assert/strict');
@@ -1575,3 +1575,183 @@ test('SCRUM-58: completion cancels countdown and ignores late command response',
   assert.ok(!page.toasts.includes('Still waiting'));
   assert.ok(!page.toasts.some(message => message.includes('quá 2 phút')));
 });
+
+function revenuePage(getRevenue, options = {}) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+
+  const stationSel = document.getElementById('rev-station');
+  stationSel.value = options.stationId !== undefined ? options.stationId : '101';
+  document.getElementById('rev-report').hidden = true;
+  document.getElementById('rev-load').hidden = true;
+  document.getElementById('rev-empty').hidden = true;
+
+  const context = vm.createContext({
+    document,
+    window: { location: { href: '' } },
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    Date,
+    console,
+    Intl,
+    Math,
+    ApiClient: {
+      getStationRevenue: getRevenue || (async () => ({
+        station_id: 101,
+        station_name: 'Test Station',
+        start_date: '2026-10-01',
+        end_date: '2026-10-16',
+        timezone: 'Asia/Ho_Chi_Minh',
+        session_count: 5,
+        total_kwh: 120.5,
+        revenue_vnd: 480000,
+        occupancy_fee_vnd: 20000,
+        charge_points: [
+          { charge_point_code: 'CP-01', session_count: 3, total_kwh: 70.0, occupancy_fee_vnd: 10000, revenue_vnd: 280000 },
+          { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
+        ],
+      })),
+    },
+  });
+
+  const script = read('pages/stations_revenue.js');
+  vm.runInContext(script, context);
+  return { document, ids };
+}
+
+test('SCRUM-84: revenue page loads initial month data and renders KPI stats and breakdown table', async () => {
+  let calledWith = null;
+  const page = revenuePage(async (id, params, opts) => {
+    calledWith = { id, params };
+    return {
+      station_id: 101,
+      station_name: 'Test Station',
+      start_date: '2026-10-01',
+      end_date: '2026-10-31',
+      timezone: 'Asia/Ho_Chi_Minh',
+      session_count: 5,
+      total_kwh: 120.5,
+      revenue_vnd: 480000,
+      occupancy_fee_vnd: 20000,
+      charge_points: [
+        { charge_point_code: 'CP-01', session_count: 3, total_kwh: 70.0, occupancy_fee_vnd: 10000, revenue_vnd: 280000 },
+        { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
+      ],
+    };
+  });
+  await flush();
+
+  assert.equal(calledWith.id, '101');
+  assert.ok(calledWith.params.start_date);
+  assert.ok(calledWith.params.end_date);
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+  assert.equal(page.document.getElementById('stat-sessions').textContent, '5');
+  assert.ok(page.document.getElementById('stat-rev').textContent.includes('480.000'));
+  assert.ok(page.document.getElementById('stat-kwh').textContent.includes('120,5'));
+  assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-01'));
+  assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-02'));
+});
+
+test('SCRUM-84: inverted date range shows validation error and avoids API call', async () => {
+  let apiCalls = 0;
+  const page = revenuePage(async () => {
+    apiCalls++;
+    return { session_count: 0, total_kwh: 0, revenue_vnd: 0, occupancy_fee_vnd: 0, charge_points: [] };
+  });
+  await flush();
+  assert.equal(apiCalls, 1);
+
+  // Invert dates
+  page.document.getElementById('rev-start').value = '2026-10-25';
+  page.document.getElementById('rev-end').value = '2026-10-10';
+  page.document.getElementById('btn-apply-filter').handlers.click();
+  await flush();
+
+  assert.equal(apiCalls, 1);
+  const errBox = page.document.getElementById('rev-err');
+  assert.ok(errBox.textContent.includes('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc'));
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: changing filter immediately hides stale report results', async () => {
+  let resolve;
+  const pending = new Promise(done => { resolve = done; });
+  const page = revenuePage(async () => pending);
+  await flush();
+
+  // Initially in loading state, report hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, false);
+
+  // Finish initial load
+  resolve({
+    session_count: 2, total_kwh: 10, revenue_vnd: 50000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-10', timezone: 'Asia/Ho_Chi_Minh', charge_points: []
+  });
+  await flush();
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+
+  // Changing start date input clears the report immediately
+  page.document.getElementById('rev-start').handlers.input();
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+
+  // Changing station selector triggers reload and clears old report immediately
+  page.document.getElementById('rev-station').value = '202';
+  page.document.getElementById('rev-station').handlers.change();
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: pending request is invalidated when user changes date input and old response must stay hidden', async () => {
+  let resolve;
+  const pending = new Promise(done => { resolve = done; });
+  const page = revenuePage(async () => pending);
+  await flush();
+
+  // Initially request is pending
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, false);
+
+  // User modifies date input while request is pending
+  page.document.getElementById('rev-start').value = '2026-10-15';
+  page.document.getElementById('rev-start').handlers.input();
+
+  // Ensure loading and report are hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, true);
+
+  // Old delayed response finally resolves
+  resolve({
+    session_count: 5, total_kwh: 50, revenue_vnd: 200000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-31', timezone: 'Asia/Ho_Chi_Minh',
+    charge_points: [{ charge_point_code: 'CP-01', session_count: 5, total_kwh: 50, occupancy_fee_vnd: 0, revenue_vnd: 200000 }]
+  });
+  await flush();
+
+  // The stale response MUST NOT be rendered; report box MUST remain hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: charge point code is properly escaped when rendered in table', async () => {
+  const page = revenuePage(async () => ({
+    session_count: 1, total_kwh: 10, revenue_vnd: 40000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-31', timezone: 'Asia/Ho_Chi_Minh',
+    charge_points: [{ charge_point_code: '<CP-01&02>', session_count: 1, total_kwh: 10, occupancy_fee_vnd: 0, revenue_vnd: 40000 }]
+  }));
+  await flush();
+
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+  const html = page.document.getElementById('rev-tbody').innerHTML;
+  assert.ok(html.includes('&lt;CP-01&amp;02&gt;'));
+  assert.ok(!html.includes('<CP-01&02>'));
+});
+
+

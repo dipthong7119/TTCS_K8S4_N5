@@ -61,6 +61,10 @@ const ApiClient = (() => {
     createStation: (body) => _request('POST', '/stations', body),
     updateStation: (id, body) => _request('PUT', `/stations/${id}`, body),
     deleteStation: (id) => _request('DELETE', `/stations/${id}`),
+    getStationRevenue: (stationId, params = {}, opts = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', `/stations/${encodeURIComponent(stationId)}/revenue` + (q ? '?' + q : ''), null, opts);
+    },
 
     // --- Charge Points ---
     listChargePoints: (stationId) => _request('GET', `/charge-points?station_id=${encodeURIComponent(stationId)}`),
