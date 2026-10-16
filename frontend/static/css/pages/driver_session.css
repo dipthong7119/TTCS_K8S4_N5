@@ -86,6 +86,7 @@
 /* Charging header */
 .ds-live-card__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-5) var(--space-6);
@@ -145,7 +146,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 4px 12px;
   border-radius: var(--radius-full);
   background: hsl(0,72%,18%);
@@ -155,6 +155,15 @@
   letter-spacing: .08em;
   color: hsl(0,72%,70%);
 }
+.ds-live-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+.ds-live-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.ds-live-actions .btn:disabled { cursor: wait; opacity: .7; }
+.ds-stop-error { color: var(--color-danger); font-size: var(--font-size-sm); }
 .ds-live-dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: hsl(0,72%,65%);
@@ -259,46 +268,6 @@
 .ds-info-row:last-child { border-bottom: none; }
 .ds-info-label { color: var(--color-text-secondary); font-weight: 500; }
 .ds-info-value { font-weight: 600; color: var(--color-text); font-family: monospace; }
-
-/* ── History section ──────────────────────────────────────────────────────── */
-.ds-history-section {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.ds-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-.ds-history-title {
-  font-size: var(--font-size-base);
-  font-weight: 700;
-  margin: 0;
-}
-.ds-history-list { display: grid; }
-.ds-history-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--font-size-sm);
-  transition: background var(--transition-fast);
-}
-.ds-history-item:last-child { border-bottom: none; }
-.ds-history-item:hover { background: var(--color-surface-alt); }
-.ds-history-item__left { display: flex; flex-direction: column; gap: 2px; }
-.ds-history-item__station { font-weight: 600; color: var(--color-text); }
-.ds-history-item__date { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-.ds-history-item__right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.ds-history-item__kwh { font-weight: 700; color: var(--color-text); }
-.ds-history-item__cost { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 
 /* ── Ended overlay ───────────────────────────────────────────────────────── */
 .ds-ended-overlay {
@@ -422,6 +391,7 @@
 @media (max-width: 540px) {
   .ds-metrics-grid { grid-template-columns: 1fr; }
   .ds-live-card__header { padding: var(--space-4); }
+  .ds-live-actions { gap: var(--space-2); }
   .ds-progress-section,
   .ds-session-info { padding-left: var(--space-4); padding-right: var(--space-4); }
   .ds-ended-card { padding: var(--space-6) var(--space-4); }

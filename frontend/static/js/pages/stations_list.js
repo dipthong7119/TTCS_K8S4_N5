@@ -10,6 +10,8 @@
   let _page = 1;
   const PAGE_SIZE = 10;
   const canManageStations = document.getElementById('stations-page')?.dataset.canManageStations === 'true';
+  const isDriverView = document.getElementById('stations-page')?.dataset.isDriverView === 'true';
+  const tableColumnCount = isDriverView ? 5 : 6;
 
   // ── Labels & classes trạng thái ──
   const STATUS_LABELS = {
@@ -33,7 +35,7 @@
 
     // Hiện loading
     tbody.innerHTML = `
-      <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--color-text-muted);">
+      <tr><td colspan="${tableColumnCount}" style="text-align:center;padding:40px;color:var(--color-text-muted);">
         <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
           <div class="spinner" aria-hidden="true"></div><span>Đang tải...</span>
         </div>
@@ -54,7 +56,7 @@
       renderPagination(total);
     } catch (err) {
       tbody.innerHTML = `
-        <tr><td colspan="6" style="text-align:center;padding:40px;">
+        <tr><td colspan="${tableColumnCount}" style="text-align:center;padding:40px;">
           <div class="empty-state">
             <div class="empty-state__icon">⚠️</div>
             <div class="empty-state__title">Không tải được dữ liệu</div>
@@ -86,7 +88,7 @@
     const tbody = document.getElementById('station-tbody');
     if (!stations.length) {
       tbody.innerHTML = `
-        <tr><td colspan="6">
+        <tr><td colspan="${tableColumnCount}">
           <div class="empty-state">
             <div class="empty-state__icon">🏗️</div>
             <div class="empty-state__title">Chưa có trạm nào</div>
@@ -115,7 +117,7 @@
             </span>
           </td>
           <td class="td-date">${fmtDate(s.created_at)}</td>
-          <td class="text-right">
+          ${isDriverView ? '' : `<td class="text-right">
             <div class="station-row-actions">
               ${canManageStations ? `
               <a href="/stations/${s.id}/edit"
@@ -142,7 +144,7 @@
               </button>
               ` : '<span aria-label="Chỉ xem">Chỉ xem</span>'}
             </div>
-          </td>
+          </td>`}
         </tr>`;
     }).join('');
 
@@ -262,7 +264,9 @@
       if (e.target === e.currentTarget) closeDeleteModal();
     });
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') closeDeleteModal();
+      if (e.key === 'Escape') {
+        closeDeleteModal();
+      }
     });
 
     // Modal xoá — xác nhận

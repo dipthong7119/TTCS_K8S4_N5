@@ -17,11 +17,13 @@ class AuditLog(Base):
     object_type = Column(String(80), nullable=False)
     object_id = Column(String(80), nullable=True)
     charge_point_code = Column(String(50), nullable=True)
+    target_user_id = Column(Integer, nullable=True)
     details = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
         Index("ix_audit_logs_created_id", "created_at", "id"),
         Index("ix_audit_logs_actor_created", "actor_id", "created_at"),
+        Index("ix_audit_logs_target_created", "target_user_id", "created_at"),
         Index("ix_audit_logs_cp_created", "charge_point_code", "created_at"),
     )

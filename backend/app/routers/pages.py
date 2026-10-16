@@ -257,6 +257,23 @@ async def sandbox_checkout_page(request: Request, current_user: CurrentUser, ord
     )
 
 
+# SCRUM-231 / SCRUM-85 — Giao diện đối soát cho kế toán
+@router.get(
+    "/sessions/financial-reconciliation",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def financial_reconciliation_page(
+    request: Request,
+    current_user: CurrentUser,
+):
+    _require_any_role(current_user, "admin", "accountant")
+    return templates.TemplateResponse(
+        request,
+        "sessions/financial_reconciliation.html",
+        _page_context(request, current_user),
+    )
+
+
 # SCRUM-68 — Giao diện đăng ký gói thuê bao hàng tháng (Phạm Văn Tuấn)
 @router.get("/subscriptions", dependencies=[Depends(require_role("driver", "admin"))])
 async def subscriptions_page(request: Request, current_user: CurrentUser):
@@ -265,6 +282,14 @@ async def subscriptions_page(request: Request, current_user: CurrentUser):
         request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )
 
+
+# SCRUM-76 — Màn hình đặt chỗ trụ sạc cho tài xế (Phạm Văn Tuấn)
+@router.get("/reservations", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+async def reservations_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin", "operator")
+    return templates.TemplateResponse(
+        request, "reservations/list.html", _page_context(request, current_user)
+    )
 
 # SCRUM-96 (FE) — Tài xế tìm trạm gần & xem đầu nối rảnh (Vy Hoàng Tú)
 @router.get("/driver/stations", dependencies=[Depends(require_role("driver"))])

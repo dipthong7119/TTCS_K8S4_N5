@@ -93,9 +93,17 @@
         <div class="ds-live-card__status-text" id="ds-status-text">Đang sạc</div>
         <div class="ds-live-card__station" id="ds-station-name">—</div>
       </div>
-      <div class="ds-live-badge" id="ds-live-badge">
-        <span class="ds-live-dot" aria-hidden="true"></span>
-        LIVE
+      <div class="ds-live-actions">
+        <button class="btn btn--danger btn--sm" id="ds-stop-btn" type="button" aria-label="Dừng phiên sạc hiện tại">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+          <span id="ds-stop-btn-label">Dừng sạc</span>
+        </button>
+        <div class="ds-live-badge" id="ds-live-badge">
+          <span class="ds-live-dot" aria-hidden="true"></span>
+          LIVE
+        </div>
       </div>
     </div>
 
@@ -173,14 +181,22 @@
     </div>
   </div>
 
-  <!-- History section (recent sessions) -->
-  <div class="ds-history-section" id="ds-history-section">
-    <div class="ds-history-header">
-      <h2 class="ds-history-title">Phiên sạc gần đây</h2>
-      <a href="/sessions/mine" class="btn btn--ghost btn--sm">Xem tất cả</a>
+</div>
+
+<!-- Confirmation before asking the charge point to stop the driver's own session -->
+<div class="modal-backdrop is-hidden" id="ds-stop-modal" role="dialog" aria-modal="true" aria-labelledby="ds-stop-modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="ds-stop-modal-title">Dừng phiên sạc?</h2>
+      <button class="modal__close" id="ds-stop-modal-close" type="button" aria-label="Đóng">&times;</button>
     </div>
-    <div id="ds-history-list" class="ds-history-list">
-      <!-- Injected by JS -->
+    <div class="modal__body">
+      <p>Bạn muốn gửi lệnh dừng phiên sạc hiện tại tới trụ không? Phiên chỉ kết thúc khi trụ xác nhận.</p>
+      <div class="ds-stop-error" id="ds-stop-modal-error" role="alert" aria-live="polite"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="ds-stop-modal-cancel" type="button">Tiếp tục sạc</button>
+      <button class="btn btn--danger" id="ds-stop-modal-confirm" type="button">Xác nhận dừng</button>
     </div>
   </div>
 </div>

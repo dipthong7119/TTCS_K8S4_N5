@@ -33,6 +33,7 @@
   {% endif %}
 </div>
 
+{% if is_global_sessions %}
 <!-- Active session banner / card (T-48, T-50) -->
 <div class="active-session-banner" id="active-session-banner" style="display:none;" aria-live="polite">
   <div class="active-session-banner__main">
@@ -82,27 +83,7 @@
     </div>
   </div>
 </div>
-
-<!-- No active session card for driver (S-22 AC3) -->
-<div class="no-active-session-card" id="no-active-session-card" style="display:none;" aria-live="polite">
-  <div class="no-active-session-card__icon" aria-hidden="true">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-    </svg>
-  </div>
-  <div class="no-active-session-card__content">
-    <div class="no-active-session-card__title">Không có phiên sạc nào đang hoạt động</div>
-    <div class="no-active-session-card__sub">Bạn hiện không cắm sạc xe tại trụ nào. Hãy tìm kiếm trạm sạc gần nhất để bắt đầu sạc xe.</div>
-  </div>
-  <div class="no-active-session-card__action">
-    <a href="/stations" class="btn btn--primary" id="btn-find-station">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      Tìm trạm sạc
-    </a>
-  </div>
-</div>
+{% endif %}
 
 <!-- Filters -->
 <div class="filters-bar" style="margin-bottom:var(--space-4);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);">

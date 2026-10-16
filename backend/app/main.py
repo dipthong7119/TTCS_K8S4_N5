@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.core.deps import deny_unannotated_route, public_route
+from app.routers.alerts import router as alerts_router
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.charge_point_configuration import (
@@ -24,11 +25,14 @@ from app.routers.charge_point_configuration import (
 )
 from app.routers.charge_points import router as charge_points_router
 from app.routers.monitoring import router as monitoring_router
+from app.routers.nearby import router as nearby_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
+from app.routers.power_capacity import router as power_capacity_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
+from app.routers.reservations import router as reservations_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
 from app.routers.subscriptions import router as subscriptions_router
@@ -85,8 +89,11 @@ async def lifespan(app: FastAPI):
     # T-26: Start background job
 
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+    from app.services.reservation_job import check_expired_reservations
+
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
+    reservation_task = asyncio.create_task(check_expired_reservations())
     local_simulator_task: asyncio.Task[None] | None = None
     if settings.APP_ENV == "development" and settings.CSMS_LOCAL_SIMULATOR_ENABLED:
         local_simulator_task = asyncio.create_task(_run_local_simulator_fleet())
@@ -95,7 +102,8 @@ async def lifespan(app: FastAPI):
 
     bg_task.cancel()
     cleanup_task.cancel()
-    tasks = [bg_task, cleanup_task]
+    reservation_task.cancel()
+    tasks = [bg_task, cleanup_task, reservation_task]
     if local_simulator_task is not None:
         local_simulator_task.cancel()
         tasks.append(local_simulator_task)
@@ -138,19 +146,23 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
+app.include_router(nearby_router, prefix="/api")   # S-47: phải đứng trước stations_router
 app.include_router(stations_router, prefix="/api")
+app.include_router(power_capacity_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
 app.include_router(charge_point_configuration_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api/monitoring")
 app.include_router(ocpp_router)
 app.include_router(remote_router, prefix="/api")
 app.include_router(remote_starts_router, prefix="/api")
+app.include_router(reservations_router, prefix="/api")
 app.include_router(sessions_router, prefix="/api")
 app.include_router(reconciliation_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(subscriptions_router, prefix="/api")
+app.include_router(alerts_router, prefix="/api")
 
 app.include_router(pages_router)
 

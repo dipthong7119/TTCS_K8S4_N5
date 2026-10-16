@@ -35,7 +35,8 @@ class WalletLedgerEntry(Base):
     __table_args__ = (
         CheckConstraint(
             "(entry_type IN ('manual_topup', 'demo_topup', 'sandbox_topup', 'refund') AND amount_vnd > 0) OR "
-            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund') AND amount_vnd < 0)",
+            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund', 'no_show_fee') AND amount_vnd < 0) OR "
+            "(entry_type = 'adjustment' AND amount_vnd != 0)",
             name="ck_wallet_ledger_amount_sign",
         ),
         UniqueConstraint("user_id", "idempotency_key", name="uq_wallet_user_idempotency"),

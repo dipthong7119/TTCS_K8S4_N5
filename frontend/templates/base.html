@@ -108,6 +108,18 @@
       </a>
       {% endif %}
 
+      {% if 'admin' in current_user.roles or 'accountant' in current_user.roles %}
+      <a href="/sessions/financial-reconciliation" id="nav-financial-reconciliation"
+         class="sidebar__link {% if active_page == 'financial-reconciliation' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'financial-reconciliation' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 9v12M9 15h12" />
+        </svg>
+        Đối soát điện và tiền
+      </a>
+      {% endif %}
+
       <div class="sidebar__section-label">Tài khoản</div>
 
       {% if 'admin' in current_user.roles or 'accountant' in current_user.roles or 'driver' in current_user.roles %}
@@ -157,6 +169,17 @@
           <line x1="12" y1="22.08" x2="12" y2="12"/>
         </svg>
         Gói thuê bao tháng
+      </a>
+      <a href="/reservations" id="nav-reservations"
+         class="sidebar__link {% if active_page == 'reservations' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'reservations' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Đặt chỗ của tôi
       </a>
       {% endif %}
 

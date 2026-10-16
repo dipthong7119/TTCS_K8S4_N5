@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% set active_page = "reservations" %}
+
+{% block title %}Đặt chỗ trụ sạc{% endblock %}
+{% block meta_description %}Đặt trước trụ sạc xe điện trong vòng 2 giờ để chủ động hành trình — CSMS{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Đặt chỗ trụ sạc</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/reservations.css') }}" />
+{% endblock %}
+
+{% block content %}
+<!-- 1. Header Banner -->
+<div class="reserve-banner" id="reserve-banner">
+  <div class="reserve-banner__info">
+    <h1 class="reserve-banner__title">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      Đặt trước trụ sạc
+    </h1>
+    <p class="reserve-banner__desc">
+      Chủ động đặt trước vị trí sạc trong vòng 2 giờ tới. Hệ thống tự động gửi lệnh khóa trụ <code style="color:#7dd3fc;background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;">ReserveNow</code> để không ai có thể chiếm chỗ của bạn.
+    </p>
+  </div>
+  <div class="reserve-banner__action">
+    <button class="btn btn--primary" id="btn-open-reserve-modal" type="button" style="box-shadow: 0 4px 14px hsla(199,89%,48%,0.4);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Đặt chỗ mới
+    </button>
+  </div>
+</div>
+
+<!-- Thông báo quá hạn giữ chỗ (SCRUM-78) -->
+<div id="expired-notice-container"></div>
+
+<!-- 2. Active Reservation Card (Hiển thị nếu đang có đặt chỗ còn hiệu lực) -->
+<div id="active-res-container">
+  <!-- Sẽ được JS render linh hoạt (Active Card hoặc Empty Card) -->
+</div>
+
+
+<!-- 3. Thẻ thống kê tổng quan -->
+<div class="stats-grid" id="res-stats" style="margin-bottom: var(--space-6);">
+  <div class="stat-card stat-card--green" role="img" aria-label="Đang giữ chỗ">
+    <div class="stat-card__label">Đang giữ chỗ</div>
+    <div class="stat-card__value" id="stat-active" aria-live="polite">0</div>
+    <div class="stat-card__sub">chờ bạn tới sạc</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card stat-card--blue" role="img" aria-label="Đã hoàn thành">
+    <div class="stat-card__label">Đã hoàn thành</div>
+    <div class="stat-card__value" id="stat-completed" aria-live="polite">0</div>
+    <div class="stat-card__sub">đã bắt đầu sạc thành công</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card stat-card--gray" role="img" aria-label="Đã hủy">
+    <div class="stat-card__label">Đã hủy</div>
+    <div class="stat-card__value" id="stat-cancelled" aria-live="polite">0</div>
+    <div class="stat-card__sub">bạn chủ động hủy</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card stat-card--orange" role="img" aria-label="Quá hạn giữ chỗ">
+    <div class="stat-card__label">Quá hạn</div>
+    <div class="stat-card__value" id="stat-expired" aria-live="polite">0</div>
+    <div class="stat-card__sub">không đến đúng giờ</div>
+    <div class="stat-card__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Lịch sử đặt chỗ -->
+<div class="card" style="margin-bottom: var(--space-6);">
+  <div class="card__header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);">
+    <div>
+      <h2 class="card__title" style="margin:0;">Lịch sử đặt chỗ</h2>
+      <p class="card__subtitle" style="margin:0;">Danh sách tất cả các lượt đặt trước vị trí sạc của bạn</p>
+    </div>
+    <button class="btn btn--secondary btn--sm" id="btn-refresh-res" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+      Làm mới
+    </button>
+  </div>
+
+  <div class="card__body" style="padding-top: var(--space-3);">
+    <!-- Thanh tìm kiếm & bộ lọc -->
+    <div class="filters-bar" style="margin-bottom: var(--space-4);">
+      <div class="search-input-wrap" style="max-width: 320px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="search" class="search-input" id="search-res" placeholder="Tìm theo mã đặt chỗ, trạm, trụ..." aria-label="Tìm kiếm đặt chỗ" />
+      </div>
+
+      <select class="form-select" id="filter-res-status" style="width: auto; min-width: 170px;" aria-label="Lọc theo trạng thái">
+        <option value="">Tất cả trạng thái</option>
+        <option value="Active">Đang giữ chỗ (Active)</option>
+        <option value="Completed">Đã sử dụng (Completed)</option>
+        <option value="Cancelled">Đã hủy (Cancelled)</option>
+        <option value="Expired">Quá hạn (Expired)</option>
+      </select>
+    </div>
+
+    <!-- Bảng dữ liệu -->
+    <div class="table-wrapper" tabindex="0" role="region" aria-label="Bảng danh sách đặt chỗ">
+      <table class="table" id="res-table">
+        <thead>
+          <tr>
+            <th>Mã đặt chỗ</th>
+            <th>Trạm sạc</th>
+            <th>Trụ / Cổng</th>
+            <th>Thời điểm đặt</th>
+            <th>Hạn giữ chỗ</th>
+            <th>Trạng thái</th>
+            <th style="text-align: right;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="res-table-body">
+          <tr>
+            <td colspan="7" class="table__loading">
+              <div class="spinner spinner--sm" aria-hidden="true"></div>
+              <span>Đang tải danh sách đặt chỗ...</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Modal Đặt chỗ mới (SCRUM-76 / S-48) -->
+<div class="modal is-hidden reservation-modal reservation-modal--reserve" id="modal-reserve-new" role="dialog" aria-modal="true" aria-labelledby="modal-reserve-title">
+  <div class="modal__backdrop" id="modal-reserve-backdrop"></div>
+  <div class="modal__dialog modal__dialog--wide" style="position:relative;z-index:1001;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-reserve-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--color-primary);vertical-align:middle;margin-right:6px;">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Đặt chỗ trụ sạc mới
+      </h2>
+      <button class="modal__close" id="btn-close-reserve-modal" type="button" aria-label="Đóng modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <form id="form-reserve-new" class="modal__body reservation-form-grid">
+      <!-- 1. Chọn trạm sạc -->
+      <div class="form-group reservation-form__station">
+        <label class="form-label" for="select-station">
+          Trạm sạc <span class="required" aria-hidden="true">*</span>
+        </label>
+        <select class="form-select" id="select-station" required>
+          <option value="">-- Đang tải danh sách trạm sạc --</option>
+        </select>
+        <span class="form-hint" id="station-address-hint">Chọn trạm xe điện bạn muốn đến sạc</span>
+      </div>
+
+      <!-- 2. Chọn trụ & đầu nối -->
+      <div class="form-group reservation-form__connector">
+        <label class="form-label" for="select-charge-point">
+          Trụ sạc & Đầu nối khả dụng <span class="required" aria-hidden="true">*</span>
+        </label>
+        <select class="form-select" id="select-charge-point" required disabled>
+          <option value="">-- Vui lòng chọn trạm trước --</option>
+        </select>
+        <span class="form-hint">Hệ thống chỉ cho phép đặt các đầu nối đang ở trạng thái <strong>Sẵn sàng (Available)</strong></span>
+      </div>
+
+      <!-- 3. Chọn thời gian dự kiến tới (trong vòng 2h) -->
+      <div class="form-group reservation-form__arrival">
+        <label class="form-label">
+          Thời gian bạn dự kiến đến (trong vòng 2 giờ tới) <span class="required" aria-hidden="true">*</span>
+        </label>
+        <div class="quick-time-grid" id="quick-time-chips">
+          <button type="button" class="time-chip-btn" data-minutes="15">15 phút</button>
+          <button type="button" class="time-chip-btn is-selected" data-minutes="30">30 phút</button>
+          <button type="button" class="time-chip-btn" data-minutes="45">45 phút</button>
+          <button type="button" class="time-chip-btn" data-minutes="60">1 giờ</button>
+          <button type="button" class="time-chip-btn" data-minutes="90">1.5 giờ</button>
+          <button type="button" class="time-chip-btn" data-minutes="120">2 giờ (tối đa)</button>
+          <button type="button" class="time-chip-btn" data-minutes="5" style="border-style:dashed;color:#b45309;" title="Thời hạn tối thiểu của API; trạng thái quá hạn được cập nhật sau 2 phút ân hạn và job nền">⏱ 5 phút (test hết hạn)</button>
+        </div>
+        <input type="hidden" id="input-arrival-minutes" value="30" />
+        <div style="background:var(--color-bg-subtle);border-radius:var(--radius-md);padding:var(--space-3);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">Hạn giữ chỗ đến:</span>
+          <strong id="display-expiry-target" style="color:var(--color-primary);font-size:var(--font-size-base);">—:—</strong>
+        </div>
+      </div>
+
+
+      <!-- Chính sách cam kết giữ chỗ -->
+      <div class="res-policy-box reservation-form__wide">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-top;margin-right:4px;">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <strong>Quy định đặt chỗ (S-48 / S-50):</strong> Trụ sẽ khóa bằng mã RFID/tài khoản của bạn qua lệnh OCPP <code>ReserveNow</code>. Đầu nối sẽ chuyển sang trạng thái <strong>Đã đặt chỗ (Reserved)</strong>. Quá thời gian giữ chỗ nếu bạn không đến bắt đầu sạc, vị trí sẽ tự động hủy.
+      </div>
+
+      <!-- SCRUM-77: Giả lập kiểm thử tranh chấp đồng thời -->
+      <div class="simulation-bar reservation-form__wide" id="conflict-simulation-wrap">
+        <label for="simulate-conflict-toggle">
+          <input type="checkbox" id="simulate-conflict-toggle" />
+          <span>🧪 Thử nghiệm ca tranh chấp (Giả lập 2 tài xế đặt cùng lúc — SCRUM-77)</span>
+        </label>
+        <span style="opacity:0.8;">Mô phỏng đụng hàng</span>
+      </div>
+
+      <!-- Trạng thái thông báo lỗi / submit / gợi ý trụ khác (SCRUM-77) -->
+      <div id="reserve-feedback" class="reservation-form__wide" style="margin-top:var(--space-4);" role="alert" aria-live="polite"></div>
+
+      <div class="modal__footer reservation-form__wide" style="padding:var(--space-4) 0 0;margin-top:var(--space-4);border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:var(--space-3);">
+        <button class="btn btn--secondary" id="btn-cancel-reserve-dialog" type="button">Hủy bỏ</button>
+        <button class="btn btn--primary" id="btn-submit-reserve" type="submit">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Xác nhận đặt chỗ
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 6. Modal Chi tiết đặt chỗ -->
+<div class="modal is-hidden reservation-modal reservation-modal--detail" id="modal-res-detail" role="dialog" aria-modal="true" aria-labelledby="modal-detail-title">
+  <div class="modal__backdrop" id="modal-detail-backdrop"></div>
+  <div class="modal__dialog modal__dialog--wide" style="position:relative;z-index:1001;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-detail-title">Chi tiết lượt đặt chỗ</h2>
+      <button class="modal__close" id="btn-close-detail-modal" type="button" aria-label="Đóng modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body" id="detail-modal-body">
+      <!-- Injected by JS -->
+    </div>
+    <div class="modal__footer" style="display:flex;justify-content:flex-end;gap:var(--space-3);padding-top:var(--space-4);border-top:1px solid var(--color-border);">
+      <button class="btn btn--secondary" id="btn-detail-close" type="button">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- 7. Modal Xác nhận Hủy đặt chỗ (SCRUM-79 / S-51) -->
+<div class="modal is-hidden reservation-modal reservation-modal--cancel" id="modal-cancel-confirm" role="dialog" aria-modal="true" aria-labelledby="modal-cancel-title">
+  <div class="modal__backdrop" id="modal-cancel-backdrop"></div>
+  <div class="modal__dialog modal__dialog--wide" style="position:relative;z-index:1001;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-cancel-title" style="color:#dc2626;display:flex;align-items:center;gap:var(--space-2);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        Xác nhận hủy đặt chỗ
+      </h2>
+      <button class="modal__close" id="btn-close-cancel-modal" type="button" aria-label="Đóng modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-cancel-reservation" class="modal__body reservation-cancel-grid">
+      <input type="hidden" id="cancel-reservation-id" />
+      <div class="cancel-summary-box reservation-cancel__summary">
+        <div style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">Mã đặt chỗ: <strong id="cancel-code-display" style="color:var(--color-primary);">RES-...</strong></div>
+        <div style="font-weight:700;font-size:var(--font-size-base);margin-top:2px;" id="cancel-station-display">Trạm Sạc</div>
+        <div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin-top:2px;" id="cancel-cp-display">Trụ sạc — Cổng #1</div>
+      </div>
+
+      <div class="cancel-policy-notice reservation-cancel__policy">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#059669;flex-shrink:0;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <div>
+          <strong>Hủy trước hạn hoàn toàn MIỄN PHÍ (S-51):</strong> Trụ sạc sẽ lập tức được giải phóng qua lệnh OCPP <code>CancelReservation</code> và chuyển về trạng thái <strong>Sẵn sàng (Available)</strong> cho tài xế khác.
+        </div>
+      </div>
+
+      <div class="form-group reservation-cancel__reason" style="margin-top:var(--space-4);">
+        <label class="form-label" for="select-cancel-reason">
+          Lý do hủy đặt chỗ <span class="required" aria-hidden="true">*</span>
+        </label>
+        <select class="form-select" id="select-cancel-reason" required>
+          <option value="Thay đổi kế hoạch di chuyển">Thay đổi kế hoạch di chuyển</option>
+          <option value="Đã tìm được trạm sạc khác gần hơn">Đã tìm được trạm sạc khác gần hơn</option>
+          <option value="Pin xe còn đủ, không cần sạc nữa">Pin xe còn đủ, không cần sạc nữa</option>
+          <option value="Bị tắc đường, không kịp đến nơi đúng giờ">Bị tắc đường, không kịp đến nơi đúng giờ</option>
+          <option value="Khác">Lý do khác</option>
+        </select>
+      </div>
+
+      <div id="cancel-feedback" class="reservation-cancel__wide" role="alert" aria-live="polite"></div>
+
+      <div class="modal__footer reservation-cancel__wide" style="display:flex;justify-content:flex-end;gap:var(--space-3);padding-top:var(--space-4);border-top:1px solid var(--color-border);margin-top:var(--space-4);">
+        <button class="btn btn--secondary" id="btn-cancel-dialog-dismiss" type="button">Giữ lại đặt chỗ</button>
+        <button class="btn btn--danger" id="btn-confirm-cancel-submit" type="submit" style="background-color:#ef4444;color:white;border-color:#ef4444;">
+          Xác nhận hủy đặt chỗ
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/reservations.js') }}"></script>
+{% endblock %}

@@ -58,6 +58,7 @@ const ApiClient = (() => {
     // --- Stations ---
     listStations: (params = {}) => _request('GET', '/stations?' + new URLSearchParams(params)),
     getStation: (id) => _request('GET', `/stations/${id}`),
+    getBookingOptions: (stationId) => _request('GET', `/stations/${stationId}/booking-options`),
     createStation: (body) => _request('POST', '/stations', body),
     updateStation: (id, body) => _request('PUT', `/stations/${id}`, body),
     deleteStation: (id) => _request('DELETE', `/stations/${id}`),
@@ -103,6 +104,13 @@ const ApiClient = (() => {
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 
+    // --- Reservations ---
+    createReservation: (body) => _request('POST', '/reservations', body),
+    listMyReservations: (activeOnly = false) =>
+      _request('GET', `/reservations/me?active_only=${activeOnly}`),
+    cancelReservation: (reservationId) =>
+      _request('POST', `/reservations/${encodeURIComponent(reservationId)}/cancel`),
+
     // --- Audit trail ---
     listAuditLogs: (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
 
@@ -130,6 +138,20 @@ const ApiClient = (() => {
     // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
     listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),
     createStationTariff: (stationId, body) => _request('POST', `/stations/${stationId}/tariffs`, body),
+
+    // --- Reservations (SCRUM-76 / S-48) ---
+    listReservations: (params = {}, opts = {}) => {
+      const query = new URLSearchParams({
+        active_only: String(params.active_only === true),
+      }).toString();
+      return _request('GET', `/reservations/me?${query}`, null, opts);
+    },
+    createReservation: (body, opts = {}) =>
+      _request('POST', '/reservations', body, opts),
+    cancelReservation: (id, body = null, opts = {}) =>
+      _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
+    getReservation: (id, opts = {}) =>
+      _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
   };
 })();
 

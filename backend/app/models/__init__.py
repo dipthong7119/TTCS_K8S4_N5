@@ -1,6 +1,7 @@
 # models/__init__.py
 # Import tat ca model de Alembic autogenerate phat hien duoc toan bo schema
 
+from app.models.alert import Alert  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.charge_point import ChargePoint, Connector  # noqa: F401
 from app.models.charge_point_configuration import ChargePointConfiguration  # noqa: F401
@@ -17,6 +18,11 @@ from app.models.payment_transaction import PaymentTransaction  # noqa: F401
 from app.models.remote_start_request import (  # noqa: F401
     RemoteStartRequest,
     RemoteStartStatus,
+)
+from app.models.reservation import (  # noqa: F401
+    CancelStatus,
+    Reservation,
+    ReservationStatus,
 )
 from app.models.station import Station  # noqa: F401
 from app.models.station_tariff import StationTariff, TariffBand  # noqa: F401
