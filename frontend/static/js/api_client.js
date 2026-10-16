@@ -96,6 +96,8 @@ const ApiClient = (() => {
     // --- Sessions ---
     listMySessions: (params = {}) => _request('GET', '/sessions/mine?' + new URLSearchParams(params)),
     getCurrentSession: (opts) => _request('GET', '/sessions/current', null, opts),
+    // SCRUM-96: Tài xế tìm trạm gần (dùng monitoring/tree với role driver)
+    findDriverStations: (params = {}) => _request('GET', '/stations?' + new URLSearchParams(params)),
     listAllSessions: (params = {}, opts) => _request('GET', '/sessions?' + new URLSearchParams(params), null, opts),
     getSession: (id) => _request('GET', `/sessions/${id}`),
     getSessionInvoice: (id) => _request('GET', `/sessions/${id}/invoice`),

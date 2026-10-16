@@ -1,72 +1,88 @@
-# Nhật ký phân công công việc - Vy Hoàng Tú (Sprint 345)
+# Nhật ký phân công công việc - Vy Hoàng Tú
 
-**Thời gian cập nhật:** 09/10/2026
-**Vai trò:** Frontend Developer (Mảng giao diện biểu giá, hoá đơn)
+**Thành viên:** Vy Hoàng Tú — FE Developer
+**Cập nhật mới nhất:** 15/10/2026
 
-## 1. Danh sách nhiệm vụ hiện tại (Sprint 3)
-- **SCRUM-61 (FE):** Màn hình khai báo biểu giá theo kWh và phí chiếm trụ (3 SP).
-- **SCRUM-62 (FE):** Màn hình cấu hình nhiều khung giờ, cảnh báo chồng lấn/thiếu giờ (3 SP).
-- **SCRUM-63 (Subtask FE: 208):** Hiển thị chi tiết cách tính tiền theo từng khung giờ cho phiên sạc (5 SP chung).
-- **SCRUM-66 (FE):** Màn hình hoá đơn có diễn giải từng đoạn giá (3 SP).
+---
 
-*(Ghi chú: SCRUM-68 (FE) - Giao diện gói thuê bao đã được chuyển giao cho Phạm Văn Tuấn để giảm tải).*
+## Sprint 3-4-5 (cũ) — Hoàn thành 12/10/2026
 
-## 2. Điều kiện bắt đầu làm việc (Dependencies)
-Theo quy tắc chống nghẽn (Mục 6.1), Tú có thể bắt đầu làm việc ngay bằng cách sử dụng **Mock data** thay vì đợi Backend hoàn thành:
-
-* **Đối với SCRUM-61, 62 (FE):** 
-  - Đang chờ API biểu giá từ Hoàng Văn Tân và Trịnh Thanh Tùng.
-  - **Hành động:** Chốt sớm hợp đồng API với Tân và Tùng, sau đó dùng dữ liệu giả (mock) để làm giao diện.
-* **Đối với SCRUM-208, 66 (FE):** 
-  - Đang chờ dữ liệu đoạn tính tiền (207, 66 BE) từ Tạ Như Vinh.
-  - **Hành động:** Chốt sớm format hoá đơn với Vinh, sau đó sử dụng dữ liệu mock để tiếp tục công việc.
-
-## 3. Hoạt động kiểm thử / Review chéo
-- Nhận review/test từ: **Đặng Ngọc Đại**
-- Người Tú cần review code: **Phạm Văn Tuấn** (đảm bảo review trong ngày khi có PR mở).
-
-## 4. Ghi chú cá nhân
-- Luôn ưu tiên chốt schema/hợp đồng API ngay từ đầu Sprint.
-- Nếu bị chờ BE quá 1 ngày (dù đã hối thúc), báo cáo ngay cho Scrum Master (Trịnh Thanh Tùng) trong buổi Daily Scrum.
-
-## 5. Tiến độ thực hiện (Cập nhật ngày 12/10/2026)
-- **[HOÀN THÀNH 100%] SCRUM-61 (FE - Khai báo biểu giá theo kWh và phí chiếm trụ theo phút):**
-  - Tích hợp trực tiếp vào màn hình sửa trạm sạc (`frontend/templates/stations/form.html` và `frontend/static/js/pages/stations_form.js`).
-  - Hỗ trợ đầy đủ các trường: Tên biểu giá, Đơn giá điện (hoặc chế độ nhiều khung giờ), Phí chiếm trụ (đồng/phút), Thời gian ân hạn (phút), Thời điểm hiệu lực (`effective_from`).
-  - Kết nối API authoritative `POST /api/stations/{station_id}/tariffs` và `GET /api/stations/{station_id}/tariffs`.
-  - Hiển thị danh sách lịch sử các phiên bản biểu giá của trạm với đầy đủ thông tin phí và thời điểm áp dụng.
-- **[HOÀN THÀNH 100%] SCRUM-62 (FE - Cấu hình nhiều khung giờ, cảnh báo chồng lấn/thiếu giờ):**
-  - Thiết kế tab chuyển đổi trực quan giữa 2 chế độ: "Đơn giá cố định cả ngày" và "Nhiều khung giờ (Time-of-Use)".
-  - Hỗ trợ thêm/xóa/sửa các khung giờ động linh hoạt trong ngày.
-  - Tích hợp nút tiện ích: "⚡ Áp dụng mẫu 24h chuẩn" nạp nhanh 3 khung giờ mẫu (Thấp điểm, Tiêu chuẩn, Cao điểm).
-  - Thanh trực quan 24 giờ (Visual 24-hour timeline bar) chia tỉ lệ theo 1440 phút, phân màu rõ rệt theo loại khung giờ và hiển thị các khoảng hở (gaps) hoặc chồng lấn (overlaps).
-  - Thuật toán kiểm tra (Client-side validation) thời gian thực theo đúng chuẩn nghiệp vụ:
-    - Bắt lỗi hở giờ chính xác đến từng phút (`Biểu giá bị hở từ XX:XX đến YY:YY` hoặc `đến 24:00`).
-    - Bắt lỗi chồng lấn giờ chính xác (`Biểu giá bị chồng lấn từ XX:XX đến YY:YY`).
-    - Bắt lỗi giờ trùng nhau, đơn giá âm, tên khung rỗng.
-    - Hiển thị thông báo trạng thái màu xanh khi cấu hình hợp lệ phủ kín 24h.
-  - Chuyển đổi dữ liệu sang định dạng `bands: [{label, start_minute, end_minute, price_vnd_per_kwh}]` gửi lên API Backend.
-  - Thẻ lịch sử biểu giá hiển thị chi tiết từng khung giờ kèm dải thời gian và đơn giá.
-- **[HOÀN THÀNH 100%] SCRUM-208 (Subtask FE của SCRUM-63 - Hiển thị chi tiết cách tính tiền theo từng khung giờ):**
-  - Nâng cấp hàm `renderInvoiceBreakdown()` trong `my_session.js`: bảng `<table class="invoice-table">` 5 cột (Khung giá / Thời gian / Sản lượng kWh / Đơn giá / Thành tiền).
-  - Badge màu khác nhau: xanh dương cho đoạn điện năng, cam cho phí chiếm trụ (`kind === 'occupancy_fee'`).
-  - Dòng tổng cộng nổi bật trong `<tfoot>`, ghi chú làm tròn `invoice_rounding_rule`, nút "Xem hoá đơn đầy đủ" dẫn sang SCRUM-66.
-  - Nâng cấp layout modal chi tiết: `<dl class="session-detail-dl">` grid 2 cột, semantic, responsive.
-- **[HOÀN THÀNH 100%] SCRUM-66 (FE - Màn hình hoá đơn có diễn giải từng đoạn giá):**
-  - Hàm `openInvoice(session)` render modal `#invoice-modal` dạng E-Receipt đầy đủ:
-    - Header gradient tối kèm logo CSMS và badge "Hoá đơn điện tử".
-    - Lưới meta 2 cột: mã phiên, ngày phát hành, trạm, mã trụ, thời lượng, tổng kWh.
-    - Dòng chi tiết từng đoạn: tên khung giá, khoảng thời gian `from → to`, kWh × đơn giá, thành tiền.
-    - Tổng thanh toán nổi bật (font 800, màu primary).
-    - Ghi chú phương thức thanh toán (Ví CSMS hoặc Gói thuê bao).
-    - Footer cảm ơn gradient.
-  - Modal `#invoice-modal` HTML thêm vào `my_session.html`, đóng bằng nút X hoặc click backdrop.
-  - Thêm ~530 dòng CSS cho 2 nhóm component: `invoice-breakdown/*` và `receipt-*`.
-
-**Trạng thái tổng kết (12/10/2026):**
 | Ticket | Mô tả | SP | Trạng thái |
 |---|---|---|---|
 | SCRUM-61 (FE) | Màn hình khai báo biểu giá | 3 | ✅ Hoàn thành |
 | SCRUM-62 (FE) | Màn hình cấu hình khung giờ | 3 | ✅ Hoàn thành |
 | SCRUM-208 (FE) | Bảng phân rã chi phí trong modal | 5 (chung) | ✅ Hoàn thành |
 | SCRUM-66 (FE) | Modal hoá đơn E-Receipt | 3 (chung) | ✅ Hoàn thành |
+
+---
+
+## Sprint 6-7-8 — Tiến độ (Cập nhật ngày 15/10/2026)
+
+### ✅ SCRUM-96 (FE) — Tài xế tìm trạm gần & xem đầu nối rảnh
+
+**Files tạo mới:**
+- [`frontend/templates/driver/station_finder.html`](frontend/templates/driver/station_finder.html)
+- [`frontend/static/css/pages/station_finder.css`](frontend/static/css/pages/station_finder.css)
+- [`frontend/static/js/pages/station_finder.js`](frontend/static/js/pages/station_finder.js)
+
+**Tính năng đã làm:**
+- **SCRUM-241 (subtask):** Thanh thống kê: "X đầu nối rảnh / Y đang sạc / Z trạm / W ngoại tuyến" — cập nhật realtime qua SSE `status_update`.
+- **SCRUM-242 (subtask):** Bản đồ Leaflet OSM: marker màu (xanh lá=rảnh, xanh dương=bận, xám=offline), click → popup → drawer chi tiết. Load lazy khi chuyển sang tab bản đồ.
+- Chế độ xem thẻ (card grid): mỗi trạm hiển thị chip đầu nối với badge trạng thái (rảnh/sạc/bận/offline) + animation pulse khi rảnh.
+- GPS định vị: nút "Vị trí của tôi" → sắp xếp theo khoảng cách Haversine, hiển thị "X.Xkm từ bạn".
+- Lọc: tìm theo tên/địa chỉ, lọc trạng thái, sắp xếp (rảnh nhiều nhất / tên / gần nhất).
+- Drawer chi tiết: từng trụ → từng đầu nối chip, mini map, nút Google Maps, CTA "Bắt đầu sạc".
+- SSE realtime: card cập nhật ngay khi nhận `status_update`, không reload trang.
+- Route: `GET /driver/stations` → `require_role("driver")`
+- Sidebar: thêm link "Tìm trạm sạc"
+
+**API:** `GET /api/monitoring/tree`, `GET /api/sse`
+
+---
+
+### ✅ SCRUM-98 (FE) — Theo dõi phiên sạc & nhận thông báo (1 SP)
+
+**Files tạo mới:**
+- [`frontend/templates/driver/driver_session.html`](frontend/templates/driver/driver_session.html)
+- [`frontend/static/css/pages/driver_session.css`](frontend/static/css/pages/driver_session.css)
+- [`frontend/static/js/pages/driver_session.js`](frontend/static/js/pages/driver_session.js)
+
+**Tính năng đã làm:**
+- **Live card:** kWh nạp, thời gian sạc (live counter đếm giây), ước tính chi phí, số đầu nối.
+- **Progress bar:** Ước tính % tiến trình phiên (max 3h).
+- **SSE realtime:** Lắng nghe `session_update` → khi phiên kết thúc/bị dừng → overlay fullscreen.
+- **Ended overlay:** Popup khi kết thúc — tổng kWh, thời gian, tổng tiền, nút "Xem hoá đơn". Animation scale-in đẹp.
+- **Browser Notification:** Xin quyền lúc vào trang, gửi thông báo hệ thống khi phiên kết thúc (kể cả khi tab ẩn).
+- **Phiên sạc gần đây:** 5 phiên mới nhất phía dưới.
+- **No session state:** Màn hình mời tìm trạm khi không có phiên chạy.
+- Route: `GET /driver/session` → `require_role("driver")`
+- Sidebar: thêm link "Phiên sạc của tôi"
+
+**API:** `GET /api/sessions/current`, `GET /api/sessions/{id}`, `GET /api/sessions/mine`, `GET /api/sse`
+
+---
+
+### Files đã sửa trong sprint này
+| File | Thay đổi |
+|---|---|
+| `backend/app/routers/pages.py` | Thêm route `/driver/stations` và `/driver/session` |
+| `frontend/templates/base.html` | Thêm 2 nav link mới cho driver |
+| `frontend/static/js/api_client.js` | Thêm method `findDriverStations()` |
+
+---
+
+### ⏳ Việc còn lại — Chờ BE
+| Ticket | Chờ ai | Ghi chú |
+|---|---|---|
+| SCRUM-80~83 (FE) | Trịnh Thanh Tùng (SM) | BE chưa có model/API công suất — cần field `power_limit` trong Station |
+| SCRUM-97 (FE) | Trịnh Thanh Tùng (SM) | Mock SSE đã sẵn trong SCRUM-98; cần chốt payload `session_update` đầy đủ |
+
+### Trạng thái Sprint 678 (15/10/2026)
+| Ticket | Mô tả | SP | Trạng thái |
+|---|---|---|---|
+| SCRUM-96 (FE) | Tìm trạm gần + đầu nối rảnh | subtask FE | ✅ Hoàn thành |
+| SCRUM-241 (subtask) | Thống kê đầu nối rảnh | — | ✅ Hoàn thành |
+| SCRUM-242 (subtask) | Bản đồ trạm sạc Leaflet | — | ✅ Hoàn thành |
+| SCRUM-98 (FE) | Theo dõi phiên sạc + thông báo | 1 SP | ✅ Hoàn thành |
+| SCRUM-80~83 (FE) | Giao diện phân bổ công suất | subtask FE | ⏳ Chờ BE (Tùng SM) |
+| SCRUM-97 (FE) | Thông báo khi phiên kết thúc | subtask FE | 🔄 Đã mock trong SCRUM-98 |

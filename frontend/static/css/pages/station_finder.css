@@ -1,0 +1,402 @@
+/* ==========================================================================
+   pages/station_finder.css — SCRUM-96 FE: Tìm trạm sạc gần đây (Vy Hoàng Tú)
+   ========================================================================== */
+
+/* ── Stats row ─────────────────────────────────────────────────────────── */
+.finder-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.finder-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-base);
+}
+.finder-stat:hover { box-shadow: var(--shadow-md); }
+
+.finder-stat svg { flex-shrink: 0; opacity: .85; }
+
+.finder-stat--available { border-left: 3px solid var(--color-online); }
+.finder-stat--available svg { color: var(--color-online); }
+.finder-stat--charging { border-left: 3px solid var(--color-primary); }
+.finder-stat--charging svg { color: var(--color-primary); }
+.finder-stat--station { border-left: 3px solid hsl(262,80%,62%); }
+.finder-stat--station svg { color: hsl(262,80%,62%); }
+.finder-stat--offline { border-left: 3px solid var(--color-text-muted); }
+.finder-stat--offline svg { color: var(--color-text-muted); }
+
+.finder-stat__value {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1;
+}
+.finder-stat__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+}
+
+/* ── Filter bar ─────────────────────────────────────────────────────────── */
+.finder-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ── Map container ─────────────────────────────────────────────────────── */
+.finder-map-container {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-5);
+}
+.finder-map-container.is-hidden { display: none; }
+.finder-map {
+  width: 100%;
+  height: 460px;
+  background: var(--color-surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  position: relative;
+}
+
+/* Leaflet map tiles */
+.finder-map .leaflet-container { height: 460px; width: 100%; }
+
+.finder-map-legend {
+  position: absolute;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: hsla(220,20%,10%,.75);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  z-index: 500;
+}
+.map-legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.map-legend-dot--available { background: var(--color-online); }
+.map-legend-dot--busy { background: var(--color-primary); }
+.map-legend-dot--offline { background: var(--color-text-muted); }
+
+/* ── Grid ───────────────────────────────────────────────────────────────── */
+.finder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* ── Station card ───────────────────────────────────────────────────────── */
+.finder-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+  cursor: pointer;
+}
+.finder-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.finder-card:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Card availability stripe */
+.finder-card--all-available { border-top: 3px solid var(--color-online); }
+.finder-card--partial { border-top: 3px solid var(--color-warning); }
+.finder-card--busy { border-top: 3px solid var(--color-primary); }
+.finder-card--offline { border-top: 3px solid var(--color-text-muted); opacity: .72; }
+
+.finder-card__header {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.finder-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.finder-card__name {
+  font-weight: 700;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.finder-card__avail-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+.finder-card__avail-badge--yes {
+  background: hsl(145,60%,12%);
+  color: var(--color-online);
+  border: 1px solid hsl(145,60%,22%);
+}
+.finder-card__avail-badge--no {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+.finder-card__addr {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.finder-card__addr svg { flex-shrink: 0; opacity: .6; }
+.finder-card__dist {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-top: 4px;
+}
+
+/* Connector summary row */
+.finder-card__body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.finder-card__cp-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: var(--space-2);
+}
+.finder-connector-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.finder-connector-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  border: 1.5px solid transparent;
+  transition: transform var(--transition-fast);
+}
+.finder-connector-chip:hover { transform: scale(1.06); }
+
+.chip--available {
+  background: hsl(145,60%,12%);
+  color: var(--color-online);
+  border-color: hsl(145,60%,22%);
+}
+.chip--charging {
+  background: hsl(210,90%,12%);
+  color: hsl(210,90%,70%);
+  border-color: hsl(210,90%,22%);
+}
+.chip--occupied, .chip--reserved {
+  background: hsl(38,90%,12%);
+  color: hsl(38,90%,70%);
+  border-color: hsl(38,90%,22%);
+}
+.chip--offline, .chip--unavailable, .chip--faulted {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+.chip--unknown {
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+.connector-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+
+/* Pulse animation for available connectors */
+@keyframes connector-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+.chip--available .connector-dot { animation: connector-pulse 2s ease-in-out infinite; }
+
+/* Card footer: CTA button -->*/
+.finder-card__footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.finder-card__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ── Detail drawer ──────────────────────────────────────────────────────── */
+.finder-detail-addr {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.finder-detail-section {
+  margin-bottom: var(--space-5);
+}
+.finder-detail-section-title {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: var(--space-3);
+}
+.finder-detail-cp {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+.finder-detail-cp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+.finder-detail-cp__code {
+  font-size: var(--font-size-xs);
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+.finder-detail-connector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  transition: background var(--transition-fast);
+}
+.finder-detail-connector:last-child { border-bottom: none; }
+.finder-detail-connector:hover { background: var(--color-surface-alt); }
+.finder-detail-connector__name { color: var(--color-text); font-weight: 500; }
+
+/* Start charging button in drawer */
+.finder-start-btn {
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+/* ── Map popup ──────────────────────────────────────────────────────────── */
+.finder-map-popup {
+  font-family: var(--font-family);
+  min-width: 180px;
+}
+.finder-map-popup__name {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: #1a1a2e;
+}
+.finder-map-popup__addr {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.finder-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  grid-column: 1/-1;
+  color: var(--color-text-secondary);
+  gap: var(--space-4);
+}
+.finder-empty.is-hidden { display: none; }
+.finder-empty svg { opacity: .3; }
+.finder-empty p { font-size: var(--font-size-md); font-weight: 500; margin: 0; }
+
+/* ── SSE indicator (reuse from monitoring.css) ───────────────────────────── */
+.sse-indicator {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--font-size-xs); font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+}
+.sse-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-text-muted);
+  transition: background var(--transition-base);
+}
+.sse-indicator.connected .sse-dot { background: var(--color-online); animation: pulse-dot 2s ease-in-out infinite; }
+.sse-indicator.connected { color: var(--color-online); }
+.sse-indicator.error .sse-dot { background: var(--color-fault); }
+.sse-indicator.error { color: var(--color-fault); }
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 hsla(145,60%,45%,.5); }
+  50% { box-shadow: 0 0 0 5px hsla(145,60%,45%,0); }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .finder-stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .finder-stats-row { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .finder-filter-bar { flex-direction: column; align-items: stretch; }
+  .finder-grid { grid-template-columns: 1fr; }
+  .finder-map { height: 300px; }
+}
