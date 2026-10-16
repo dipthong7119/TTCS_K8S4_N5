@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.reservation import (
     CancelReservationResponse,
+    CancelReservationRequest,
     ReservationCreateRequest,
     ReservationCreateResponse,
     ReservationErrorResponse,
@@ -86,12 +87,18 @@ def get_reservation_detail_endpoint(
 )
 async def cancel_reservation_endpoint(
     reservation_id: int,
+    payload: CancelReservationRequest | None = None,
     current_user: User = Depends(require_role("driver")),
     db: Session = Depends(get_db),
 ):
     """Tài xế huỷ chỗ đã đặt trước thời hạn cho phép (SCRUM-79)."""
     try:
-        return await cancel_reservation(db, reservation_id, current_user.id)
+        return await cancel_reservation(
+            db,
+            reservation_id,
+            current_user.id,
+            reason=payload.reason if payload else None,
+        )
     except ReservationCancelError as exc:
         return JSONResponse(
             status_code=exc.status_code,

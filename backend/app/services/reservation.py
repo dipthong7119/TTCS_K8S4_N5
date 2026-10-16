@@ -573,6 +573,10 @@ async def create_reservation(
             status="accepted",
             reject_reason=None,
             created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            expired_at=reservation.expired_at,
+            cancelled_at=reservation.cancelled_at,
+            no_show_fee_vnd=reservation.no_show_fee_vnd,
+            cancel_status=reservation.cancel_status,
         )
         return ReservationCreateResponse(
             status="Accepted",
@@ -634,6 +638,10 @@ def get_user_reservations(
                 status=res.status,
                 reject_reason=res.reject_reason,
                 created_at=res.created_at,
+                expired_at=res.expired_at,
+                cancelled_at=res.cancelled_at,
+                no_show_fee_vnd=res.no_show_fee_vnd,
+                cancel_status=res.cancel_status,
             )
         )
     return items
@@ -676,4 +684,8 @@ def get_reservation_by_id(
         status=res.status,
         reject_reason=res.reject_reason,
         created_at=res.created_at,
+        expired_at=res.expired_at,
+        cancelled_at=res.cancelled_at,
+        no_show_fee_vnd=res.no_show_fee_vnd,
+        cancel_status=res.cancel_status,
     )

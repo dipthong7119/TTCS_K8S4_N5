@@ -46,6 +46,10 @@ class ReservationItem(BaseModel):
     status: str
     reject_reason: str | None = None
     created_at: datetime
+    expired_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    no_show_fee_vnd: int | None = None
+    cancel_status: str | None = None
 
     class Config:
         from_attributes = True
@@ -88,6 +92,10 @@ class CancelReservationResponse(BaseModel):
     status: str
     cancelled_at: datetime
     cancel_status: str
+
+
+class CancelReservationRequest(BaseModel):
+    reason: str | None = Field(None, max_length=200)
 
 
 class ReservationErrorResponse(BaseModel):

@@ -137,8 +137,10 @@ const ApiClient = (() => {
 
     // --- Reservations (SCRUM-76 / S-48) ---
     listReservations: (params = {}, opts = {}) => {
-      const q = new URLSearchParams(params).toString();
-      return _request('GET', '/reservations' + (q ? '?' + q : ''), null, opts);
+      const query = new URLSearchParams({
+        active_only: String(params.active_only === true),
+      }).toString();
+      return _request('GET', `/reservations/me?${query}`, null, opts);
     },
     createReservation: (body, opts = {}) =>
       _request('POST', '/reservations', body, opts),

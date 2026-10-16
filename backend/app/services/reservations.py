@@ -618,6 +618,7 @@ async def cancel_reservation(
     reservation_id: int,
     user_id: int,
     now: datetime | None = None,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     """Tài xế huỷ chỗ đã đặt (S-51).
 
@@ -683,6 +684,7 @@ async def cancel_reservation(
                 "cancelled_at": now.isoformat(),
                 "cancel_status": CancelStatus.PENDING.value,
                 "fee_waived_reason": "driver_cancelled",
+                "cancellation_reason": reason,
             },
         )
         # Commit xong mới gửi OCPP (không giữ transaction trong lúc chờ trụ)
