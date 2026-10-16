@@ -530,6 +530,7 @@ async def create_station(
         latitude=body.latitude,
         longitude=body.longitude,
         status=body.status,
+        no_show_fee_vnd=body.no_show_fee_vnd,
         owner_id=current_user.id,
         created_at=now,
         updated_at=now,
@@ -579,6 +580,8 @@ async def update_station(
         station.longitude = body.longitude
     if body.status is not None:
         station.status = body.status
+    if body.no_show_fee_vnd is not None:
+        station.no_show_fee_vnd = body.no_show_fee_vnd
     station.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
