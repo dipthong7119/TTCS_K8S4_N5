@@ -31,6 +31,7 @@ from app.routers.power_capacity import router as power_capacity_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
+from app.routers.nearby import router as nearby_router
 from app.routers.reservations import router as reservations_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router
@@ -88,8 +89,11 @@ async def lifespan(app: FastAPI):
     # T-26: Start background job
 
     from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+    from app.services.reservation_job import check_expired_reservations
+
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
+    reservation_task = asyncio.create_task(check_expired_reservations())
     local_simulator_task: asyncio.Task[None] | None = None
     if settings.APP_ENV == "development" and settings.CSMS_LOCAL_SIMULATOR_ENABLED:
         local_simulator_task = asyncio.create_task(_run_local_simulator_fleet())
@@ -98,7 +102,8 @@ async def lifespan(app: FastAPI):
 
     bg_task.cancel()
     cleanup_task.cancel()
-    tasks = [bg_task, cleanup_task]
+    reservation_task.cancel()
+    tasks = [bg_task, cleanup_task, reservation_task]
     if local_simulator_task is not None:
         local_simulator_task.cancel()
         tasks.append(local_simulator_task)
@@ -141,6 +146,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 
 # -- Routers ------------------------------------------------------------------
 app.include_router(auth_router, prefix="/api")
+app.include_router(nearby_router, prefix="/api")   # S-47: phải đứng trước stations_router
 app.include_router(stations_router, prefix="/api")
 app.include_router(power_capacity_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")

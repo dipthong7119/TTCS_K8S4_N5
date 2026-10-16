@@ -1,4 +1,4 @@
-﻿"""
+"""
 Models: stations
 Tham chieu: SPRINT_1.md T-08, 02_CODING_STANDARDS.md muc 2.2
 """
@@ -38,11 +38,18 @@ class Station(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    # Phí không đến (VNĐ, mặc định 0). snapshot_no_show_fee() chốt giá trị này vào reservation khi đặt chỗ.
+    no_show_fee_vnd = Column(Integer, nullable=False, default=0, server_default="0")
+
     # Chi muc tren owner_id -- moi truy van cua chu tram loc theo cot nay (T-08 NFR)
     __table_args__ = (
         CheckConstraint(
             "power_limit_kw IS NULL OR power_limit_kw > 0",
             name="ck_stations_power_limit_positive",
+        ),
+        CheckConstraint(
+            "no_show_fee_vnd >= 0",
+            name="ck_stations_no_show_fee_nonneg",
         ),
         Index("ix_stations_owner_id", "owner_id"),
     )

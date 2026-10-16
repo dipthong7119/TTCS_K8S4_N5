@@ -19,7 +19,11 @@ from app.models.remote_start_request import (  # noqa: F401
     RemoteStartRequest,
     RemoteStartStatus,
 )
-from app.models.reservation import Reservation  # noqa: F401
+from app.models.reservation import (  # noqa: F401
+    CancelStatus,
+    Reservation,
+    ReservationStatus,
+)
 from app.models.station import Station  # noqa: F401
 from app.models.station_tariff import StationTariff, TariffBand  # noqa: F401
 from app.models.subscription_plan import SubscriptionPlan  # noqa: F401

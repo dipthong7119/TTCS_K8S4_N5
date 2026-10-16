@@ -26,7 +26,7 @@ def upgrade() -> None:
         batch.create_check_constraint(
             "ck_wallet_ledger_amount_sign",
             "(entry_type IN ('manual_topup', 'demo_topup', 'sandbox_topup', 'refund') AND amount_vnd > 0) OR "
-            "(entry_type IN ('session_charge', 'subscription_charge') AND amount_vnd < 0) OR "
+            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund', 'no_show_fee') AND amount_vnd < 0) OR "
             "(entry_type = 'adjustment' AND amount_vnd != 0)",
         )
 
@@ -37,7 +37,7 @@ def downgrade() -> None:
         batch.create_check_constraint(
             "ck_wallet_ledger_amount_sign",
             "(entry_type IN ('manual_topup', 'demo_topup', 'sandbox_topup', 'refund') AND amount_vnd > 0) OR "
-            "(entry_type IN ('session_charge', 'subscription_charge') AND amount_vnd < 0)",
+            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund', 'no_show_fee') AND amount_vnd < 0)",
         )
 
     with op.batch_alter_table("audit_logs") as batch:
