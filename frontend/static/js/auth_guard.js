@@ -2,6 +2,7 @@
 window.AuthGuard = (() => {
   'use strict';
   const rules = [
+    [/^\/sessions\/financial-reconciliation\/?$/, ['admin', 'accountant']],
     [/^\/monitoring\/?$/, ['admin', 'operator', 'station_owner']],
     [/^\/stations(?:\/new|\/\d+\/edit)\/?$/, ['admin', 'station_owner']],
     [/^\/stations\/revenue\/?$/, ['admin', 'station_owner']],

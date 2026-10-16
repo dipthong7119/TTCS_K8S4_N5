@@ -4,7 +4,7 @@ Schemas: reservations (SCRUM-76 / S-48: Tài xế đặt chỗ trụ sạc).
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReservationCreateRequest(BaseModel):
@@ -46,6 +46,10 @@ class ReservationItem(BaseModel):
     status: str
     reject_reason: str | None = None
     created_at: datetime
+    expired_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    no_show_fee_vnd: int | None = None
+    cancel_status: str | None = None
 
     class Config:
         from_attributes = True
@@ -79,4 +83,22 @@ class ReservationConflictResponse(BaseModel):
     charge_point_code: str
     connector_id: int
     suggestions: list[AlternativeSuggestion] = []
+
+
+class CancelReservationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: str
+    cancelled_at: datetime
+    cancel_status: str
+
+
+class CancelReservationRequest(BaseModel):
+    reason: str | None = Field(None, max_length=200)
+
+
+class ReservationErrorResponse(BaseModel):
+    detail: str
+    code: str
 

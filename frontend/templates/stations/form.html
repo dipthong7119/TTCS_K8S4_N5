@@ -112,6 +112,15 @@
           </div>
         </div>
 
+        <!-- Phí không đến sau thời hạn giữ chỗ (SCRUM-78) -->
+        <div class="form-group">
+          <label class="form-label" for="station-no-show-fee">Phí không đến (đồng)</label>
+          <input id="station-no-show-fee" name="no_show_fee_vnd" type="number" class="form-input"
+                 min="0" max="1000000000" step="1"
+                 value="{{ station.no_show_fee_vnd | default(0) if is_edit else 0 }}" />
+          <p class="form-hint">Phí này được chốt khi tài xế đặt chỗ và chỉ thu nếu đặt chỗ hết hạn mà tài xế không bắt đầu sạc. Nhập 0 để miễn phí.</p>
+        </div>
+
         <!-- Trạng thái (chỉ hiện khi edit) -->
         {% if is_edit %}
         <div class="form-group">

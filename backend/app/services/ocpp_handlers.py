@@ -129,6 +129,8 @@ def handle_ocpp_message(
             publish_charge_point_status(db, point.id)
         if action in {"StartTransaction", "MeterValues", "StopTransaction"}:
             publish_session_update(db, point.id, action, payload)
+        if action in {"StatusNotification", "StartTransaction", "StopTransaction"}:
+            _schedule_power_rebalance(point.station_id)
         return existing.response_payload
 
     touch_last_seen(db, charge_point_code)
@@ -178,7 +180,17 @@ def handle_ocpp_message(
         publish_charge_point_status(db, point.id)
     if action in {"StartTransaction", "MeterValues", "StopTransaction"}:
         publish_session_update(db, point.id, action, payload)
+    if action in {"StatusNotification", "StartTransaction", "StopTransaction"}:
+        _schedule_power_rebalance(point.station_id)
     return response
+
+
+def _schedule_power_rebalance(station_id: int | None) -> None:
+    if station_id is None:
+        return
+    from app.services.power_allocation import schedule_station_rebalance
+
+    schedule_station_rebalance(station_id)
 
 
 def _parse_for_handler(raw_msg: str):

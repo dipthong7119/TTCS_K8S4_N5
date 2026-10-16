@@ -371,7 +371,7 @@ async def get_session_invoice(
 
 @router.post(
     "/{session_id}/remote-stop",
-    dependencies=[Depends(require_role("admin", "operator"))],
+    dependencies=[Depends(require_role("admin", "operator", "driver"))],
 )
 async def remote_stop_session(
     session_id: int,
@@ -381,6 +381,10 @@ async def remote_stop_session(
     item = _session_query(db).filter(ChargingSession.id == session_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên sạc")
+    roles = _role_names(current_user)
+    is_driver_only = "driver" in roles and not roles.intersection({"admin", "operator"})
+    if is_driver_only and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bạn chỉ có thể dừng phiên sạc của chính mình")
     if item.ended_at is not None:
         raise HTTPException(status_code=409, detail="Phiên sạc đã kết thúc, không thể dừng từ xa")
 

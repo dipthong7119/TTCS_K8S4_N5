@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.charge_point import ChargePoint
 from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
+from app.models.reservation import Reservation, ReservationStatus
 from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
 from app.schemas.station import (
@@ -24,6 +25,8 @@ from app.schemas.station import (
     StationUpdate,
 )
 from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
+from app.services.connection_manager import manager
+from app.services.ocpp_status import is_charge_point_stale
 from app.services.ownership import filter_by_owner, get_station_for_user
 from app.services.pricing import normalize_daily_bands
 
@@ -365,6 +368,86 @@ async def list_stations(
 
 
 @router.get(
+    "/{station_id}/booking-options",
+    dependencies=[Depends(require_role("driver"))],
+)
+async def get_station_booking_options(
+    station_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Return only public, currently bookable connector identifiers to drivers."""
+    station = db.query(Station).filter(
+        Station.id == station_id,
+        Station.status == "active",
+    ).first()
+    if station is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy trạm đang hoạt động")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    active_reservations = (
+        db.query(Reservation.charge_point_id, Reservation.connector_id)
+        .filter(
+            Reservation.status.in_([
+                ReservationStatus.PENDING,
+                ReservationStatus.ACTIVE,
+            ]),
+            Reservation.expiry_date > now,
+            Reservation.charge_point_id.in_(
+                db.query(ChargePoint.id).filter(ChargePoint.station_id == station.id)
+            ),
+        )
+        .all()
+    )
+    reserved_slots = {(row.charge_point_id, row.connector_id) for row in active_reservations}
+
+    points = (
+        db.query(ChargePoint)
+        .options(joinedload(ChargePoint.connectors))
+        .filter(ChargePoint.station_id == station.id)
+        .order_by(ChargePoint.code)
+        .all()
+    )
+    busy_statuses = {
+        "charging", "suspended_ev", "suspended_evse", "finishing",
+        "reserved", "faulted", "unavailable",
+    }
+    busy_ocpp_statuses = {
+        "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing",
+        "Reserved", "Faulted", "Unavailable", "Occupied",
+    }
+
+    items = []
+    for point in points:
+        point_online = (
+            point.code in manager.active_connections
+            and point.status == "online"
+            and not is_charge_point_stale(point.last_seen_at)
+        )
+        if not point_online:
+            continue
+
+        available_connectors = [
+            {
+                "connector_id": connector.connector_id,
+                "connector_type": connector.connector_type,
+                "rated_power_kw": connector.rated_power_kw,
+            }
+            for connector in point.connectors
+            if connector.status.lower() not in busy_statuses
+            and connector.ocpp_status not in busy_ocpp_statuses
+            and (point.id, connector.connector_id) not in reserved_slots
+        ]
+        if available_connectors:
+            items.append({
+                "charge_point_code": point.code,
+                "connectors": available_connectors,
+            })
+
+    return {"station_id": station.id, "station_name": station.name, "items": items}
+
+
+@router.get(
     "/{station_id}",
     response_model=StationResponse | StationDirectoryResponse,
     dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))],
@@ -447,6 +530,7 @@ async def create_station(
         latitude=body.latitude,
         longitude=body.longitude,
         status=body.status,
+        no_show_fee_vnd=body.no_show_fee_vnd,
         owner_id=current_user.id,
         created_at=now,
         updated_at=now,
@@ -496,6 +580,8 @@ async def update_station(
         station.longitude = body.longitude
     if body.status is not None:
         station.status = body.status
+    if body.no_show_fee_vnd is not None:
+        station.no_show_fee_vnd = body.no_show_fee_vnd
     station.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
