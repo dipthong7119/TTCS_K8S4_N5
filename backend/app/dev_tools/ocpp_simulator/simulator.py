@@ -8,6 +8,7 @@ Compose supplies configuration as CLI arguments; no server logic is imported.
 import argparse
 import asyncio
 import json
+import os
 import re
 import time
 import uuid
@@ -119,7 +120,7 @@ class SimpleSimulator:
 
     def __init__(
         self, host: str = "localhost", port: int = 8000, code: str = "TEST-01",
-        *, server_url: str | None = None,
+        *, server_url: str | None = None, state_dir: str | Path | None = None,
     ):
         self.host = host
         self.port = port
@@ -136,11 +137,106 @@ class SimpleSimulator:
             "MeterValueSampleInterval": 30,
         }
         self._active_transactions: dict[int, dict[str, Any]] = {}
+        configured_state_dir = state_dir if state_dir is not None else os.getenv(
+            "CSMS_SIMULATOR_STATE_DIR"
+        )
+        safe_code = re.sub(r"[^A-Za-z0-9_.-]", "_", code)
+        state_file_name = f"{safe_code}.json"
+        self._state_path = (
+            Path(configured_state_dir) / state_file_name
+            if configured_state_dir
+            else None
+        )
+        self._load_active_transactions()
         self._reservations: dict[int, int] = {}
         self._pending_calls: dict[str, asyncio.Future] = {}
         self._receiver_task: asyncio.Task | None = None
         self._reboot_requested = False
         self._disconnect_event = asyncio.Event()
+
+    def _load_active_transactions(self) -> None:
+        if self._state_path is None or not self._state_path.exists():
+            return
+        try:
+            state = json.loads(self._state_path.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                raise ValueError("simulator state must be an object")
+            transactions = state.get("active_transactions", {})
+            if not isinstance(transactions, dict):
+                raise ValueError("active_transactions must be an object")
+            for raw_connector_id, transaction in transactions.items():
+                try:
+                    connector_id = int(raw_connector_id)
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(transaction, dict):
+                    continue
+                transaction_id = transaction.get("transaction_id")
+                meter_wh = transaction.get("meter_wh")
+                stop_requested = transaction.get("stop_requested", False)
+                stop_requested_at = transaction.get("stop_requested_at")
+                if (
+                    connector_id <= 0
+                    or type(transaction_id) is not int
+                    or transaction_id <= 0
+                    or type(meter_wh) is not int
+                    or meter_wh < 0
+                    or type(stop_requested) is not bool
+                    or (
+                        stop_requested_at is not None
+                        and not isinstance(stop_requested_at, str)
+                    )
+                ):
+                    continue
+                if stop_requested_at is not None:
+                    try:
+                        datetime.fromisoformat(stop_requested_at.replace("Z", "+00:00"))
+                    except ValueError:
+                        continue
+                self._active_transactions[connector_id] = {
+                    "transaction_id": transaction_id,
+                    "meter_wh": meter_wh,
+                    "last_sample": time.monotonic(),
+                    "stop_requested": stop_requested,
+                    "stop_requested_at": stop_requested_at,
+                }
+        except (OSError, TypeError, ValueError) as exc:
+            print(
+                f"[Simulator {self.code}] Could not restore transaction state: {exc}",
+                flush=True,
+            )
+            return
+        if self._active_transactions:
+            print(
+                f"[Simulator {self.code}] Restored {len(self._active_transactions)} active transaction(s)",
+                flush=True,
+            )
+
+    def _persist_active_transactions(self) -> None:
+        if self._state_path is None:
+            return
+        state = {
+            "version": 1,
+            "active_transactions": {
+                str(connector_id): {
+                    "transaction_id": session["transaction_id"],
+                    "meter_wh": session["meter_wh"],
+                    "stop_requested": session.get("stop_requested", False),
+                    "stop_requested_at": session.get("stop_requested_at"),
+                }
+                for connector_id, session in self._active_transactions.items()
+            },
+        }
+        temp_path = self._state_path.with_suffix(".json.tmp")
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(json.dumps(state), encoding="utf-8")
+            temp_path.replace(self._state_path)
+        except OSError as exc:
+            print(
+                f"[Simulator {self.code}] Could not save transaction state: {exc}",
+                flush=True,
+            )
 
     async def connect(self):
         """Kết nối WebSocket đến server."""
@@ -205,9 +301,32 @@ class SimpleSimulator:
                         id_tag = str(payload.get("idTag", "DEMO-DRIVER-0005"))
                         asyncio.create_task(self._trigger_remote_start(connector_id, id_tag))
                     elif action == "RemoteStopTransaction":
-                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
-                        transaction_id = int(payload.get("transactionId", 1))
-                        asyncio.create_task(self._trigger_remote_stop(transaction_id))
+                        try:
+                            transaction_id = int(payload.get("transactionId"))
+                        except (TypeError, ValueError):
+                            transaction_id = None
+                        session = next(
+                            (
+                                transaction
+                                for transaction in self._active_transactions.values()
+                                if transaction["transaction_id"] == transaction_id
+                            ),
+                            None,
+                        )
+                        if session is None:
+                            status = "Rejected"
+                        else:
+                            session["stop_requested"] = True
+                            session["stop_requested_at"] = (
+                                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                            )
+                            self._persist_active_transactions()
+                            status = "Accepted"
+                        await self.ws.send(
+                            json.dumps(make_callresult(message_id, {"status": status}))
+                        )
+                        if session is not None:
+                            asyncio.create_task(self._trigger_remote_stop(transaction_id))
                     elif action == "ReserveNow":
                         try:
                             reservation_id = int(payload["reservationId"])
@@ -318,7 +437,9 @@ class SimpleSimulator:
                         "transaction_id": transaction_id,
                         "meter_wh": 1000,
                         "last_sample": time.monotonic(),
+                        "stop_requested": False,
                     }
+                    self._persist_active_transactions()
                 charging_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                 await self._call("StatusNotification", {
                     "connectorId": connector_id,
@@ -343,28 +464,53 @@ class SimpleSimulator:
 
     async def _trigger_remote_stop(self, transaction_id: int) -> None:
         """Dừng phiên sạc sau khi nhận RemoteStopTransaction."""
-        try:
-            for connector_id, session in list(self._active_transactions.items()):
-                if session["transaction_id"] != transaction_id:
-                    continue
+        match = next(
+            (
+                (connector_id, session)
+                for connector_id, session in self._active_transactions.items()
+                if session["transaction_id"] == transaction_id
+            ),
+            None,
+        )
+        if match is None:
+            print(
+                f"[Simulator {self.code}] Cannot stop unknown transaction {transaction_id}",
+                flush=True,
+            )
+            return
 
-                self._active_transactions.pop(connector_id)
-                now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                await self._call("StopTransaction", {
-                    "transactionId": transaction_id,
-                    "meterStop": max(2500, session["meter_wh"]),
-                    "timestamp": now_iso,
-                    "reason": "Remote",
-                })
-                await self._call("StatusNotification", {
-                    "connectorId": connector_id,
-                    "errorCode": "NoError",
-                    "status": "Available",
-                    "timestamp": now_iso,
-                })
-                return
-        except Exception:  # noqa: S110
-            pass
+        connector_id, session = match
+        self._active_transactions.pop(connector_id, None)
+        now_iso = session.get("stop_requested_at") or (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        try:
+            await self._call("StopTransaction", {
+                "transactionId": transaction_id,
+                "meterStop": session["meter_wh"],
+                "timestamp": now_iso,
+                "reason": "Remote",
+            })
+        except Exception as exc:
+            self._active_transactions[connector_id] = session
+            print(
+                f"[Simulator {self.code}] Remote stop failed for transaction {transaction_id}: {exc}",
+                flush=True,
+            )
+            return
+        self._persist_active_transactions()
+        try:
+            await self._call("StatusNotification", {
+                "connectorId": connector_id,
+                "errorCode": "NoError",
+                "status": "Available",
+                "timestamp": now_iso,
+            })
+        except Exception as exc:
+            print(
+                f"[Simulator {self.code}] Could not report available connector {connector_id}: {exc}",
+                flush=True,
+            )
 
 
     async def _run_loop(self):
@@ -387,6 +533,15 @@ class SimpleSimulator:
                 "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             })
         print(f"[Simulator {self.code}] Boot accepted, interval={heartbeat_interval}s")
+
+        # Resume an accepted remote stop after a simulator restart.
+        pending_stops = [
+            session["transaction_id"]
+            for session in self._active_transactions.values()
+            if session.get("stop_requested")
+        ]
+        for transaction_id in pending_stops:
+            await self._trigger_remote_stop(transaction_id)
 
         last_heartbeat_tick = time.monotonic()
         while self.connected:
@@ -428,6 +583,7 @@ class SimpleSimulator:
 
             session["meter_wh"] += 100
             session["last_sample"] = now
+            self._persist_active_transactions()
             now_utc = timestamp or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             payload = {
                 "connectorId": connector_id,
@@ -462,7 +618,9 @@ class SimpleSimulator:
                     "transaction_id": transaction_id,
                     "meter_wh": 0,
                     "last_sample": time.monotonic(),
+                    "stop_requested": False,
                 }
+                self._persist_active_transactions()
         return result
 
     async def stop_transaction(self, transaction_id: int, meter_stop: int = 5000) -> dict | None:
@@ -473,12 +631,22 @@ class SimpleSimulator:
             if session["transaction_id"] == transaction_id:
                 meter_stop = max(meter_stop, session["meter_wh"])
                 self._active_transactions.pop(connector_id)
-        result = await self._call("StopTransaction", {
-            "transactionId": transaction_id,
-            "meterStop": meter_stop,
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "reason": "EVDisconnected",
-        })
+                removed = (connector_id, session)
+                break
+        else:
+            removed = None
+        try:
+            result = await self._call("StopTransaction", {
+                "transactionId": transaction_id,
+                "meterStop": meter_stop,
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "reason": "EVDisconnected",
+            })
+        except Exception:
+            if removed is not None:
+                self._active_transactions[removed[0]] = removed[1]
+            raise
+        self._persist_active_transactions()
         print("[Simulator] Sent StopTransaction")
         return result
 

@@ -334,8 +334,223 @@
 }
 
 /* 7. Dialog & Modal Enhancements */
-.modal__dialog--medium {
-  max-width: 560px;
+.reservation-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: none;
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.reservation-modal.is-hidden {
+  display: none;
+}
+
+.reservation-modal .modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: hsla(220, 20%, 10%, .58);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.reservation-modal .modal__dialog {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 100%);
+  max-width: 1080px;
+  max-height: calc(100vh - 2 * var(--space-4));
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: scaleIn .22s ease;
+}
+
+.reservation-modal .modal__header,
+.reservation-modal .modal__footer {
+  flex: 0 0 auto;
+}
+
+.reservation-modal .modal__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.reservation-modal--detail .modal__dialog {
+  max-width: 960px;
+}
+
+.reservation-modal--cancel .modal__dialog {
+  max-width: 920px;
+}
+
+.reservation-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-4) var(--space-5);
+}
+
+.reservation-form-grid > .form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.reservation-form__arrival,
+.reservation-form__wide {
+  grid-column: 1 / -1;
+}
+
+.reservation-form__arrival .quick-time-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.reservation-form__arrival .time-chip-btn {
+  padding-inline: var(--space-2);
+  white-space: nowrap;
+}
+
+.reservation-form__wide.res-policy-box {
+  margin-top: 0;
+}
+
+.reservation-form-grid #reserve-feedback {
+  margin-top: 0 !important;
+}
+
+.reservation-form-grid .modal__footer {
+  margin-top: 0 !important;
+}
+
+.reservation-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.reservation-detail-item {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  overflow-wrap: anywhere;
+}
+
+.reservation-detail-item__label {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.reservation-detail-item--wide {
+  grid-column: 1 / -1;
+}
+
+.reservation-detail-wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.reservation-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.reservation-detail-item--code strong {
+  color: var(--color-primary);
+  font-size: var(--font-size-xl);
+}
+
+.reservation-cancel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: stretch;
+  gap: var(--space-4);
+}
+
+.reservation-cancel__summary,
+.reservation-cancel__policy {
+  min-width: 0;
+  margin: 0;
+}
+
+.reservation-cancel__reason,
+.reservation-cancel__wide {
+  grid-column: 1 / -1;
+}
+
+.reservation-cancel__reason {
+  margin-top: 0 !important;
+  margin-bottom: 0;
+}
+
+.reservation-cancel-grid .modal__footer {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  .reservation-form__arrival .quick-time-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .reservation-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .reservation-modal {
+    align-items: flex-start;
+    padding: var(--space-2);
+  }
+
+  .reservation-modal .modal__dialog {
+    max-height: calc(100vh - 2 * var(--space-2));
+    border-radius: var(--radius-lg);
+  }
+
+  .reservation-modal .modal__header,
+  .reservation-modal .modal__body {
+    padding: var(--space-4);
+  }
+
+  .reservation-form-grid,
+  .reservation-cancel-grid,
+  .reservation-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reservation-form__arrival,
+  .reservation-form__wide,
+  .reservation-detail-item--wide,
+  .reservation-detail-wide,
+  .reservation-cancel__reason,
+  .reservation-cancel__wide {
+    grid-column: 1;
+  }
+
+  .reservation-form__arrival .quick-time-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* 8. SCRUM-77: Xử lý Tranh chấp đặt chỗ & Gợi ý trụ thay thế */

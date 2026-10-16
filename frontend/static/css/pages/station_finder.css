@@ -63,6 +63,7 @@
 /* ── Map container ─────────────────────────────────────────────────────── */
 .finder-map-container {
   position: relative;
+  isolation: isolate;
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--color-border);
@@ -170,9 +171,9 @@
   font-weight: 700;
 }
 .finder-card__avail-badge--yes {
-  background: hsl(145,60%,12%);
-  color: var(--color-online);
-  border: 1px solid hsl(145,60%,22%);
+  background: hsl(145, 75%, 92%);
+  color: hsl(145, 70%, 24%);
+  border: 1px solid hsl(145, 55%, 70%);
 }
 .finder-card__avail-badge--no {
   background: var(--color-surface-alt);
@@ -226,9 +227,9 @@
 .finder-connector-chip:hover { transform: scale(1.06); }
 
 .chip--available {
-  background: hsl(145,60%,12%);
-  color: var(--color-online);
-  border-color: hsl(145,60%,22%);
+  background: hsl(145, 75%, 92%);
+  color: hsl(145, 70%, 24%);
+  border-color: hsl(145, 55%, 70%);
 }
 .chip--charging {
   background: hsl(210,90%,12%);
@@ -278,6 +279,50 @@
 }
 
 /* ── Detail drawer ──────────────────────────────────────────────────────── */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  justify-content: flex-end;
+  overflow-y: auto;
+  background: hsla(220,20%,10%,.4);
+}
+.drawer-backdrop.is-hidden { display: none; }
+.drawer {
+  display: flex;
+  flex: 0 0 min(480px, 100%);
+  flex-direction: column;
+  width: min(480px, 100%);
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+  animation: slideInRight .25s ease;
+}
+.drawer__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+.drawer__title { font-size: var(--font-size-lg); font-weight: 700; }
+.drawer__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-5) var(--space-6);
+}
 .finder-detail-addr {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -399,4 +444,5 @@
   .finder-filter-bar { flex-direction: column; align-items: stretch; }
   .finder-grid { grid-template-columns: 1fr; }
   .finder-map { height: 300px; }
+  .drawer__body { padding: var(--space-4); }
 }

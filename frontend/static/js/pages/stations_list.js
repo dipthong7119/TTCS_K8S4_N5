@@ -11,8 +11,7 @@
   const PAGE_SIZE = 10;
   const canManageStations = document.getElementById('stations-page')?.dataset.canManageStations === 'true';
   const isDriverView = document.getElementById('stations-page')?.dataset.isDriverView === 'true';
-  let _bookingOptions = [];
-  let _bookingStationId = null;
+  const tableColumnCount = isDriverView ? 5 : 6;
 
   // ── Labels & classes trạng thái ──
   const STATUS_LABELS = {
@@ -36,7 +35,7 @@
 
     // Hiện loading
     tbody.innerHTML = `
-      <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--color-text-muted);">
+      <tr><td colspan="${tableColumnCount}" style="text-align:center;padding:40px;color:var(--color-text-muted);">
         <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
           <div class="spinner" aria-hidden="true"></div><span>Đang tải...</span>
         </div>
@@ -57,7 +56,7 @@
       renderPagination(total);
     } catch (err) {
       tbody.innerHTML = `
-        <tr><td colspan="6" style="text-align:center;padding:40px;">
+        <tr><td colspan="${tableColumnCount}" style="text-align:center;padding:40px;">
           <div class="empty-state">
             <div class="empty-state__icon">⚠️</div>
             <div class="empty-state__title">Không tải được dữ liệu</div>
@@ -89,7 +88,7 @@
     const tbody = document.getElementById('station-tbody');
     if (!stations.length) {
       tbody.innerHTML = `
-        <tr><td colspan="6">
+        <tr><td colspan="${tableColumnCount}">
           <div class="empty-state">
             <div class="empty-state__icon">🏗️</div>
             <div class="empty-state__title">Chưa có trạm nào</div>
@@ -118,7 +117,7 @@
             </span>
           </td>
           <td class="td-date">${fmtDate(s.created_at)}</td>
-          <td class="text-right">
+          ${isDriverView ? '' : `<td class="text-right">
             <div class="station-row-actions">
               ${canManageStations ? `
               <a href="/stations/${s.id}/edit"
@@ -143,15 +142,9 @@
                   <path d="M9 6V4h6v2"/>
                 </svg>
               </button>
-              ` : (isDriverView ? `
-              <button class="btn btn--primary btn--sm" type="button"
-                      data-book-station-id="${s.id}"
-                      data-book-station-name="${escHtml(s.name)}">
-                Đặt chỗ
-              </button>
-              ` : '<span aria-label="Chỉ xem">Chỉ xem</span>')}
+              ` : '<span aria-label="Chỉ xem">Chỉ xem</span>'}
             </div>
-          </td>
+          </td>`}
         </tr>`;
     }).join('');
 
@@ -160,176 +153,6 @@
       btn.addEventListener('click', () =>
         openDeleteModal(btn.dataset.deleteId, btn.dataset.deleteName));
     });
-    tbody.querySelectorAll('[data-book-station-id]').forEach(btn => {
-      btn.addEventListener('click', () =>
-        openBookingModal(btn.dataset.bookStationId, btn.dataset.bookStationName));
-    });
-  }
-
-  async function loadMyReservations() {
-    const tbody = document.getElementById('reservation-tbody');
-    if (!tbody || !isDriverView) return;
-
-    tbody.innerHTML = '<tr><td colspan="5" class="reservation-empty">Đang tải...</td></tr>';
-    try {
-      const reservations = await ApiClient.listMyReservations();
-      if (!reservations.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="reservation-empty">Bạn chưa có lượt đặt chỗ nào.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = reservations.map(item => {
-        const state = reservationStatus(item.status);
-        const cancelButton = item.status === 'accepted'
-          ? `<button class="btn btn--ghost btn--sm" type="button" data-cancel-reservation="${item.id}">Hủy chỗ</button>`
-          : '—';
-        return `
-          <tr>
-            <td><strong>${escHtml(item.charge_point_code)}</strong></td>
-            <td>${escHtml(item.connector_id)}</td>
-            <td>${fmtDateTime(item.expiry_date)}</td>
-            <td><span class="badge ${state.className}">${state.label}</span></td>
-            <td class="text-right">${cancelButton}</td>
-          </tr>`;
-      }).join('');
-
-      tbody.querySelectorAll('[data-cancel-reservation]').forEach(btn => {
-        btn.addEventListener('click', () => cancelMyReservation(btn));
-      });
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="5" class="reservation-empty">${escHtml(err.message || 'Không tải được đặt chỗ')}</td></tr>`;
-    }
-  }
-
-  function reservationStatus(value) {
-    const labels = {
-      pending: ['Đang gửi đến trụ', 'badge--warning'],
-      accepted: ['Đã xác nhận', 'badge--online'],
-      rejected: ['Bị từ chối', 'badge--offline'],
-      completed: ['Đã sử dụng', 'badge--neutral'],
-      expired: ['Hết hạn', 'badge--offline'],
-      cancelled: ['Đã hủy', 'badge--neutral'],
-    };
-    const [label, className] = labels[value] || ['Không rõ', 'badge--neutral'];
-    return { label, className };
-  }
-
-  async function cancelMyReservation(button) {
-    const reservationId = button.dataset.cancelReservation;
-    button.disabled = true;
-    button.textContent = 'Đang gửi lệnh hủy...';
-    try {
-      const result = await ApiClient.cancelReservation(reservationId);
-      if (result.cancel_status === 'pending') {
-        showToast('Đã hủy đặt chỗ trên hệ thống; đang chờ trụ xác nhận giải phóng đầu nối.', 'warning', 7000);
-      } else {
-        showToast('Đã hủy đặt chỗ thành công.', 'success');
-      }
-      await Promise.all([loadMyReservations(), loadStations()]);
-    } catch (err) {
-      showToast(err.message || 'Không thể hủy đặt chỗ', 'error', 6000);
-      button.disabled = false;
-      button.textContent = 'Hủy chỗ';
-    }
-  }
-
-  async function openBookingModal(stationId, stationName) {
-    _bookingStationId = stationId;
-    const modal = document.getElementById('booking-modal');
-    if (!modal) return;
-    document.getElementById('booking-station-name').textContent = stationName;
-    document.getElementById('booking-error').hidden = true;
-    document.getElementById('booking-modal').classList.remove('is-hidden');
-    document.getElementById('booking-modal-close').focus();
-    await loadBookingOptions();
-  }
-
-  async function loadBookingOptions() {
-    const pointSelect = document.getElementById('booking-charge-point');
-    const connectorSelect = document.getElementById('booking-connector');
-    const submit = document.getElementById('booking-submit');
-    const help = document.getElementById('booking-options-help');
-    pointSelect.disabled = true;
-    connectorSelect.disabled = true;
-    submit.disabled = true;
-    pointSelect.innerHTML = '<option value="">Đang tải trụ...</option>';
-    connectorSelect.innerHTML = '<option value="">Chọn trụ trước</option>';
-    help.textContent = 'Đang kiểm tra đầu nối đang rảnh...';
-
-    try {
-      const result = await ApiClient.getBookingOptions(_bookingStationId);
-      _bookingOptions = result.items || [];
-      if (!_bookingOptions.length) {
-        pointSelect.innerHTML = '<option value="">Không có trụ đang kết nối với đầu nối rảnh</option>';
-        connectorSelect.innerHTML = '<option value="">Chưa có đầu nối khả dụng</option>';
-        help.textContent = 'Thử làm mới sau khi trụ kết nối và báo trạng thái khả dụng.';
-        return;
-      }
-
-      pointSelect.innerHTML = _bookingOptions.map((point, index) =>
-        `<option value="${index}">${escHtml(point.charge_point_code)}</option>`
-      ).join('');
-      pointSelect.disabled = false;
-      help.textContent = `${_bookingOptions.reduce((sum, point) => sum + point.connectors.length, 0)} đầu nối đang khả dụng.`;
-      renderBookingConnectors();
-    } catch (err) {
-      _bookingOptions = [];
-      pointSelect.innerHTML = '<option value="">Không tải được danh sách trụ</option>';
-      connectorSelect.innerHTML = '<option value="">Thử lại sau</option>';
-      help.textContent = err.message || 'Không thể tải đầu nối của trạm.';
-    }
-  }
-
-  function renderBookingConnectors() {
-    const pointSelect = document.getElementById('booking-charge-point');
-    const connectorSelect = document.getElementById('booking-connector');
-    const submit = document.getElementById('booking-submit');
-    const point = _bookingOptions[Number(pointSelect.value)];
-    const connectors = point?.connectors || [];
-    connectorSelect.innerHTML = connectors.map(connector => {
-      const type = connector.connector_type ? ` · ${escHtml(connector.connector_type)}` : '';
-      const power = connector.rated_power_kw ? ` · ${escHtml(connector.rated_power_kw)} kW` : '';
-      return `<option value="${connector.connector_id}">Đầu nối ${connector.connector_id}${type}${power}</option>`;
-    }).join('') || '<option value="">Không có đầu nối khả dụng</option>';
-    connectorSelect.disabled = connectors.length === 0;
-    submit.disabled = connectors.length === 0;
-  }
-
-  function closeBookingModal() {
-    document.getElementById('booking-modal')?.classList.add('is-hidden');
-    _bookingStationId = null;
-  }
-
-  async function submitBooking(event) {
-    event.preventDefault();
-    const point = _bookingOptions[Number(document.getElementById('booking-charge-point').value)];
-    if (!point) return;
-
-    const submit = document.getElementById('booking-submit');
-    const error = document.getElementById('booking-error');
-    submit.disabled = true;
-    submit.textContent = 'Đang gửi đặt chỗ...';
-    error.hidden = true;
-    try {
-      const result = await ApiClient.createReservation({
-        charge_point_code: point.charge_point_code,
-        connector_id: Number(document.getElementById('booking-connector').value),
-        expiry_minutes: Number(document.getElementById('booking-expiry').value),
-      });
-      showToast(result.message || 'Đặt chỗ đã được gửi đến trụ.', 'success', 6000);
-      closeBookingModal();
-      await Promise.all([loadMyReservations(), loadStations()]);
-    } catch (err) {
-      error.textContent = err.message || 'Không thể đặt chỗ.';
-      error.hidden = false;
-      showToast(err.message || 'Không thể đặt chỗ.', 'error', 6000);
-      await loadBookingOptions();
-    } finally {
-      submit.textContent = 'Đặt chỗ';
-      if (!document.getElementById('booking-modal').classList.contains('is-hidden')) {
-        submit.disabled = document.getElementById('booking-connector').disabled;
-      }
-    }
   }
 
   // ── Hiện số lượng kết quả ──
@@ -411,16 +234,9 @@
     } catch { return '—'; }
   }
 
-  function fmtDateTime(iso) {
-    if (!iso) return '—';
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('vi-VN');
-  }
-
   // ── Khởi động ──
   document.addEventListener('DOMContentLoaded', () => {
     loadStations();
-    if (isDriverView) loadMyReservations();
 
     // Tìm kiếm có debounce
     let _debounce;
@@ -441,15 +257,6 @@
       loadStations();
     });
 
-    document.getElementById('btn-refresh-reservations')?.addEventListener('click', loadMyReservations);
-    document.getElementById('booking-charge-point')?.addEventListener('change', renderBookingConnectors);
-    document.getElementById('booking-form')?.addEventListener('submit', submitBooking);
-    document.getElementById('booking-modal-close')?.addEventListener('click', closeBookingModal);
-    document.getElementById('booking-cancel')?.addEventListener('click', closeBookingModal);
-    document.getElementById('booking-modal')?.addEventListener('click', event => {
-      if (event.target === event.currentTarget) closeBookingModal();
-    });
-
     // Modal xoá — mở/đóng
     document.getElementById('delete-modal-close').addEventListener('click', closeDeleteModal);
     document.getElementById('delete-cancel').addEventListener('click', closeDeleteModal);
@@ -459,7 +266,6 @@
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         closeDeleteModal();
-        closeBookingModal();
       }
     });
 

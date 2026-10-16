@@ -5,7 +5,7 @@
  *
  * API sử dụng:
  *   GET /api/monitoring/tree  → [{id, name, address, lat, lng, charge_points:[{code, status, connectors:[{connector_id, status}]}]}]
- *   GET /api/sse              → SSE stream cho status_update
+ *   GET /api/monitoring/sse   → SSE stream cho status_update
  */
 
 'use strict';
@@ -48,6 +48,39 @@ const StationFinder = (() => {
     offline:     'Offline',
     unknown:     'Chưa rõ',
   };
+
+  // The monitoring API uses the Vietnamese internal statuses, while this page
+  // renders canonical English statuses. Normalize both the initial tree and
+  // SSE updates so badges, totals, filters, and connector chips agree.
+  const STATUS_ALIASES = {
+    'rảnh': 'available',
+    'bận': 'occupied',
+    'đặt chỗ': 'reserved',
+    'lỗi': 'faulted',
+    'tạm ngừng': 'unavailable',
+  };
+
+  function _normalizeConnectorStatus(status) {
+    const normalized = String(status || 'unknown').trim().toLowerCase();
+    return STATUS_ALIASES[normalized] || normalized;
+  }
+
+  function _normalizeChargePoints(chargePoints) {
+    return (chargePoints || []).map(cp => ({
+      ...cp,
+      connectors: (cp.connectors || []).map(connector => ({
+        ...connector,
+        status: _normalizeConnectorStatus(connector.status),
+      })),
+    }));
+  }
+
+  function _normalizeStations(stations) {
+    return (stations || []).map(station => ({
+      ...station,
+      charge_points: _normalizeChargePoints(station.charge_points),
+    }));
+  }
 
   function _connectorClass(status) {
     const s = (status || 'unknown').toLowerCase();
@@ -459,7 +492,7 @@ const StationFinder = (() => {
 
   // ── SSE realtime updates ───────────────────────────────────────────────
   function _initSSE() {
-    SseClient.connect('/api/sse');
+    SseClient.connect('/api/monitoring/sse');
 
     SseClient.on('_connected', () => {
       const ind = $sseInd();
@@ -472,7 +505,8 @@ const StationFinder = (() => {
 
     SseClient.on('status_update', (payload) => {
       // payload: { station_id, charge_points: [{code, status, connectors:[{connector_id, status}]}] }
-      const { station_id, charge_points } = payload;
+      const { station_id } = payload;
+      const charge_points = _normalizeChargePoints(payload.charge_points);
       const idx = _stations.findIndex(s => s.id === station_id);
       if (idx === -1) return;
 
@@ -506,7 +540,7 @@ const StationFinder = (() => {
   // ── Load data ─────────────────────────────────────────────────────────
   async function _load() {
     try {
-      const data = await ApiClient.getMonitoringTree();
+      const data = _normalizeStations(await ApiClient.getMonitoringTree());
       _stations = data;
       $loading().style.display = 'none';
       _renderStats(data);

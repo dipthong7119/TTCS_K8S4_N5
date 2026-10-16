@@ -6,6 +6,15 @@
 (function () {
   'use strict';
 
+  // Keep page state inside this IIFE. Assigning these values without declarations
+  // throws in strict mode and prevents the DOM event handlers from being bound.
+  let stationsTree = [];
+  let reservations = [];
+  let activeReservation = null;
+  let reservationLoadError = null;
+  let countdownTimerId = null;
+  let expiryRefreshTimerId = null;
+
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -813,57 +822,43 @@
     }
 
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:var(--space-3);">
-        <div style="background:var(--color-bg-subtle);border-radius:var(--radius-lg);padding:var(--space-4);border:1px solid var(--color-border);">
-          <div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;">Mã đặt chỗ</div>
-          <div style="font-size:var(--font-size-xl);font-weight:750;color:var(--color-primary);">${escapeHtml(res.reservation_code)}</div>
+      <div class="reservation-detail-grid">
+        <div class="reservation-detail-item reservation-detail-item--code">
+          <span class="reservation-detail-item__label">Mã đặt chỗ</span>
+          <strong>${escapeHtml(res.reservation_code)}</strong>
         </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trạng thái:</span>
-            <div style="margin-top:2px;"><span class="badge badge--res-${res.status.toLowerCase()}">${escapeHtml(res.status)}</span></div>
-          </div>
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Phản hồi OCPP:</span>
-            <div style="margin-top:2px;"><strong>${escapeHtml(res.ocpp_status || 'Accepted')}</strong></div>
-          </div>
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Trạng thái</span>
+          <span class="badge badge--res-${res.status.toLowerCase()}">${escapeHtml(res.status)}</span>
         </div>
-
-        <hr style="border:0;border-top:1px solid var(--color-border);margin:var(--space-2) 0;" />
-
-        <div>
-          <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trạm sạc:</span>
-          <div style="font-weight:600;">${escapeHtml(res.station_name)}</div>
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Phản hồi OCPP</span>
+          <strong>${escapeHtml(res.ocpp_status || 'Accepted')}</strong>
+        </div>
+        <div class="reservation-detail-item reservation-detail-item--wide">
+          <span class="reservation-detail-item__label">Trạm sạc</span>
+          <strong>${escapeHtml(res.station_name)}</strong>
           <div style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">${escapeHtml(res.station_address || '')}</div>
         </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trụ sạc:</span>
-            <div><strong>${escapeHtml(res.charge_point_code)}</strong></div>
-          </div>
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Cổng sạc:</span>
-            <div><strong>Cổng #${escapeHtml(res.connector_id)}</strong> (${escapeHtml(res.connector_type || 'CCS2')})</div>
-          </div>
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Trụ sạc</span>
+          <strong>${escapeHtml(res.charge_point_code)}</strong>
         </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Thời điểm đặt:</span>
-            <div style="font-size:var(--font-size-sm);">${formatDate(res.created_at)}</div>
-          </div>
-          <div>
-            <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Hạn giữ chỗ:</span>
-            <div style="font-size:var(--font-size-sm);font-weight:600;color:var(--color-primary);">${formatDate(res.expiry_at)}</div>
-          </div>
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Cổng sạc</span>
+          <strong>Cổng #${escapeHtml(res.connector_id)}</strong> (${escapeHtml(res.connector_type || 'CCS2')})
         </div>
-
-        ${extraBannerHtml}
-
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Thời điểm đặt</span>
+          <span>${formatDate(res.created_at)}</span>
+        </div>
+        <div class="reservation-detail-item">
+          <span class="reservation-detail-item__label">Hạn giữ chỗ</span>
+          <strong style="color:var(--color-primary);">${formatDate(res.expiry_at)}</strong>
+        </div>
+        ${extraBannerHtml ? `<div class="reservation-detail-wide">${extraBannerHtml}</div>` : ''}
         ${isActive ? `
-          <div style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;">
+          <div class="reservation-detail-wide reservation-detail-actions">
             <button class="btn btn--danger btn--sm" id="btn-cancel-from-detail" type="button" style="background-color:#ef4444;color:white;border-color:#ef4444;">
               Hủy đặt chỗ này
             </button>
@@ -886,9 +881,6 @@
 
   // --- Khởi tạo sự kiện ---
   document.addEventListener('DOMContentLoaded', async () => {
-    await loadStations();
-    await loadReservations();
-
     // Nút mở modal đặt chỗ
     document.getElementById('btn-open-reserve-modal')?.addEventListener('click', openReserveModal);
     document.getElementById('btn-close-reserve-modal')?.addEventListener('click', closeReserveModal);
@@ -923,6 +915,10 @@
     document.getElementById('search-res')?.addEventListener('input', renderTable);
     document.getElementById('filter-res-status')?.addEventListener('change', renderTable);
     document.getElementById('btn-refresh-res')?.addEventListener('click', loadReservations);
+
+    // Gắn sự kiện trước khi gọi API để trang vẫn phản hồi nếu máy chủ chậm.
+    await loadStations();
+    await loadReservations();
 
     // Xử lý query param nếu điều hướng từ monitoring (ví dụ: ?action=reserve&station_id=1&cp_code=CP_VINCOM_01)
     const urlParams = new URLSearchParams(window.location.search);
