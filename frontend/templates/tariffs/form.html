@@ -1,52 +1,242 @@
 {% extends "base.html" %}
 
 {% block title %}Khai báo biểu giá{% endblock %}
+{% block meta_description %}Khai báo đơn giá điện và phí chiếm trụ cho trạm sạc{% endblock %}
+
+{% block extra_css %}
+<style>
+  .tariff-form-wrap { max-width: 540px; }
+  .tariff-info-card {
+    background: var(--color-surface-elevated, #f8f9fa);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    padding: var(--space-4, 16px);
+    margin-bottom: var(--space-5, 20px);
+    font-size: var(--font-size-sm, 0.875rem);
+    color: var(--color-text-secondary, #64748b);
+  }
+  .tariff-info-card strong { color: var(--color-text-primary, #1e293b); }
+  .form-hint { font-size: var(--font-size-xs, 0.75rem); color: var(--color-text-muted, #94a3b8); margin-top: 4px; }
+  .tariff-success {
+    display: none;
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border-radius: var(--radius-md, 8px);
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    margin-bottom: var(--space-4, 16px);
+    align-items: center;
+    gap: var(--space-2, 8px);
+  }
+  .tariff-success.is-visible { display: flex; }
+  .tariff-error {
+    display: none;
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border-radius: var(--radius-md, 8px);
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    margin-bottom: var(--space-4, 16px);
+  }
+  .tariff-error.is-visible { display: block; }
+  .station-select-wrap { margin-bottom: var(--space-4, 16px); }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/stations">Trạm sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Khai báo biểu giá</span>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Khai báo biểu giá</h1>
-    <p class="text-muted">Khai báo đơn giá điện (kWh) và phí chiếm trụ (theo phút) cho trạm sạc.</p>
+  <div class="page-header__info">
+    <h1 class="page-header__title">Khai báo biểu giá</h1>
+    <p class="page-header__subtitle">Khai báo đơn giá điện (kWh) và phí chiếm trụ (theo phút) cho trạm sạc.</p>
+  </div>
 </div>
 
-<div class="card">
-    <div class="card-body">
-        <form id="tariff-form" onsubmit="event.preventDefault(); submitTariff();">
-            <div class="form-group mb-3">
-                <label for="tariffName" class="form-label">Tên biểu giá</label>
-                <input type="text" class="form-control" id="tariffName" placeholder="VD: Biểu giá tiêu chuẩn" required>
-            </div>
-            <div class="form-group mb-3">
-                <label for="kwhPrice" class="form-label">Đơn giá điện (VNĐ/kWh)</label>
-                <input type="number" class="form-control" id="kwhPrice" placeholder="VD: 3200" required min="0">
-            </div>
-            <div class="form-group mb-4">
-                <label for="occupancyFee" class="form-label">Phí chiếm trụ (VNĐ/phút)</label>
-                <input type="number" class="form-control" id="occupancyFee" placeholder="VD: 500" required min="0">
-                <small class="form-text text-muted">Phí này áp dụng khi xe đã sạc đầy nhưng chưa rút súng sạc.</small>
-            </div>
-            
-            <div class="alert alert-info mb-3">
-                💡 <strong>Lưu ý:</strong> Để biểu giá có hiệu lực với trạm sạc thực tế, vui lòng vào trang <a href="/stations" class="alert-link">Quản lý trạm sạc</a> &rarr; chọn <strong>Sửa trạm</strong> để lưu biểu giá trực tiếp cho trạm.
-            </div>
-            <button type="submit" class="btn btn-primary">Lưu biểu giá</button>
-            <a href="/stations" class="btn btn-secondary">Quay lại Trạm sạc</a>
-        </form>
+<div class="tariff-form-wrap">
+
+  <div class="tariff-info-card">
+    💡 Biểu giá sẽ áp dụng cho trạm bạn chọn bên dưới. Để cấu hình nhiều khung giờ trong ngày,
+    dùng trang <a href="/tariffs/time-frames">Cấu hình khung giờ</a> sau khi tạo biểu giá cơ bản.
+  </div>
+
+  <div class="card">
+    <div class="card__body" style="padding: var(--space-5, 20px);">
+
+      <div id="tariff-success" class="tariff-success" role="status" aria-live="polite">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span id="tariff-success-msg">Đã lưu biểu giá thành công!</span>
+      </div>
+      <div id="tariff-error" class="tariff-error" role="alert" aria-live="assertive"></div>
+
+      <form id="tariff-form" novalidate>
+
+        <!-- Chọn trạm -->
+        <div class="station-select-wrap">
+          <label for="tariff-station-id" class="form-label">Trạm sạc <span aria-hidden="true" style="color:var(--color-fault);">*</span></label>
+          <select class="form-select" id="tariff-station-id" required aria-required="true">
+            <option value="">-- Đang tải danh sách trạm... --</option>
+          </select>
+          <p class="form-hint">Biểu giá sẽ được áp dụng cho trạm này.</p>
+        </div>
+
+        <!-- Tên biểu giá -->
+        <div class="form-group" style="margin-bottom: var(--space-4, 16px);">
+          <label for="tariff-name" class="form-label">Tên biểu giá <span aria-hidden="true" style="color:var(--color-fault);">*</span></label>
+          <input type="text" class="form-control" id="tariff-name"
+            placeholder="VD: Biểu giá tiêu chuẩn tháng 10" required aria-required="true" maxlength="120">
+        </div>
+
+        <!-- Đơn giá kWh -->
+        <div class="form-group" style="margin-bottom: var(--space-4, 16px);">
+          <label for="tariff-kwh-price" class="form-label">Đơn giá điện (VNĐ/kWh) <span aria-hidden="true" style="color:var(--color-fault);">*</span></label>
+          <input type="number" class="form-control" id="tariff-kwh-price"
+            placeholder="VD: 3200" required aria-required="true" min="0" step="1">
+          <p class="form-hint">Áp dụng cả ngày. Để cấu hình theo khung giờ, dùng trang Khung giờ.</p>
+        </div>
+
+        <!-- Phí chiếm trụ -->
+        <div class="form-group" style="margin-bottom: var(--space-4, 16px);">
+          <label for="tariff-occupancy-fee" class="form-label">Phí chiếm trụ (VNĐ/phút)</label>
+          <input type="number" class="form-control" id="tariff-occupancy-fee"
+            placeholder="VD: 500 (để trống = 0)" min="0" step="1">
+          <p class="form-hint">Phí áp dụng khi xe đã sạc đầy nhưng chưa rút súng. Để trống = không tính phí.</p>
+        </div>
+
+        <!-- Thời điểm hiệu lực -->
+        <div class="form-group" style="margin-bottom: var(--space-5, 20px);">
+          <label for="tariff-effective-from" class="form-label">Thời điểm hiệu lực</label>
+          <input type="datetime-local" class="form-control" id="tariff-effective-from">
+          <p class="form-hint">Để trống = áp dụng ngay từ bây giờ. Không được đặt trong quá khứ.</p>
+        </div>
+
+        <div style="display:flex; gap:var(--space-3, 12px); flex-wrap:wrap;">
+          <button type="submit" class="btn btn--primary" id="tariff-submit-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Lưu biểu giá
+          </button>
+          <a href="/stations" class="btn btn--secondary">Quay lại Trạm sạc</a>
+        </div>
+
+      </form>
     </div>
+  </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
-    async function submitTariff() {
-        const payload = {
-            name: document.getElementById('tariffName').value,
-            kwhPrice: parseFloat(document.getElementById('kwhPrice').value),
-            occupancyFee: parseFloat(document.getElementById('occupancyFee').value)
-        };
-        
-        console.log("Mock Submit Tariff Data:", payload);
-        alert("Đã gửi dữ liệu biểu giá (Mock): " + JSON.stringify(payload));
-        // TODO: Chờ API thực tế từ Backend để fetch() vào
+(function () {
+  'use strict';
+
+  const stationSelect = document.getElementById('tariff-station-id');
+  const form = document.getElementById('tariff-form');
+  const submitBtn = document.getElementById('tariff-submit-btn');
+  const successEl = document.getElementById('tariff-success');
+  const successMsg = document.getElementById('tariff-success-msg');
+  const errorEl = document.getElementById('tariff-error');
+
+  function _showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.classList.add('is-visible');
+    successEl.classList.remove('is-visible');
+  }
+
+  function _showSuccess(msg) {
+    successMsg.textContent = msg;
+    successEl.classList.add('is-visible');
+    errorEl.classList.remove('is-visible');
+    // Scroll to top of form
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function _clearMessages() {
+    errorEl.classList.remove('is-visible');
+    successEl.classList.remove('is-visible');
+  }
+
+  // ── Tải danh sách trạm ───────────────────────────────────────────────
+  async function _loadStations() {
+    try {
+      const data = await ApiClient.listStations({ page: 1, page_size: 100 });
+      const stations = data.items || data;
+      stationSelect.innerHTML = stations.length === 0
+        ? '<option value="">-- Bạn chưa có trạm sạc nào --</option>'
+        : '<option value="">-- Chọn trạm sạc --</option>' +
+          stations.map(st => `<option value="${st.id}">${st.name || st.id}</option>`).join('');
+
+      // Tự chọn nếu URL có ?station_id=...
+      const urlParams = new URLSearchParams(window.location.search);
+      const preselect = urlParams.get('station_id');
+      if (preselect) stationSelect.value = preselect;
+    } catch (err) {
+      stationSelect.innerHTML = '<option value="">-- Không tải được danh sách trạm --</option>';
+      _showError('Không thể tải danh sách trạm: ' + (err.message || 'Lỗi kết nối'));
     }
+  }
+
+  // ── Submit form ──────────────────────────────────────────────────────
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    _clearMessages();
+
+    const stationId = stationSelect.value;
+    const name = document.getElementById('tariff-name').value.trim();
+    const kwhPrice = document.getElementById('tariff-kwh-price').value;
+    const occupancyFee = document.getElementById('tariff-occupancy-fee').value;
+    const effectiveFrom = document.getElementById('tariff-effective-from').value;
+
+    // Validation
+    if (!stationId) { _showError('Vui lòng chọn trạm sạc.'); stationSelect.focus(); return; }
+    if (!name) { _showError('Vui lòng nhập tên biểu giá.'); document.getElementById('tariff-name').focus(); return; }
+    if (!kwhPrice || parseFloat(kwhPrice) < 0) {
+      _showError('Đơn giá điện phải là số không âm.'); document.getElementById('tariff-kwh-price').focus(); return;
+    }
+
+    const payload = {
+      name,
+      price_vnd_per_kwh: parseFloat(kwhPrice),
+      occupancy_fee_vnd_per_minute: occupancyFee ? parseFloat(occupancyFee) : 0,
+      grace_period_minutes: 0,
+      timezone_name: 'Asia/Ho_Chi_Minh',
+    };
+    if (effectiveFrom) payload.effective_from = new Date(effectiveFrom).toISOString();
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Đang lưu...';
+
+    try {
+      const result = await ApiClient.post(`/stations/${stationId}/tariffs`, payload);
+      _showSuccess(`Đã lưu biểu giá "${result.name || name}" cho trạm thành công!`);
+      form.reset();
+      stationSelect.value = stationId; // giữ lại trạm đã chọn
+    } catch (err) {
+      _showError(err.message || 'Có lỗi xảy ra khi lưu biểu giá. Vui lòng thử lại.');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Lưu biểu giá`;
+    }
+  });
+
+  // ── Khởi tạo ────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', _loadStations);
+})();
 </script>
-{% endblock %}
 {% endblock %}

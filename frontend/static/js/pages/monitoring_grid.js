@@ -263,13 +263,24 @@
         </label>
 
               ${driver ? '' : '<label>Mã thẻ RFID <input class="form-input" data-start-tag maxlength="20" autocomplete="off" placeholder="Nhập mã thẻ được cấp" /></label>'}
-        <button class="btn btn--primary"
-                type="button"
-                data-start-charging
-                data-cp-code="${escapeHtml(point.code)}"
-                disabled>
-          Bắt đầu sạc
-        </button>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
+          <button class="btn btn--primary"
+                  type="button"
+                  data-start-charging
+                  data-cp-code="${escapeHtml(point.code)}"
+                  disabled>
+            Bắt đầu sạc
+          </button>
+          ${driver ? `
+            <a class="btn btn--secondary"
+               data-reserve-link
+               data-cp-code="${escapeHtml(point.code)}"
+               href="/reservations?action=reserve&cp_code=${encodeURIComponent(point.code)}"
+               title="Đặt trước trụ này (SCRUM-76)">
+              Đặt trước trụ này
+            </a>
+          ` : ''}
+        </div>
 
         <p data-start-message role="status" aria-live="polite"></p>
       </div>`;

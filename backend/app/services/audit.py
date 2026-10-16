@@ -12,18 +12,28 @@ def ghi_nhat_ky(
     actor_id: int | None = None,
     actor_email: str | None = None,
     actor_name: str | None = None,
+    target_user_id: int | None = None,
     charge_point_code: str | None = None,
     details: dict | None = None,
 ) -> AuditLog:
+    details_dict = details or {}
+    resolved_target = target_user_id
+    if resolved_target is None:
+        if "driver_id" in details_dict and isinstance(details_dict["driver_id"], int):
+            resolved_target = details_dict["driver_id"]
+        elif "target_user_id" in details_dict and isinstance(details_dict["target_user_id"], int):
+            resolved_target = details_dict["target_user_id"]
+
     entry = AuditLog(
         actor_id=actor_id,
         actor_email=actor_email,
         actor_name=actor_name,
+        target_user_id=resolved_target,
         action=action,
         object_type=object_type,
         object_id=str(object_id) if object_id is not None else None,
         charge_point_code=charge_point_code,
-        details=details or {},
+        details=details_dict,
     )
     db.add(entry)
     return entry

@@ -1218,29 +1218,76 @@ function sessionPage(getSessions, options = {}) {
   return { document, calls, timers, toasts, callbacks, cleared };
 }
 
+function driverSessionPage(options = {}) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) {
+        const el = element();
+        el.style = {};
+        ids.set(id, el);
+      }
+      return ids.get(id);
+    },
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  document.getElementById('ds-progress-fill').closest = () => ({ setAttribute() { } });
+
+  const callbacks = {}, calls = [], intervals = [], timeouts = [], cleared = [], banners = [];
+  const sse = { connect() { }, on(name, fn) { callbacks[name] = fn; } };
+  const session = options.session ?? null;
+  const api = {
+    getCurrentSession: async () => {
+      calls.push('current');
+      return options.currentSession ? options.currentSession() : session;
+    },
+    getSession: options.getSession || (async () => session),
+    remoteStop: options.stop || (async () => ({ status: 'Accepted' })),
+  };
+  let nextTimerId = 1;
+  const context = vm.createContext({
+    document,
+    window: { SseClient: sse },
+    SseClient: sse,
+    ApiClient: api,
+    Date: options.clock || Date,
+    Intl,
+    console,
+    setTimeout(fn, delay) { const timer = { id: nextTimerId++, fn, delay }; timeouts.push(timer); return timer.id; },
+    clearTimeout(id) { cleared.push(id); },
+    setInterval(fn, delay) { const timer = { id: nextTimerId++, fn, delay }; intervals.push(timer); return timer.id; },
+    clearInterval(id) { cleared.push(id); },
+    showToast: message => banners.push(message),
+  });
+  vm.runInContext(read('pages/driver_session.js'), context);
+  document.handlers.DOMContentLoaded();
+  return { document, callbacks, calls, intervals, timeouts, cleared, banners };
+}
+
 test('driver session page uses the API and stays empty without fabricated sessions', async () => {
-  const page = sessionPage(async () => ({ items: [], total: 0 }));
+  const page = driverSessionPage();
   await flush();
   assert.equal(page.calls.length, 1);
-  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /Chưa có phiên sạc nào/);
-  assert.equal(page.document.getElementById('active-session-banner').style.display, 'none');
-  assert.equal(page.document.getElementById('no-active-session-card').style.display, 'flex');
-  assert.equal(page.timers.length, 0);
+  assert.equal(page.document.getElementById('ds-no-session').classList.contains('is-hidden'), false);
+  assert.equal(page.document.getElementById('ds-session-wrap').classList.contains('is-hidden'), true);
+  assert.equal(page.intervals.length, 0);
 });
 
-test('driver session banner displays API energy and never increments energy with a timer', async () => {
+test('driver session page displays API energy and never increments energy with a timer', async () => {
   const session = {
     id: 123, station_name: 'API station', charge_point_code: 'API-01', connector_number: 1,
     started_at: '2026-10-06T00:00:00Z', status: 'active', live_kwh: 1.234
   };
-  const page = sessionPage(async () => ({ items: [session], total: 1 }));
+  const page = driverSessionPage({ session });
   await flush();
-  assert.match(page.document.getElementById('sessions-tbody').innerHTML, /API-01/);
-  assert.equal(page.document.getElementById('active-session-id').textContent, '#123');
-  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
-  assert.equal(page.timers.length, 1);
-  page.timers[0]();
-  assert.match(page.document.getElementById('active-kwh').innerHTML, /1\.234/);
+  const energy = page.document.getElementById('ds-kwh');
+  assert.equal(page.document.getElementById('ds-cp-code').textContent, 'API-01');
+  assert.equal(page.document.getElementById('ds-session-id').textContent, '#123');
+  assert.equal(energy.textContent, '1.23 kWh');
+  assert.equal(page.intervals.length, 1);
+  page.intervals[0].fn();
+  assert.equal(energy.textContent, '1.23 kWh');
 });
 
 test('driver session API failure reports the error without displaying sample sessions', async () => {
@@ -1503,25 +1550,17 @@ test('SCRUM-94: reconnect refreshes active session energy', async () => {
     status: 'active',
     live_kwh: 1.234,
   };
-  const page = sessionPage(
-    async () => ({ items: [session], total: 1 }),
-    { liveUpdates: true }
-  );
+  const page = driverSessionPage({ currentSession: async () => session });
   await flush();
-  assert.match(
-    page.document.getElementById('active-kwh').innerHTML,
-    /1\.234/
-  );
+  assert.equal(page.document.getElementById('ds-kwh').textContent, '1.23 kWh');
 
+  page.callbacks._connected();
   session = { ...session, live_kwh: 2.345 };
   page.callbacks._connected();
   await flush();
 
   assert.equal(page.calls.length, 2);
-  assert.match(
-    page.document.getElementById('active-kwh').innerHTML,
-    /2\.345/
-  );
+  assert.equal(page.document.getElementById('ds-kwh').textContent, '2.35 kWh');
 });
 
 test('SCRUM-94: duration displays immediately and advances each second', async () => {
@@ -1538,19 +1577,16 @@ test('SCRUM-94: duration displays immediately and advances each second', async (
     status: 'active',
     live_kwh: 1.234,
   };
-  const page = sessionPage(
-    async () => ({ items: [session], total: 1 }),
-    { clock: Clock }
-  );
+  const page = driverSessionPage({ session, clock: Clock });
   await flush();
 
-  const duration = page.document.getElementById('active-duration');
+  const duration = page.document.getElementById('ds-duration');
   const initial = duration.textContent;
   assert.ok(initial && initial.trim());
-  assert.equal(page.timers.length, 1);
+  assert.equal(page.intervals.length, 1);
 
   now += 1000;
-  page.timers[0]();
+  page.intervals[0].fn();
   assert.notEqual(duration.textContent, initial);
 });
 
@@ -1558,20 +1594,28 @@ test('SCRUM-94: duration displays immediately and advances each second', async (
 test('SCRUM-58: completion cancels countdown and ignores late command response', async () => {
   let resolve;
   const response = new Promise(done => { resolve = done; });
-  let session = { id: 123, status: 'active', live_kwh: 0 };
-  const page = sessionPage(async () => ({ items: [session], total: 1 }), { stop: () => response });
+  let session = {
+    id: 123, status: 'active', live_kwh: 0,
+    started_at: '2026-10-06T00:00:00Z', charge_point_code: 'API-01',
+  };
+  const page = driverSessionPage({
+    currentSession: async () => session,
+    getSession: async () => session,
+    stop: () => response,
+  });
   await flush();
-  page.document.getElementById('active-stop-btn').onclick();
-  const pending = page.document.getElementById('remote-stop-modal-confirm').handlers.click();
-  const countdownId = page.timers.length;
-  page.callbacks.session_update({ session_id: 999, status: 'completed' });
-  assert.ok(!page.cleared.includes(countdownId));
-  session = { ...session, status: 'completed' };
-  page.callbacks.session_update({ session_id: 123, status: 'completed' });
-  assert.ok(page.cleared.includes(countdownId));
+  page.document.getElementById('ds-stop-btn').handlers.click();
+  const pending = page.document.getElementById('ds-stop-modal-confirm').handlers.click();
+  const durationTimerId = page.intervals[0].id;
+  session = {
+    ...session, status: 'completed', stop_reason: 'Remote',
+    ended_at: '2026-10-06T01:00:00Z', total_kwh: 3.5,
+  };
+  await page.callbacks.session_update({ session_id: 123 });
+  assert.ok(page.cleared.includes(durationTimerId));
   resolve({ status: 'Accepted', message: 'Still waiting' });
   await pending;
   await flush();
-  assert.ok(!page.toasts.includes('Still waiting'));
-  assert.ok(!page.toasts.some(message => message.includes('quá 2 phút')));
+  assert.equal(page.document.getElementById('ds-notif-text').textContent, 'Phiên sạc của bạn vừa bị dừng.');
+  assert.ok(!page.timeouts.some(timer => timer.delay === 120000));
 });

@@ -624,6 +624,7 @@
         address:   (formData.address || '').trim(),
         latitude:  formData.latitude  ? parseFloat(formData.latitude)  : null,
         longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        no_show_fee_vnd: formData.no_show_fee_vnd === '' ? 0 : parseInt(formData.no_show_fee_vnd, 10),
       };
       if (isEdit && formData.status) payload.status = formData.status;
 
@@ -789,4 +790,204 @@
       }
     });
   });
+
+  // ── SCRUM-80: Quản lý hạn mức công suất trạm & đầu nối ──
+  const powerCard = document.getElementById('station-power-card');
+  if (powerCard && isEdit && stationId) {
+    const powerLoading = document.getElementById('power-capacity-loading');
+    const powerContent = document.getElementById('power-capacity-content');
+    const powerLimitInput = document.getElementById('station-power-limit');
+    const powerTbody = document.getElementById('power-connectors-tbody');
+    const countEl = document.getElementById('power-connectors-count');
+    const metricLimit = document.getElementById('power-metric-limit');
+    const metricNominal = document.getElementById('power-metric-nominal');
+    const metricStatus = document.getElementById('power-metric-status');
+    const metricStatusHint = document.getElementById('power-metric-status-hint');
+    const oversubBanner = document.getElementById('power-oversubscribed-banner');
+    const powerForm = document.getElementById('station-power-form');
+    const powerMessage = document.getElementById('station-power-message');
+    const saveBtn = document.getElementById('btn-save-power-capacity');
+
+    function _escHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function renderStatus(nominal, limit) {
+      if (!limit || limit <= 0) {
+        metricStatus.innerHTML = '<span class="badge badge--neutral"><span class="badge-text">Chưa đặt hạn mức</span></span>';
+        metricStatusHint.textContent = 'Cần nhập hạn mức công suất trạm';
+        oversubBanner.classList.add('is-hidden');
+        return;
+      }
+
+      if (nominal > limit) {
+        metricStatus.innerHTML = '<span class="badge badge--warning"><span class="badge-text">Vượt hạn mức (Over-subscribed)</span></span>';
+        metricStatusHint.textContent = `Vượt ${((nominal - limit) / limit * 100).toFixed(0)}% so với hạn mức nguồn cấp`;
+        oversubBanner.classList.remove('is-hidden');
+      } else {
+        metricStatus.innerHTML = '<span class="badge badge--success"><span class="badge-text">An toàn (Trong hạn mức)</span></span>';
+        metricStatusHint.textContent = `Tải danh định đạt ${((nominal / limit) * 100).toFixed(0)}% hạn mức`;
+        oversubBanner.classList.add('is-hidden');
+      }
+    }
+
+    function recalculateMetrics() {
+      const limit = parseFloat(powerLimitInput.value) || 0;
+      let nominal = 0;
+      const rows = powerTbody.querySelectorAll('tr[data-cp-code]');
+      rows.forEach(row => {
+        const input = row.querySelector('.connector-power-input');
+        const val = parseFloat(input?.value) || 0;
+        nominal += val;
+      });
+
+      metricLimit.textContent = limit > 0 ? `${limit.toFixed(1)} kW` : '—';
+      metricNominal.textContent = `${nominal.toFixed(1)} kW`;
+      renderStatus(nominal, limit);
+    }
+
+    async function loadPowerCapacity() {
+      try {
+        const currentCapacity = await ApiClient.getStationPowerCapacity(stationId);
+        powerLoading.classList.add('is-hidden');
+        powerContent.classList.remove('is-hidden');
+
+        // Điền hạn mức trạm
+        if (currentCapacity.power_limit_kw != null) {
+          powerLimitInput.value = currentCapacity.power_limit_kw;
+        }
+
+        // Render bảng đầu nối
+        const connectors = currentCapacity.connectors || [];
+        countEl.textContent = `${connectors.length} đầu nối`;
+
+        if (connectors.length === 0) {
+          powerTbody.innerHTML = `
+            <tr>
+              <td colspan="4" style="text-align:center;padding:var(--space-6);color:var(--color-text-muted);">
+                Trạm chưa có trụ sạc hoặc đầu nối nào. Vui lòng thêm trụ sạc ở mục phía trên trước.
+              </td>
+            </tr>
+          `;
+          saveBtn.disabled = true;
+          return;
+        }
+
+        powerTbody.innerHTML = connectors.map(c => `
+          <tr data-cp-code="${_escHtml(c.charge_point_code)}" data-conn-id="${c.connector_id}">
+            <td><code class="code-tag">${_escHtml(c.charge_point_code)}</code></td>
+            <td><strong>Cổng #${c.connector_id}</strong></td>
+            <td>
+              <div class="input-with-suffix" style="max-width:180px;">
+                <input type="number" step="0.1" min="0.1" max="500" class="form-input connector-power-input"
+                  value="${c.rated_power_kw != null ? c.rated_power_kw : ''}"
+                  placeholder="VD: 60" required />
+                <span class="input-suffix">kW</span>
+              </div>
+            </td>
+            <td>
+              <div class="power-preset-group">
+                <button type="button" class="power-preset-btn" data-preset="7.4">7.4 kW</button>
+                <button type="button" class="power-preset-btn" data-preset="11">11 kW</button>
+                <button type="button" class="power-preset-btn" data-preset="22">22 kW</button>
+                <button type="button" class="power-preset-btn" data-preset="60">60 kW</button>
+                <button type="button" class="power-preset-btn" data-preset="120">120 kW</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+
+        // Wire events for inputs
+        powerTbody.querySelectorAll('.connector-power-input').forEach(input => {
+          input.addEventListener('input', recalculateMetrics);
+        });
+
+        // Wire preset buttons
+        powerTbody.querySelectorAll('.power-preset-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const row = btn.closest('tr');
+            const input = row.querySelector('.connector-power-input');
+            if (input) {
+              input.value = btn.dataset.preset;
+              recalculateMetrics();
+            }
+          });
+        });
+
+        powerLimitInput.addEventListener('input', recalculateMetrics);
+        recalculateMetrics();
+      } catch (err) {
+        powerLoading.innerHTML = `
+          <p style="color:var(--color-fault);">Không thể tải thông tin công suất: ${err.message || 'Lỗi kết nối'}</p>
+          <button class="btn btn--secondary btn--sm" type="button" id="btn-retry-power" style="margin-top:var(--space-2);">Thử lại</button>
+        `;
+        document.getElementById('btn-retry-power')?.addEventListener('click', loadPowerCapacity);
+      }
+    }
+
+    // Submit handler
+    powerForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      powerMessage.innerHTML = '';
+
+      const limit = parseFloat(powerLimitInput.value);
+      if (!limit || limit <= 0) {
+        powerMessage.innerHTML = '<div class="alert alert--error">Vui lòng nhập hạn mức công suất toàn trạm hợp lệ (&gt; 0 kW).</div>';
+        powerLimitInput.focus();
+        return;
+      }
+
+      const connectorsPayload = [];
+      let hasError = false;
+      const rows = powerTbody.querySelectorAll('tr[data-cp-code]');
+      rows.forEach(row => {
+        const code = row.dataset.cpCode;
+        const connId = parseInt(row.dataset.connId, 10);
+        const input = row.querySelector('.connector-power-input');
+        const ratedKw = parseFloat(input?.value);
+        if (isNaN(ratedKw) || ratedKw <= 0) {
+          hasError = true;
+          input?.classList.add('form-input--error');
+        } else {
+          input?.classList.remove('form-input--error');
+          connectorsPayload.push({
+            charge_point_code: code,
+            connector_id: connId,
+            rated_power_kw: ratedKw
+          });
+        }
+      });
+
+      if (hasError) {
+        powerMessage.innerHTML = '<div class="alert alert--error">Vui lòng nhập công suất định danh hợp lệ cho tất cả các đầu nối.</div>';
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner spinner--sm" aria-hidden="true"></span> Đang lưu...';
+
+      try {
+        await ApiClient.updateStationPowerCapacity(stationId, {
+          power_limit_kw: limit,
+          connectors: connectorsPayload
+        });
+        powerMessage.innerHTML = '<div class="alert alert--success">Đã lưu cấu hình hạn mức công suất trạm thành công! Thuật toán phân bổ động đã được kích hoạt.</div>';
+        showToast('Đã lưu cấu hình công suất trạm', 'success');
+        recalculateMetrics();
+      } catch (err) {
+        powerMessage.innerHTML = `<div class="alert alert--error">Lỗi khi lưu cấu hình: ${_escHtml(err.message || 'Không thể lưu')}</div>`;
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Lưu cấu hình công suất
+        `;
+      }
+    });
+
+    loadPowerCapacity();
+  }
 })();

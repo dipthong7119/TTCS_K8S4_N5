@@ -1,132 +1,501 @@
 {% extends "base.html" %}
 
 {% block title %}Cấu hình khung giờ biểu giá{% endblock %}
+{% block meta_description %}Thiết lập các khung giờ và đơn giá điện trong ngày cho trạm sạc{% endblock %}
+
+{% block extra_css %}
+<style>
+  .tf-wrap { max-width: 760px; }
+  .tf-alert {
+    display: none;
+    border-radius: var(--radius-md, 8px);
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    margin-bottom: var(--space-4, 16px);
+    font-size: var(--font-size-sm, 0.875rem);
+  }
+  .tf-alert.is-error { display: flex; gap: 8px; align-items: flex-start; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .tf-alert.is-success { display: flex; gap: 8px; align-items: center; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .tf-alert.is-warning { display: flex; gap: 8px; align-items: flex-start; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+  .tf-alert svg { flex-shrink: 0; margin-top: 1px; }
+
+  .tf-coverage-bar {
+    height: 32px;
+    border-radius: var(--radius-sm, 4px);
+    background: var(--color-surface, #f1f5f9);
+    border: 1px solid var(--color-border, #e2e8f0);
+    position: relative;
+    margin-bottom: var(--space-3, 12px);
+    overflow: hidden;
+    display: flex;
+  }
+  .tf-coverage-seg {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,.3);
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: default;
+    transition: opacity .15s;
+  }
+  .tf-coverage-seg:hover { opacity: .85; }
+  .tf-coverage-gap {
+    height: 100%;
+    background: repeating-linear-gradient(45deg, #fca5a5, #fca5a5 4px, #fef2f2 4px, #fef2f2 8px);
+    flex-shrink: 0;
+  }
+
+  .tf-row {
+    display: grid;
+    grid-template-columns: 100px 100px 1fr auto;
+    gap: var(--space-3, 12px);
+    align-items: end;
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: var(--space-2, 8px);
+    background: var(--color-surface, #fff);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .tf-row:hover { border-color: var(--color-primary, #3b82f6); box-shadow: 0 0 0 2px rgba(59,130,246,.1); }
+  .tf-row.is-overlap { border-color: #fca5a5; background: #fff5f5; }
+  .tf-row.is-gap-after { border-bottom-color: #fdba74; }
+  .tf-row-label { font-size: var(--font-size-sm, 0.875rem); color: var(--color-text-secondary, #64748b); margin-bottom: 4px; }
+  .tf-row-error { font-size: 11px; color: #dc2626; margin-top: 2px; }
+  .tf-band-color {
+    width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 4px; vertical-align: middle;
+  }
+  @media (max-width: 600px) {
+    .tf-row { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/stations">Trạm sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Cấu hình khung giờ biểu giá</span>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Cấu hình khung giờ biểu giá</h1>
-    <p class="text-muted">Thiết lập các khung giờ trong ngày (đảm bảo phủ kín 24h và không chồng lấn).</p>
+  <div class="page-header__info">
+    <h1 class="page-header__title">Cấu hình khung giờ biểu giá</h1>
+    <p class="page-header__subtitle">Thiết lập các khung giờ trong ngày với đơn giá riêng (phải phủ kín 24h và không chồng lấn).</p>
+  </div>
 </div>
 
-<div class="card">
-    <div class="card-body">
-        <div id="validation-alert" class="alert alert-danger" style="display: none;"></div>
-        
-        <form id="timeframe-form" onsubmit="event.preventDefault(); saveTimeFrames();">
-            <div id="timeframes-container">
-                <!-- Các khung giờ sẽ được render ở đây -->
-            </div>
-            
-            <button type="button" class="btn btn-outline-primary mb-4" onclick="addTimeFrame()">+ Thêm khung giờ</button>
-            
-            <div class="border-top pt-3">
-                <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
-                <a href="/stations" class="btn btn-secondary">Quay lại Trạm sạc</a>
-            </div>
-        </form>
+<div class="tf-wrap">
+
+  <!-- Chọn trạm -->
+  <div class="card" style="margin-bottom:var(--space-4,16px);">
+    <div class="card__body" style="padding:var(--space-4,16px);">
+      <div style="display:flex;gap:var(--space-3,12px);align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <label for="tf-station-id" class="form-label">Trạm sạc</label>
+          <select class="form-select" id="tf-station-id" aria-label="Chọn trạm sạc">
+            <option value="">-- Đang tải... --</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <label for="tf-tariff-id" class="form-label">Biểu giá hiện tại</label>
+          <select class="form-select" id="tf-tariff-id" aria-label="Chọn biểu giá">
+            <option value="">-- Chọn trạm trước --</option>
+          </select>
+        </div>
+        <button class="btn btn--secondary btn--sm" id="tf-load-btn" type="button" style="margin-bottom:1px;">
+          Tải khung giờ
+        </button>
+      </div>
+      <p class="form-hint" style="margin-top:var(--space-2,8px);">
+        Mỗi biểu giá có thể có nhiều khung giờ. Bạn đang tạo biểu giá mới với các khung giờ bên dưới,
+        hoặc chọn biểu giá đã có để xem thông tin.
+      </p>
     </div>
+  </div>
+
+  <!-- Thanh phủ 24h trực quan -->
+  <div id="tf-coverage-wrap" style="margin-bottom:var(--space-4,16px);">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-muted,#94a3b8);margin-bottom:4px;">
+      <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+    </div>
+    <div class="tf-coverage-bar" id="tf-coverage-bar" aria-label="Biểu đồ phủ khung giờ trong 24h" role="img"></div>
+  </div>
+
+  <!-- Thông báo -->
+  <div id="tf-validation-alert" class="tf-alert" role="alert" aria-live="assertive"></div>
+  <div id="tf-success-alert" class="tf-alert" aria-live="polite"></div>
+
+  <!-- Form khung giờ -->
+  <div class="card">
+    <div class="card__header" style="padding:var(--space-4,16px) var(--space-5,20px);">
+      <div class="card__title">Danh sách khung giờ</div>
+      <span class="tag" id="tf-band-count">0 khung</span>
+    </div>
+    <div class="card__body" style="padding:var(--space-4,16px);">
+      <div id="tf-rows-container">
+        <!-- Các khung giờ render ở đây -->
+      </div>
+      <button type="button" class="btn btn--outline btn--sm" id="tf-add-btn" style="margin-top:var(--space-2,8px);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Thêm khung giờ
+      </button>
+    </div>
+    <div class="card__footer" style="padding:var(--space-4,16px);display:flex;gap:var(--space-3,12px);flex-wrap:wrap;">
+      <button type="button" class="btn btn--primary" id="tf-save-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Lưu cấu hình
+      </button>
+      <a href="/tariffs/form" class="btn btn--secondary">Tạo biểu giá mới</a>
+      <a href="/stations" class="btn btn--ghost">Quay lại Trạm sạc</a>
+    </div>
+  </div>
+
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
-    let timeFrames = [
-        { startTime: '00:00', endTime: '23:59', priceMultiplier: 1.0 }
-    ];
+(function () {
+  'use strict';
 
-    function renderTimeFrames() {
-        const container = document.getElementById('timeframes-container');
-        container.innerHTML = '';
-        
-        timeFrames.forEach((tf, index) => {
-            const row = document.createElement('div');
-            row.className = 'row mb-3 align-items-end time-frame-row';
-            row.innerHTML = `
-                <div class="col-md-3">
-                    <label class="form-label">Giờ bắt đầu</label>
-                    <input type="time" class="form-control" value="${tf.startTime}" onchange="updateTF(${index}, 'startTime', this.value)" required>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Giờ kết thúc</label>
-                    <input type="time" class="form-control" value="${tf.endTime}" onchange="updateTF(${index}, 'endTime', this.value)" required>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Hệ số giá (x)</label>
-                    <input type="number" class="form-control" step="0.1" value="${tf.priceMultiplier}" onchange="updateTF(${index}, 'priceMultiplier', parseFloat(this.value))" required>
-                </div>
-                <div class="col-md-3">
-                    <button type="button" class="btn btn-danger" onclick="removeTimeFrame(${index})">Xóa</button>
-                </div>
-            `;
-            container.appendChild(row);
-        });
-        validateTimeFrames();
+  // Bảng màu cho các khung giờ
+  const BAND_COLORS = [
+    '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f97316',
+  ];
+
+  // Dữ liệu khung giờ (mảng object)
+  let _bands = [
+    { label: 'Ban ngày', start: '00:00', end: '24:00', price: '' },
+  ];
+
+  // ── DOM refs ─────────────────────────────────────────────────────────
+  const stationSel = document.getElementById('tf-station-id');
+  const tariffSel  = document.getElementById('tf-tariff-id');
+  const loadBtn    = document.getElementById('tf-load-btn');
+  const addBtn     = document.getElementById('tf-add-btn');
+  const saveBtn    = document.getElementById('tf-save-btn');
+  const container  = document.getElementById('tf-rows-container');
+  const coverageBar = document.getElementById('tf-coverage-bar');
+  const valAlert   = document.getElementById('tf-validation-alert');
+  const sucAlert   = document.getElementById('tf-success-alert');
+  const bandCount  = document.getElementById('tf-band-count');
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function _timeToMin(t) {
+    // '24:00' → 1440, '06:30' → 390
+    if (!t) return NaN;
+    if (t === '24:00') return 1440;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function _minToTime(min) {
+    if (min === 1440) return '24:00';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+
+  function _showVal(cls, html) {
+    valAlert.className = `tf-alert ${cls}`;
+    valAlert.innerHTML = html;
+  }
+  function _clearVal() {
+    valAlert.className = 'tf-alert';
+    valAlert.innerHTML = '';
+  }
+  function _showSuc(html) {
+    sucAlert.className = 'tf-alert is-success';
+    sucAlert.innerHTML = html;
+    setTimeout(() => { sucAlert.className = 'tf-alert'; sucAlert.innerHTML = ''; }, 6000);
+  }
+
+  // ── Render coverage bar ───────────────────────────────────────────────
+  function _renderCoverageBar() {
+    const sorted = [..._bands]
+      .filter(b => b.start && b.end)
+      .map(b => ({ s: _timeToMin(b.start), e: _timeToMin(b.end), label: b.label || '' }))
+      .sort((a, b) => a.s - b.s);
+
+    let html = '';
+    let cursor = 0;
+    sorted.forEach((seg, i) => {
+      if (isNaN(seg.s) || isNaN(seg.e)) return;
+      if (seg.s > cursor) {
+        // gap
+        const pct = ((seg.s - cursor) / 1440 * 100).toFixed(3);
+        html += `<div class="tf-coverage-gap" style="width:${pct}%;" title="Chưa cấu hình ${_minToTime(cursor)}–${_minToTime(seg.s)}"></div>`;
+      }
+      if (seg.e > seg.s) {
+        const pct = ((seg.e - seg.s) / 1440 * 100).toFixed(3);
+        const color = BAND_COLORS[i % BAND_COLORS.length];
+        const label = seg.label || `K${i+1}`;
+        html += `<div class="tf-coverage-seg" style="width:${pct}%;background:${color};" title="${label}: ${_minToTime(seg.s)}–${_minToTime(seg.e)}">${pct > 5 ? label : ''}</div>`;
+      }
+      cursor = Math.max(cursor, seg.e);
+    });
+    if (cursor < 1440) {
+      const pct = ((1440 - cursor) / 1440 * 100).toFixed(3);
+      html += `<div class="tf-coverage-gap" style="width:${pct}%;" title="Chưa cấu hình ${_minToTime(cursor)}–24:00"></div>`;
+    }
+    coverageBar.innerHTML = html;
+  }
+
+  // ── Validate bands ────────────────────────────────────────────────────
+  function _validate() {
+    const errs = [];
+    const sorted = [..._bands]
+      .map((b, i) => ({ ...b, idx: i, s: _timeToMin(b.start), e: _timeToMin(b.end) }))
+      .sort((a, b) => a.s - b.s);
+
+    if (sorted.length === 0) { errs.push('Cần ít nhất 1 khung giờ.'); }
+
+    sorted.forEach((b) => {
+      if (isNaN(b.s) || isNaN(b.e)) { errs.push(`Khung giờ "${b.label || b.idx + 1}": giờ không hợp lệ.`); return; }
+      if (b.e <= b.s) { errs.push(`Khung giờ "${b.label || b.idx + 1}": giờ kết thúc phải sau giờ bắt đầu.`); }
+      if (!b.price || isNaN(parseFloat(b.price)) || parseFloat(b.price) < 0) {
+        errs.push(`Khung giờ "${b.label || b.idx + 1}": đơn giá không hợp lệ.`);
+      }
+    });
+
+    // check chồng lấn và khoảng trống
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const a = sorted[i], b = sorted[i + 1];
+      if (isNaN(a.e) || isNaN(b.s)) continue;
+      if (a.e > b.s) {
+        errs.push(`Chồng lấn: khung "${a.label || a.idx+1}" kết thúc ${_minToTime(a.e)} > khung "${b.label || b.idx+1}" bắt đầu ${_minToTime(b.s)}.`);
+      } else if (a.e < b.s) {
+        errs.push(`Khoảng trống: từ ${_minToTime(a.e)} đến ${_minToTime(b.s)} chưa có biểu giá.`);
+      }
+    }
+    if (sorted.length > 0) {
+      const first = sorted[0], last = sorted[sorted.length - 1];
+      if (!isNaN(first.s) && first.s !== 0) errs.push(`Khung giờ đầu tiên phải bắt đầu từ 00:00 (hiện tại: ${_minToTime(first.s)}).`);
+      if (!isNaN(last.e) && last.e !== 1440) errs.push(`Khung giờ cuối cùng phải kết thúc lúc 24:00 (hiện tại: ${_minToTime(last.e)}).`);
+    }
+    return errs;
+  }
+
+  // ── Render rows ───────────────────────────────────────────────────────
+  function _render() {
+    bandCount.textContent = `${_bands.length} khung`;
+    container.innerHTML = _bands.map((b, i) => {
+      const color = BAND_COLORS[i % BAND_COLORS.length];
+      return `
+        <div class="tf-row" id="tf-row-${i}" data-index="${i}">
+          <div>
+            <div class="tf-row-label">Giờ bắt đầu</div>
+            <input type="time" class="form-control" id="tf-start-${i}" value="${b.start || ''}"
+              aria-label="Giờ bắt đầu khung ${i+1}" oninput="TFPage.update(${i},'start',this.value)">
+          </div>
+          <div>
+            <div class="tf-row-label">Giờ kết thúc</div>
+            <select class="form-select" id="tf-end-${i}" aria-label="Giờ kết thúc khung ${i+1}"
+              onchange="TFPage.update(${i},'end',this.value)">
+              ${_buildEndOptions(b.end)}
+            </select>
+          </div>
+          <div style="min-width:160px;">
+            <div class="tf-row-label">
+              <span class="tf-band-color" style="background:${color};"></span>
+              Nhãn & đơn giá (VNĐ/kWh)
+            </div>
+            <div style="display:flex;gap:var(--space-2,8px);">
+              <input type="text" class="form-control" style="flex:1;min-width:80px;" placeholder="VD: Giờ thấp điểm"
+                value="${_esc(b.label || '')}" aria-label="Nhãn khung ${i+1}" oninput="TFPage.update(${i},'label',this.value)">
+              <input type="number" class="form-control" style="width:100px;" placeholder="VD: 3000"
+                value="${b.price || ''}" min="0" step="1" aria-label="Đơn giá khung ${i+1}"
+                oninput="TFPage.update(${i},'price',this.value)">
+            </div>
+          </div>
+          <div>
+            <button type="button" class="btn btn--ghost btn--sm" style="color:var(--color-fault,#ef4444);"
+              onclick="TFPage.remove(${i})" aria-label="Xóa khung giờ ${i+1}" title="Xóa khung này">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    _renderCoverageBar();
+    const errs = _validate();
+    if (errs.length > 0) {
+      _showVal('is-warning',
+        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>${errs.map(e => `<div>• ${e}</div>`).join('')}</div>`
+      );
+    } else {
+      _clearVal();
+    }
+  }
+
+  function _buildEndOptions(selected) {
+    const options = [];
+    for (let h = 1; h <= 24; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        if (h === 24 && m > 0) break;
+        const val = h === 24 ? '24:00' : `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        const sel = val === selected ? ' selected' : '';
+        options.push(`<option value="${val}"${sel}>${val}</option>`);
+      }
+    }
+    return options.join('');
+  }
+
+  function _esc(s) {
+    return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ── Public actions ─────────────────────────────────────────────────────
+  window.TFPage = {
+    update(i, field, value) {
+      if (_bands[i]) { _bands[i][field] = value; _render(); }
+    },
+    remove(i) {
+      if (_bands.length <= 1) { _showVal('is-warning','<span>Phải có ít nhất 1 khung giờ!</span>'); return; }
+      _bands.splice(i, 1);
+      _render();
+    },
+  };
+
+  addBtn.addEventListener('click', () => {
+    // Gợi ý giờ bắt đầu từ cuối khung cuối
+    const last = _bands[_bands.length - 1];
+    const suggestStart = last?.end || '00:00';
+    _bands.push({ label: '', start: suggestStart === '24:00' ? '00:00' : suggestStart, end: '24:00', price: '' });
+    _render();
+  });
+
+  // ── Tải danh sách trạm ────────────────────────────────────────────────
+  async function _loadStations() {
+    try {
+      const data = await ApiClient.listStations({ page: 1, page_size: 100 });
+      const stations = data.items || data;
+      stationSel.innerHTML = stations.length === 0
+        ? '<option value="">-- Chưa có trạm nào --</option>'
+        : '<option value="">-- Chọn trạm --</option>' +
+          stations.map(st => `<option value="${st.id}">${_esc(st.name || String(st.id))}</option>`).join('');
+      const urlParams = new URLSearchParams(window.location.search);
+      const pre = urlParams.get('station_id');
+      if (pre) { stationSel.value = pre; await _loadTariffs(pre); }
+    } catch (err) {
+      stationSel.innerHTML = '<option value="">-- Lỗi tải trạm --</option>';
+    }
+  }
+
+  async function _loadTariffs(stationId) {
+    if (!stationId) { tariffSel.innerHTML = '<option value="">-- Chọn trạm trước --</option>'; return; }
+    tariffSel.innerHTML = '<option value="">-- Đang tải... --</option>';
+    try {
+      const tariffs = await ApiClient.get(`/stations/${stationId}/tariffs`);
+      tariffSel.innerHTML = tariffs.length === 0
+        ? '<option value="">-- Chưa có biểu giá nào --</option>'
+        : '<option value="">-- Chọn biểu giá để xem --</option>' +
+          tariffs.map(t => `<option value="${t.id}">${_esc(t.name)} (từ ${t.effective_from ? new Date(t.effective_from).toLocaleDateString('vi-VN') : '—'})</option>`).join('');
+    } catch {
+      tariffSel.innerHTML = '<option value="">-- Lỗi tải biểu giá --</option>';
+    }
+  }
+
+  stationSel.addEventListener('change', () => _loadTariffs(stationSel.value));
+
+  tariffSel.addEventListener('change', () => {
+    // Khi chọn biểu giá đã có → load bands từ API để hiển thị tham khảo
+    const stationId = stationSel.value;
+    const tariffId = tariffSel.value;
+    if (!stationId || !tariffId) return;
+    ApiClient.get(`/stations/${stationId}/tariffs`)
+      .then(tariffs => {
+        const t = tariffs.find(x => String(x.id) === tariffId);
+        if (!t || !t.bands || t.bands.length === 0) return;
+        _bands = t.bands.map(b => ({
+          label: b.label || '',
+          start: _minToTime(b.start_minute),
+          end: _minToTime(b.end_minute),
+          price: String(b.price_vnd_per_kwh || ''),
+        }));
+        _render();
+        _showSuc(`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Đã tải ${_bands.length} khung giờ từ biểu giá.`);
+      }).catch(() => {});
+  });
+
+  loadBtn.addEventListener('click', () => {
+    const stationId = stationSel.value;
+    if (!stationId) { _showVal('is-warning','<span>Vui lòng chọn trạm trước.</span>'); return; }
+    _loadTariffs(stationId);
+  });
+
+  // ── Lưu (tạo biểu giá mới với các bands) ─────────────────────────────
+  saveBtn.addEventListener('click', async () => {
+    const errs = _validate();
+    if (errs.length > 0) {
+      _showVal('is-error',
+        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>${errs.map(e => `<div>• ${e}</div>`).join('')}</div>`);
+      return;
     }
 
-    function addTimeFrame() {
-        timeFrames.push({ startTime: '00:00', endTime: '00:00', priceMultiplier: 1.0 });
-        renderTimeFrames();
+    const stationId = stationSel.value;
+    if (!stationId) {
+      _showVal('is-error','<span>Vui lòng chọn trạm sạc trước khi lưu.</span>');
+      stationSel.focus();
+      return;
     }
 
-    function removeTimeFrame(index) {
-        if (timeFrames.length > 1) {
-            timeFrames.splice(index, 1);
-            renderTimeFrames();
-        } else {
-            alert('Phải có ít nhất 1 khung giờ!');
-        }
-    }
+    // Build payload
+    const sorted = [..._bands]
+      .map(b => ({ ...b, s: _timeToMin(b.start), e: _timeToMin(b.end) }))
+      .sort((a, b) => a.s - b.s);
 
-    function updateTF(index, field, value) {
-        timeFrames[index][field] = value;
-        validateTimeFrames();
-    }
+    const bandsPayload = sorted.map(b => ({
+      label: b.label.trim() || `Khung ${_minToTime(b.s)}–${_minToTime(b.e)}`,
+      start_minute: b.s,
+      end_minute: b.e,
+      price_vnd_per_kwh: parseFloat(b.price),
+    }));
 
-    function validateTimeFrames() {
-        const alertBox = document.getElementById('validation-alert');
-        alertBox.style.display = 'none';
-        
-        // Sắp xếp theo giờ bắt đầu để dễ check
-        let sorted = [...timeFrames].sort((a, b) => a.startTime.localeCompare(b.startTime));
-        
-        let errors = [];
-        
-        if (sorted.length > 0) {
-            if (sorted[0].startTime !== '00:00') {
-                errors.push("Khung giờ đầu tiên phải bắt đầu từ 00:00");
-            }
-            
-            for (let i = 0; i < sorted.length - 1; i++) {
-                if (sorted[i].endTime > sorted[i+1].startTime) {
-                    errors.push(`Bị chồng lấn thời gian giữa ${sorted[i].endTime} và ${sorted[i+1].startTime}`);
-                } else if (sorted[i].endTime < sorted[i+1].startTime) {
-                    errors.push(`Có khoảng trống thời gian từ ${sorted[i].endTime} đến ${sorted[i+1].startTime}`);
-                }
-            }
-            
-            if (sorted[sorted.length - 1].endTime !== '23:59') {
-                errors.push("Khung giờ cuối cùng phải kết thúc lúc 23:59");
-            }
-        }
-        
-        if (errors.length > 0) {
-            alertBox.innerHTML = errors.join('<br>');
-            alertBox.style.display = 'block';
-            return false;
-        }
-        return true;
-    }
+    const payload = {
+      name: `Biểu giá ${new Date().toLocaleDateString('vi-VN')}`,
+      timezone_name: 'Asia/Ho_Chi_Minh',
+      bands: bandsPayload,
+    };
 
-    function saveTimeFrames() {
-        if (!validateTimeFrames()) {
-            alert("Vui lòng sửa các lỗi cảnh báo trước khi lưu!");
-            return;
-        }
-        console.log("Mock Submit Time Frames:", timeFrames);
-        alert("Đã lưu cấu hình khung giờ hợp lệ! (Mock) \n" + JSON.stringify(timeFrames));
-        // TODO: Chờ API thực tế từ Backend
-    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Đang lưu...';
+    _clearVal();
 
-    document.addEventListener("DOMContentLoaded", renderTimeFrames);
+    try {
+      const result = await ApiClient.post(`/stations/${stationId}/tariffs`, payload);
+      _showSuc(`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Đã lưu biểu giá ${bandsPayload.length} khung giờ thành công!`);
+      await _loadTariffs(stationId);
+    } catch (err) {
+      _showVal('is-error',
+        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>${err.message || 'Có lỗi khi lưu. Vui lòng thử lại.'}</span>`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg>Lưu cấu hình`;
+    }
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    _render();
+    _loadStations();
+  });
+})();
 </script>
-{% endblock %}
 {% endblock %}
