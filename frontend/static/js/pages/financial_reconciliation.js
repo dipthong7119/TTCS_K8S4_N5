@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const from = get('from');
   const to = get('to');
   const status = get('status');
+  const station = get('station');
+  const chargePoint = get('charge-point');
   const button = get('apply');
   const message = get('message');
   const tbody = get('table-body');
@@ -118,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const report = await source.getReport({
         fromDate: from.value, toDate: to.value, status: status.value,
+        stationCode: station.value, chargePointCode: chargePoint.value,
       });
       if (current !== revision) return;
       if (!report.is_sample || !Array.isArray(report.rows) || !report.summary) {
@@ -137,6 +140,26 @@ document.addEventListener('DOMContentLoaded', () => {
     notice('Chưa tải được dữ liệu mẫu. Hãy tải lại trang để thử lại.', 'danger');
     return;
   }
+  const options = source.getFilterOptions();
+  function fillOptions(select, values, label) {
+    const selected = select.value;
+    select.replaceChildren();
+    for (const value of ['', ...new Set(values)]) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value || label;
+      select.append(option);
+    }
+    select.value = values.includes(selected) ? selected : '';
+  }
+  function updateChargePoints() {
+    fillOptions(chargePoint, options
+      .filter(item => !station.value || item.stationCode === station.value)
+      .map(item => item.chargePointCode), 'Tất cả trụ');
+  }
+  fillOptions(station, options.map(item => item.stationCode), 'Tất cả trạm');
+  updateChargePoints();
+  station.addEventListener('change', updateChargePoints);
   from.value = source.defaultPeriod.fromDate;
   to.value = source.defaultPeriod.toDate;
   button.disabled = false;
