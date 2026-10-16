@@ -25,13 +25,13 @@ from app.routers.charge_point_configuration import (
 )
 from app.routers.charge_points import router as charge_points_router
 from app.routers.monitoring import router as monitoring_router
+from app.routers.nearby import router as nearby_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
 from app.routers.power_capacity import router as power_capacity_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
-from app.routers.nearby import router as nearby_router
 from app.routers.reservations import router as reservations_router
 from app.routers.sessions import router as sessions_router
 from app.routers.stations import router as stations_router

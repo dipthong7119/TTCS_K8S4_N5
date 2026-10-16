@@ -7,16 +7,13 @@ Trụ giả (fake manager) trả lời theo kịch bản.
 Bao gồm AC1–AC8 và các test cạnh (idempotency, nguyên tử, bất biến sổ cái, v.v.).
 """
 
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -37,7 +34,6 @@ from app.services.reservations import (
     set_no_show_fee,
     snapshot_no_show_fee,
 )
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -185,31 +181,31 @@ def ledger_count(db: Session, user_id: int, entry_type: str) -> int:
 
 class TestIsOverdue:
     def test_overdue_past_grace(self):
-        now = datetime(2026, 1, 1, 10, 5, 0)  # UTC naive
+        now = datetime(2026, 1, 1, 10, 5, 0, tzinfo=UTC)
         res = MagicMock()
-        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0)  # quá hạn 5 phút
+        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)  # quá hạn 5 phút
         assert is_overdue(res, now, grace_seconds=120) is True  # 300s > 120s
 
     def test_not_overdue_within_grace(self):
-        now = datetime(2026, 1, 1, 10, 1, 30)  # chỉ 90s sau expiry
+        now = datetime(2026, 1, 1, 10, 1, 30, tzinfo=UTC)  # chỉ 90s sau expiry
         res = MagicMock()
-        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0)
+        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
         assert is_overdue(res, now, grace_seconds=120) is False  # 90s < 120s
 
     def test_exactly_at_boundary(self):
-        now = datetime(2026, 1, 1, 10, 2, 0)  # đúng bằng expiry + 120s
+        now = datetime(2026, 1, 1, 10, 2, 0, tzinfo=UTC)  # đúng bằng expiry + 120s
         res = MagicMock()
-        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0)
+        res.expiry_at = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
         assert is_overdue(res, now, grace_seconds=120) is True
 
     def test_none_expiry(self):
         res = MagicMock()
         res.expiry_at = None
-        assert is_overdue(res, datetime.now(), grace_seconds=0) is False
+        assert is_overdue(res, datetime.now(UTC), grace_seconds=0) is False
 
 
 @pytest.mark.parametrize("fee_vnd, station_fee, prior, first_free, exp_amount, exp_reason", [
-    # Phí bình thường
+    # Phí bình thường; first_free tắt vẫn thu
     (20_000, 30_000, 0, False, 20_000, None),
     # Phí chốt NULL → dùng mức trạm
     (None, 30_000, 0, False, 30_000, None),
@@ -219,8 +215,6 @@ class TestIsOverdue:
     (20_000, 30_000, 0, True, 0, "first_no_show_waived"),
     # AC8: first_free bật, lần thứ hai → tính phí
     (20_000, 30_000, 1, True, 20_000, None),
-    # AC8: first_free tắt → luôn tính phí
-    (20_000, 30_000, 0, False, 20_000, None),
     # Trạm phí 0, chốt NULL → không phí
     (None, 0, 0, False, 0, None),
 ])
@@ -238,7 +232,6 @@ def test_decide_fee(fee_vnd, station_fee, prior, first_free, exp_amount, exp_rea
 def test_ac1_basic_expiry(ctx, monkeypatch):
     db = ctx["db"]
     driver = ctx["driver"]
-    connector = ctx["connector"]
 
     monkeypatch.setattr(settings, "NO_SHOW_GRACE_SECONDS", 0)
     res = make_reservation(db, ctx, expiry_offset_seconds=-300, fee_vnd=20_000)
@@ -473,7 +466,6 @@ def test_ac3_concurrent_simulation(ctx, monkeypatch):
 def test_ac4_restart_processes_overdue(ctx, tmp_path, monkeypatch):
     """Sau khởi động lại, job chạy lần đầu vẫn xử lý đặt chỗ quá hạn."""
     db = ctx["db"]
-    driver = ctx["driver"]
 
     monkeypatch.setattr(settings, "NO_SHOW_GRACE_SECONDS", 0)
     monkeypatch.setattr(settings, "RESERVATION_EXPIRY_BATCH", 100)
@@ -749,7 +741,6 @@ def test_ac8_first_free_enabled_first_time(ctx, monkeypatch):
 def test_ac8_first_free_enabled_second_time(ctx, monkeypatch):
     """first_free bật, lần thứ hai → tính phí bình thường."""
     db = ctx["db"]
-    driver = ctx["driver"]
 
     monkeypatch.setattr(settings, "NO_SHOW_GRACE_SECONDS", 0)
     monkeypatch.setattr(settings, "NO_SHOW_FIRST_FREE", True)
@@ -846,10 +837,6 @@ def test_atomic_rollback_on_ledger_error(ctx, monkeypatch):
     res = make_reservation(db, ctx, expiry_offset_seconds=-300, fee_vnd=20_000)
 
     # Patch _deduct_no_show_fee để ném lỗi giả
-    original_deduct = __import__(
-        "app.services.reservations", fromlist=["_deduct_no_show_fee"]
-    )._deduct_no_show_fee
-
     def raise_error(*args, **kwargs):
         raise RuntimeError("Giả lỗi ghi sổ cái")
 
@@ -879,7 +866,8 @@ def test_one_error_does_not_block_others(ctx, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "RESERVATION_EXPIRY_BATCH", 10)
 
     # Tạo 3 đặt chỗ
-    ids = [make_reservation(db, ctx, expiry_offset_seconds=-300, fee_vnd=0).id for _ in range(3)]
+    for _ in range(3):
+        make_reservation(db, ctx, expiry_offset_seconds=-300, fee_vnd=0)
 
     call_count = 0
     original_expire = expire_reservation
@@ -955,7 +943,6 @@ def test_ledger_blocks_delete(db: Session, ctx):
 def test_expire_due_for_connector_scope(ctx, monkeypatch):
     """expire_due_for_connector chỉ xử lý đặt chỗ của đầu nối đó."""
     db = ctx["db"]
-    station = ctx["station"]
     cp = ctx["cp"]
     driver = ctx["driver"]
     tag = ctx["tag"]

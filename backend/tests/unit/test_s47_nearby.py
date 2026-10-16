@@ -115,7 +115,7 @@ def _make_cp(
 ) -> ChargePoint:
     """Tạo ChargePoint; last_seen_at gần = trực tuyến, xa = ngoại tuyến."""
     last_seen = datetime.now(UTC).replace(tzinfo=None) if online else (
-        datetime(2000, 1, 1)  # rất xa → ngoại tuyến
+        datetime(2000, 1, 1, tzinfo=UTC).replace(tzinfo=None)  # rất xa → ngoại tuyến
     )
     cp = ChargePoint(
         id=cp_id,
@@ -160,7 +160,7 @@ def _make_tariff(
     bands: list[dict] | None = None,
 ) -> StationTariff:
     if effective_from is None:
-        effective_from = datetime(2000, 1, 1)
+        effective_from = datetime(2000, 1, 1, tzinfo=UTC).replace(tzinfo=None)
     if bands is None:
         # Cả ngày: 4000 VNĐ/kWh
         bands = [{"label": "Cả ngày", "start_minute": 0, "end_minute": 1440, "price_vnd_per_kwh": 4000}]

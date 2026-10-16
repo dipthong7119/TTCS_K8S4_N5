@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
-from app.models.charge_point import ChargePoint, Connector
+from app.models.charge_point import ChargePoint
 from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
 from app.models.reservation import Reservation, ReservationStatus
@@ -25,9 +25,9 @@ from app.schemas.station import (
     StationUpdate,
 )
 from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
-from app.services.ownership import filter_by_owner, get_station_for_user
 from app.services.connection_manager import manager
 from app.services.ocpp_status import is_charge_point_stale
+from app.services.ownership import filter_by_owner, get_station_for_user
 from app.services.pricing import normalize_daily_bands
 
 router = APIRouter(prefix="/stations", tags=["stations"], dependencies=[Depends(deny_unannotated_route)])

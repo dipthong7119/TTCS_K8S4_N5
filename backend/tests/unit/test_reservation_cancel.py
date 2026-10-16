@@ -22,8 +22,7 @@ Bao gồm:
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -41,8 +40,10 @@ from app.models.reservation import CancelStatus, Reservation, ReservationStatus
 from app.models.station import Station
 from app.models.user import Role, User
 from app.models.wallet_ledger import WalletLedgerEntry
-from app.services.connection_manager import manager
-from app.services.reservation_job import _abandon_stale_cancels, retry_cancel_reservations_once
+from app.services.reservation_job import (
+    _abandon_stale_cancels,
+    retry_cancel_reservations_once,
+)
 from app.services.reservations import (
     ReservationCancelError,
     cancel_reservation,

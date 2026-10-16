@@ -160,10 +160,10 @@ class SimpleSimulator:
         try:
             state = json.loads(self._state_path.read_text(encoding="utf-8"))
             if not isinstance(state, dict):
-                raise ValueError("simulator state must be an object")
+                raise TypeError("simulator state must be an object")
             transactions = state.get("active_transactions", {})
             if not isinstance(transactions, dict):
-                raise ValueError("active_transactions must be an object")
+                raise TypeError("active_transactions must be an object")
             for raw_connector_id, transaction in transactions.items():
                 try:
                     connector_id = int(raw_connector_id)
