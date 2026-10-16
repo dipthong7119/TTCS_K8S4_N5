@@ -16,12 +16,14 @@
 
 {% block content %}
 <div class="page-header" id="stations-page" data-can-manage-stations="{{ 'true' if can_manage_stations else 'false' }}"
-     data-can-lock-stations="{{ 'true' if can_lock_stations else 'false' }}">
+     data-can-lock-stations="{{ 'true' if can_lock_stations else 'false' }}"
+     data-is-driver-view="{{ 'true' if is_driver_view else 'false' }}">
   <div class="page-header__info">
     <h1 class="page-header__title">Trạm sạc</h1>
     <p class="page-header__subtitle">{% if is_driver_view %}Danh sách các trạm đang hoạt động{% else %}Quản lý toàn bộ trạm và trụ sạc của bạn{% endif %}</p>
   </div>
   {% if is_driver_view %}
+  <a href="#my-reservations" class="btn btn--secondary" id="btn-my-reservations">Đặt chỗ của tôi</a>
   <a href="/monitoring" class="btn btn--primary" id="btn-find-charger">Chọn trụ để sạc</a>
   {% endif %}
   {% if can_manage_stations %}
@@ -92,6 +94,34 @@
   </div>
   {% endif %}
 </div>
+
+{% if is_driver_view %}
+<section class="card driver-reservations-card" id="my-reservations" aria-labelledby="my-reservations-title">
+  <div class="card__header">
+    <div>
+      <h2 class="card__title" id="my-reservations-title">Đặt chỗ của tôi</h2>
+      <p class="card__subtitle">Theo dõi và hủy các chỗ đã đặt trước.</p>
+    </div>
+    <button class="btn btn--secondary btn--sm" id="btn-refresh-reservations" type="button">Làm mới</button>
+  </div>
+  <div class="table-wrap">
+    <table class="table" aria-label="Danh sách đặt chỗ của tôi">
+      <thead>
+        <tr>
+          <th scope="col">Trụ sạc</th>
+          <th scope="col">Đầu nối</th>
+          <th scope="col">Hết hạn</th>
+          <th scope="col">Trạng thái</th>
+          <th scope="col" class="text-right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="reservation-tbody">
+        <tr><td colspan="5" class="reservation-empty">Đang tải đặt chỗ...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 
 <!-- Bộ lọc -->
 <div class="card" style="margin-bottom: var(--space-5);">
@@ -168,6 +198,55 @@
     <div class="pagination" id="pagination" role="navigation" aria-label="Phân trang"></div>
   </div>
 </div>
+
+{% if is_driver_view %}
+<!-- Modal đặt chỗ -->
+<div class="modal-backdrop is-hidden" id="booking-modal"
+     role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 class="modal__title" id="booking-modal-title">Đặt chỗ sạc</h2>
+      <button class="modal__close" id="booking-modal-close" type="button" aria-label="Đóng hộp thoại">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <form id="booking-form">
+      <div class="modal__body">
+        <p class="booking-station-name" id="booking-station-name"></p>
+        <p class="booking-help" id="booking-options-help" aria-live="polite">
+          Đang kiểm tra đầu nối đang rảnh...
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="booking-charge-point">Trụ sạc</label>
+          <select class="form-select" id="booking-charge-point" required disabled></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="booking-connector">Đầu nối</label>
+          <select class="form-select" id="booking-connector" required disabled></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="booking-expiry">Thời gian giữ chỗ</label>
+          <select class="form-select" id="booking-expiry" required>
+            <option value="5">5 phút</option>
+            <option value="15">15 phút</option>
+            <option value="30" selected>30 phút</option>
+            <option value="60">60 phút</option>
+            <option value="120">120 phút</option>
+          </select>
+        </div>
+        <div class="booking-error" id="booking-error" role="alert" hidden></div>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--secondary" id="booking-cancel" type="button">Đóng</button>
+        <button class="btn btn--primary" id="booking-submit" type="submit" disabled>Đặt chỗ</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <!-- Modal xác nhận xoá -->
 <div class="modal-backdrop is-hidden" id="delete-modal"

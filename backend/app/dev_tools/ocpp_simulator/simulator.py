@@ -136,6 +136,7 @@ class SimpleSimulator:
             "MeterValueSampleInterval": 30,
         }
         self._active_transactions: dict[int, dict[str, Any]] = {}
+        self._reservations: dict[int, int] = {}
         self._pending_calls: dict[str, asyncio.Future] = {}
         self._receiver_task: asyncio.Task | None = None
         self._reboot_requested = False
@@ -208,7 +209,39 @@ class SimpleSimulator:
                         transaction_id = int(payload.get("transactionId", 1))
                         asyncio.create_task(self._trigger_remote_stop(transaction_id))
                     elif action == "ReserveNow":
-                        await self.ws.send(json.dumps(make_callresult(message_id, {"status": "Accepted"})))
+                        try:
+                            reservation_id = int(payload["reservationId"])
+                            connector_id = int(payload.get("connectorId", 0))
+                        except (KeyError, TypeError, ValueError):
+                            reservation_status = "Rejected"
+                        else:
+                            connector_is_reserved = connector_id in self._reservations.values()
+                            if (
+                                reservation_id <= 0
+                                or connector_id < 1
+                                or connector_id > self.profile.connector_count
+                                or connector_is_reserved
+                            ):
+                                reservation_status = "Occupied" if connector_is_reserved else "Rejected"
+                            else:
+                                self._reservations[reservation_id] = connector_id
+                                reservation_status = "Accepted"
+                        await self.ws.send(
+                            json.dumps(make_callresult(message_id, {"status": reservation_status}))
+                        )
+                    elif action == "CancelReservation":
+                        try:
+                            reservation_id = int(payload["reservationId"])
+                        except (KeyError, TypeError, ValueError):
+                            connector_id = None
+                        else:
+                            connector_id = self._reservations.pop(reservation_id, None)
+                        reservation_status = "Accepted" if connector_id is not None else "Rejected"
+                        await self.ws.send(
+                            json.dumps(make_callresult(message_id, {"status": reservation_status}))
+                        )
+                        if connector_id is not None:
+                            asyncio.create_task(self._notify_connector_available(connector_id))
                     elif action == "ChangeConfiguration":
                         key = payload.get("key")
                         limits = {
@@ -293,6 +326,18 @@ class SimpleSimulator:
                     "status": "Charging",
                     "timestamp": charging_iso,
                 })
+        except Exception:  # noqa: S110
+            pass
+
+    async def _notify_connector_available(self, connector_id: int) -> None:
+        """Report the released connector after an accepted cancellation."""
+        try:
+            await self._call("StatusNotification", {
+                "connectorId": connector_id,
+                "errorCode": "NoError",
+                "status": "Available",
+                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            })
         except Exception:  # noqa: S110
             pass
 
