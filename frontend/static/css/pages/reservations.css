@@ -1,0 +1,566 @@
+/* ==========================================================================
+   pages/reservations.css — SCRUM-76: Giao diện Đặt chỗ trụ sạc cho tài xế
+   Hỗ trợ mobile-first 360px, chuẩn Accessibility & Dark/Light theme token
+   ========================================================================== */
+
+/* 1. Header Banner */
+.reserve-banner {
+  background: linear-gradient(135deg, hsl(222, 55%, 15%) 0%, hsl(210, 65%, 22%) 50%, hsl(190, 75%, 20%) 100%);
+  color: white;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-6);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 30px -6px hsla(210, 80%, 15%, 0.45);
+  border: 1px solid hsla(190, 80%, 60%, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.reserve-banner::after {
+  content: '';
+  position: absolute;
+  top: -70px;
+  right: -70px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, hsla(185, 95%, 55%, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.reserve-banner__info {
+  max-width: 650px;
+  z-index: 1;
+}
+
+.reserve-banner__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-2xl);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.reserve-banner__desc {
+  margin: 0;
+  color: hsla(0, 0%, 100%, 0.88);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+}
+
+.reserve-banner__action {
+  z-index: 1;
+}
+
+/* 2. Active Reservation Card (Hero Card) */
+.active-res-card {
+  border: 2px solid var(--color-primary, #0284c7);
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-lg), 0 0 25px hsla(199, 89%, 48%, 0.15);
+  position: relative;
+  overflow: hidden;
+  animation: resFadeIn 0.3s ease-out;
+}
+
+.active-res-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: linear-gradient(to bottom, var(--color-primary), #06b6d4);
+}
+
+.active-res-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.active-res-card__badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.res-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: resPulse 2s infinite;
+}
+
+@keyframes resPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.active-res-card__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-6);
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .active-res-card__grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+}
+
+.active-res-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.active-res-station {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.active-res-address {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.active-res-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle, hsla(215, 20%, 95%, 1));
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+/* Countdown Clock Box */
+.countdown-box {
+  background: linear-gradient(135deg, hsl(220, 30%, 12%) 0%, hsl(215, 35%, 18%) 100%);
+  color: white;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  text-align: center;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  border: 1px solid hsla(210, 40%, 35%, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.countdown-box__label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsla(0, 0%, 100%, 0.7);
+  margin-bottom: var(--space-1);
+}
+
+.countdown-box__time {
+  font-size: 2.25rem;
+  font-weight: 800;
+  font-family: var(--font-mono, monospace);
+  color: #38bdf8;
+  text-shadow: 0 0 12px hsla(199, 89%, 48%, 0.5);
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+}
+
+.countdown-box__hint {
+  font-size: 0.8rem;
+  color: hsla(0, 0%, 100%, 0.6);
+  margin-top: var(--space-2);
+}
+
+/* Action Buttons inside Card */
+.active-res-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* 3. Empty State Banner */
+.empty-res-card {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-xl);
+  margin-bottom: var(--space-6);
+}
+
+.empty-res-card__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: hsla(199, 89%, 48%, 0.1);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.empty-res-card__title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+}
+
+.empty-res-card__desc {
+  max-width: 480px;
+  margin: 0 auto var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+/* 4. Quick Time Grid in Modal */
+.quick-time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .quick-time-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.time-chip-btn {
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: center;
+}
+
+.time-chip-btn:hover {
+  border-color: var(--color-primary);
+  background: hsla(199, 89%, 48%, 0.06);
+}
+
+.time-chip-btn.is-selected {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 10px hsla(199, 89%, 48%, 0.35);
+}
+
+/* 5. Policy Notice Box */
+.res-policy-box {
+  background: hsla(45, 95%, 55%, 0.08);
+  border: 1px solid hsla(45, 85%, 45%, 0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-top: var(--space-4);
+}
+
+.res-policy-box strong {
+  color: var(--color-text-primary);
+}
+
+/* 6. Status Badges */
+.badge--res-active {
+  background-color: hsla(142, 70%, 45%, 0.15);
+  color: #10b981;
+  border: 1px solid hsla(142, 70%, 45%, 0.3);
+}
+
+.badge--res-completed {
+  background-color: hsla(215, 80%, 55%, 0.15);
+  color: #0284c7;
+  border: 1px solid hsla(215, 80%, 55%, 0.3);
+}
+
+.badge--res-cancelled {
+  background-color: hsla(0, 0%, 50%, 0.15);
+  color: #64748b;
+  border: 1px solid hsla(0, 0%, 50%, 0.3);
+}
+
+.badge--res-expired {
+  background-color: hsla(0, 80%, 55%, 0.15);
+  color: #ef4444;
+  border: 1px solid hsla(0, 80%, 55%, 0.3);
+}
+
+/* 7. Dialog & Modal Enhancements */
+.modal__dialog--medium {
+  max-width: 560px;
+}
+
+/* 8. SCRUM-77: Xử lý Tranh chấp đặt chỗ & Gợi ý trụ thay thế */
+.conflict-alert {
+  background: hsla(25, 95%, 53%, 0.1);
+  border: 1.5px solid hsla(25, 95%, 50%, 0.35);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  animation: resShake 0.4s ease-in-out;
+}
+
+@keyframes resShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.conflict-alert__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.conflict-alert__icon {
+  color: #ea580c;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.conflict-alert__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: #c2410c;
+}
+
+.conflict-alert__desc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+.suggestion-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.suggestion-section__title {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px solid var(--color-border);
+  transition: all 0.15s ease-in-out;
+}
+
+.suggestion-item:hover {
+  border-color: var(--color-primary);
+  background: hsla(199, 89%, 48%, 0.05);
+}
+
+.suggestion-item__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.suggestion-item__cp {
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.suggestion-item__type {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.btn-select-suggested {
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-3);
+  font-weight: 600;
+}
+
+/* Simulation Switch */
+.simulation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: hsla(280, 70%, 50%, 0.08);
+  border: 1px dashed hsla(280, 60%, 50%, 0.3);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: #7e22ce;
+}
+
+.simulation-bar label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  user-select: none;
+  font-weight: 600;
+}
+
+/* 9. SCRUM-79: Modal Xác nhận hủy đặt chỗ */
+.cancel-summary-box {
+  background: var(--color-bg-subtle, #f8fafc);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.cancel-policy-notice {
+  background: hsla(142, 70%, 45%, 0.1);
+  border: 1px solid hsla(142, 70%, 45%, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: #065f46;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* 10. SCRUM-78: Quá hạn giữ chỗ & Phạt không đến (No-show fee) */
+.expired-alert-banner {
+  background: linear-gradient(135deg, hsla(0, 85%, 55%, 0.12) 0%, hsla(25, 95%, 50%, 0.12) 100%);
+  border: 1.5px solid hsla(0, 80%, 55%, 0.4);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  animation: resFadeIn 0.3s ease;
+}
+
+.expired-alert-banner__content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 750px;
+}
+
+.expired-alert-banner__icon {
+  color: #ef4444;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.expired-alert-banner__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: 750;
+  color: #b91c1c;
+}
+
+.expired-alert-banner__desc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+.no-show-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  background: hsla(0, 80%, 55%, 0.12);
+  color: #dc2626;
+  border: 1px solid hsla(0, 80%, 55%, 0.25);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: var(--font-size-xs);
+}
+
+.wallet-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+@keyframes resFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+

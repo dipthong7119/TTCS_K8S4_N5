@@ -264,3 +264,13 @@ async def subscriptions_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )
+
+
+# SCRUM-76 — Màn hình đặt chỗ trụ sạc cho tài xế (Phạm Văn Tuấn)
+@router.get("/reservations", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+async def reservations_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin", "operator")
+    return templates.TemplateResponse(
+        request, "reservations/list.html", _page_context(request, current_user)
+    )
+

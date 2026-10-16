@@ -23,8 +23,17 @@
     <p class="page-header__subtitle">{% if is_driver_view %}Danh sách các trạm đang hoạt động{% else %}Quản lý toàn bộ trạm và trụ sạc của bạn{% endif %}</p>
   </div>
   {% if is_driver_view %}
-  <a href="#my-reservations" class="btn btn--secondary" id="btn-my-reservations">Đặt chỗ của tôi</a>
-  <a href="/monitoring" class="btn btn--primary" id="btn-find-charger">Chọn trụ để sạc</a>
+  <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
+    <a href="#my-reservations" class="btn btn--secondary" id="btn-my-reservations">Đặt chỗ của tôi</a>
+    <a href="/monitoring" class="btn btn--secondary" id="btn-find-charger">Chọn trụ để sạc</a>
+    <a href="/reservations" class="btn btn--primary" id="btn-driver-reservations">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      Đặt trước trụ sạc
+    </a>
+  </div>
   {% endif %}
   {% if can_manage_stations %}
   <a href="/stations/new" class="btn btn--primary" id="btn-add-station">
