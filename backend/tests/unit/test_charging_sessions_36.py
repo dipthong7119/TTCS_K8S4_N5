@@ -147,18 +147,19 @@ def test_migration_creates_partial_unique_index(alembic_cfg):
         engine.dispose()
 
 
-def test_migration_downgrade_then_upgrade_again(alembic_cfg):
+def test_irreversible_migration_blocks_downgrade(alembic_cfg):
     cfg, url = alembic_cfg
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, REVISION_BEFORE_SESSIONS)
+    with pytest.raises(RuntimeError, match="không hỗ trợ downgrade tự động"):
+        command.downgrade(cfg, REVISION_BEFORE_SESSIONS)
 
     engine = create_engine(url)
     try:
-        assert "charging_sessions" not in inspect(engine).get_table_names()
+        assert "charging_sessions" in inspect(engine).get_table_names()
     finally:
         engine.dispose()
 
-    # Tiến lại lần nữa vẫn thành công.
+    # Sau khi migration từ chối rollback, schema vẫn dùng được.
     command.upgrade(cfg, "head")
     engine = create_engine(url)
     try:
