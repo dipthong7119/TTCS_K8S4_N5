@@ -152,6 +152,13 @@ const ApiClient = (() => {
       _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
     getReservation: (id, opts = {}) =>
       _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
+
+    // --- Power capacity (SCRUM-80) ---
+    getStationPowerCapacity: (stationId) => _request('GET', `/stations/${stationId}/power-capacity`),
+    updateStationPowerCapacity: (stationId, body) => _request('PUT', `/stations/${stationId}/power-capacity`, body),
+
+    // --- Nearby stations (SCRUM-96 / S-47) ---
+    getNearbyStations: (params = {}) => _request('GET', '/stations/nearby?' + new URLSearchParams(params)),
   };
 })();
 
