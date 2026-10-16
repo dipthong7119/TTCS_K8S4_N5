@@ -18,6 +18,7 @@ const DriverSession = (() => {
   let _sessionEndedId = null;   // ID phiên vừa kết thúc (để hiện overlay)
   let _remoteStopPending = false;
   let _remoteStopTimer = null;
+  let _hasConnectedBefore = false;
 
   // ── DOM refs ─────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
@@ -231,6 +232,7 @@ const DriverSession = (() => {
 
     try {
       const result = await ApiClient.remoteStop(sessionId);
+      if (!_currentSession || _currentSession.id !== sessionId) return;
       _remoteStopPending = true;
       _setStopButtonPending(true);
       const waitingLabel = 'Đang chờ trụ xác nhận dừng';
@@ -401,6 +403,8 @@ const DriverSession = (() => {
     SseClient.on('_connected', () => {
       const ind = $('ds-sse-indicator');
       if (ind) { ind.className = 'sse-indicator connected'; $('ds-sse-label').textContent = 'Nhận thông báo'; }
+      if (_hasConnectedBefore) _loadCurrentSession();
+      _hasConnectedBefore = true;
     });
     SseClient.on('_error', () => {
       const ind = $('ds-sse-indicator');
