@@ -7,6 +7,7 @@ window.FinancialReconciliationData = (() => {
         {
             session_id: 'DEMO-85-001',
             date: '2026-10-02',
+            station_code: 'DEMO-ST-01',
             charge_point_code: 'DEMO-CP-01',
             energy_kwh: 20,
             expected_vnd: 80000,
@@ -18,6 +19,7 @@ window.FinancialReconciliationData = (() => {
         {
             session_id: 'DEMO-85-002',
             date: '2026-10-03',
+            station_code: 'DEMO-ST-01',
             charge_point_code: 'DEMO-CP-01',
             energy_kwh: 10,
             expected_vnd: 40000,
@@ -29,6 +31,7 @@ window.FinancialReconciliationData = (() => {
         {
             session_id: 'DEMO-85-003',
             date: '2026-10-04',
+            station_code: 'DEMO-ST-01',
             charge_point_code: 'DEMO-CP-02',
             energy_kwh: 15,
             expected_vnd: 60000,
@@ -40,6 +43,7 @@ window.FinancialReconciliationData = (() => {
         {
             session_id: 'DEMO-85-004',
             date: '2026-10-05',
+            station_code: 'DEMO-ST-01',
             charge_point_code: 'DEMO-CP-02',
             energy_kwh: 25,
             expected_vnd: 100000,
@@ -51,6 +55,7 @@ window.FinancialReconciliationData = (() => {
         {
             session_id: 'DEMO-85-005',
             date: '2026-10-06',
+            station_code: 'DEMO-ST-02',
             charge_point_code: 'DEMO-CP-03',
             energy_kwh: 5,
             expected_vnd: 20000,
@@ -61,7 +66,7 @@ window.FinancialReconciliationData = (() => {
         },
     ];
 
-    async function getReport({ fromDate, toDate, status = 'all' }) {
+    async function getReport({ fromDate, toDate, status = 'all', stationCode = '', chargePointCode = '' }) {
         if (!fromDate || !toDate || fromDate > toDate) {
             throw new Error('Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.');
         }
@@ -71,7 +76,9 @@ window.FinancialReconciliationData = (() => {
             const matchesStatus = status === 'all'
                 || (status === 'review' && row.issues.length > 0)
                 || row.issues.includes(status);
-            return withinPeriod && matchesStatus;
+            return withinPeriod && matchesStatus
+                && (!stationCode || row.station_code === stationCode)
+                && (!chargePointCode || row.charge_point_code === chargePointCode);
         });
 
         // Chỉ cộng các giá trị đã có trong bộ mẫu; null vẫn giữ là dữ liệu thiếu.
@@ -97,6 +104,9 @@ window.FinancialReconciliationData = (() => {
 
     return {
         getReport,
+        getFilterOptions: () => sampleRows.map(row => ({
+            stationCode: row.station_code, chargePointCode: row.charge_point_code,
+        })),
         defaultPeriod: {
             fromDate: '2026-10-01',
             toDate: '2026-10-31',
