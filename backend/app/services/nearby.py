@@ -297,6 +297,7 @@ def find_nearby_stations(
     # Lấy tất cả ứng viên (không phân trang sớm vì cần sort haversine)
     # Để tránh tải quá nhiều: giới hạn tối đa bounding box đã thu hẹp
     candidate_stations: list[Station] = q_stations.all()
+    station_list: list[tuple[Station, float | None]]
 
     # ── Haversine chính xác + sắp xếp ────────────────────────────────────
     if lat is not None and lng is not None:

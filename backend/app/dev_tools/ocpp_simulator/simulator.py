@@ -325,7 +325,7 @@ class SimpleSimulator:
                         await self.ws.send(
                             json.dumps(make_callresult(message_id, {"status": status}))
                         )
-                        if session is not None:
+                        if session is not None and transaction_id is not None:
                             asyncio.create_task(self._trigger_remote_stop(transaction_id))
                     elif action == "ReserveNow":
                         try:

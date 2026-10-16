@@ -9,10 +9,11 @@ Thiết kế:
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import status
 from sqlalchemy import and_, or_, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -258,7 +259,7 @@ def expire_reservation(
             cancel_status=CancelStatus.PENDING,
         )
     )
-    if result.rowcount == 0:
+    if int(cast(CursorResult[Any], result).rowcount or 0) == 0:
         db.rollback()
         return False
 
@@ -580,7 +581,7 @@ def mark_reservation_fulfilled(
             cancel_status=CancelStatus.NOT_NEEDED,
         )
     )
-    return result.rowcount > 0
+    return int(cast(CursorResult[Any], result).rowcount or 0) > 0
 
 
 # ── S-51: Tài xế huỷ chỗ đã đặt ──────────────────────────────────────────────
@@ -671,7 +672,7 @@ async def cancel_reservation(
         )
     )
 
-    if result.rowcount == 1:
+    if int(cast(CursorResult[Any], result).rowcount or 0) == 1:
         # Ghi nhật ký audit
         append_audit(
             db,
