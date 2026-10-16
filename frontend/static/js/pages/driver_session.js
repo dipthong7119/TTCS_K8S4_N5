@@ -14,7 +14,7 @@
 const DriverSession = (() => {
   // ── State ────────────────────────────────────────────────────────────
   let _currentSession = null;   // phiên đang chạy
-  let _durationTimer  = null;   // interval đếm thời gian
+  let _durationTimer = null;    // interval đếm thời gian
   let _sessionEndedId = null;   // ID phiên vừa kết thúc (để hiện overlay)
 
   // ── DOM refs ─────────────────────────────────────────────────────────
@@ -38,7 +38,9 @@ const DriverSession = (() => {
 
   function _fmtDate(iso) {
     if (!iso) return '—';
-    return new Date(iso + 'Z').toLocaleString('vi-VN', {
+    // Hỗ trợ cả chuỗi có Z và không có Z (server trả naive UTC)
+    const suffix = iso.endsWith('Z') ? '' : 'Z';
+    return new Date(iso + suffix).toLocaleString('vi-VN', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
@@ -46,7 +48,8 @@ const DriverSession = (() => {
 
   function _elapsed(startIso) {
     if (!startIso) return '—';
-    const ms = Date.now() - new Date(startIso + 'Z').getTime();
+    const suffix = startIso.endsWith('Z') ? '' : 'Z';
+    const ms = Date.now() - new Date(startIso + suffix).getTime();
     if (ms < 0) return '—';
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
@@ -61,11 +64,13 @@ const DriverSession = (() => {
     $('ds-no-session').classList.add('is-hidden');
     $('ds-session-wrap').classList.add('is-hidden');
   }
+
   function _showNoSession() {
     $('ds-loading').style.display = 'none';
     $('ds-no-session').classList.remove('is-hidden');
     $('ds-session-wrap').classList.add('is-hidden');
   }
+
   function _showSession() {
     $('ds-loading').style.display = 'none';
     $('ds-no-session').classList.add('is-hidden');
@@ -74,10 +79,11 @@ const DriverSession = (() => {
 
   // ── Render live session card ─────────────────────────────────────────
   function _renderSession(session) {
+    if (!session) { _showNoSession(); return; }
     _currentSession = session;
     _showSession();
 
-    // Station name from charge_point.station.name (if available in response)
+    // Station name
     const stationName = session.station_name || session.charge_point_code || 'Trạm sạc';
     $('ds-station-name').textContent = stationName;
 
@@ -96,14 +102,17 @@ const DriverSession = (() => {
 
     // Duration (live counter)
     _stopDurationTimer();
-    _durationTimer = setInterval(() => {
-      $('ds-duration').textContent = _elapsed(session.started_at);
-    }, 1000);
+    if (!session.ended_at) {
+      _durationTimer = setInterval(() => {
+        $('ds-duration').textContent = _elapsed(session.started_at);
+      }, 1000);
+    }
     $('ds-duration').textContent = _elapsed(session.started_at);
 
     // Progress (estimate based on time — max 3h assumed)
     const maxMs = 3 * 3600 * 1000;
-    const elapsedMs = Date.now() - new Date((session.started_at || '') + 'Z').getTime();
+    const suffix = (session.started_at || '').endsWith('Z') ? '' : 'Z';
+    const elapsedMs = Date.now() - new Date((session.started_at || '') + suffix).getTime();
     const pct = Math.min(100, Math.round((elapsedMs / maxMs) * 100));
     $('ds-progress-fill').style.width = `${pct}%`;
     $('ds-progress-pct').textContent = `${pct}%`;
@@ -126,6 +135,12 @@ const DriverSession = (() => {
 
     // Status text in header
     $('ds-status-text').textContent = isCharging ? 'Đang sạc' : 'Phiên đã kết thúc';
+
+    // Live badge visibility
+    const liveBadge = $('ds-live-badge');
+    if (liveBadge) {
+      liveBadge.style.display = isCharging ? '' : 'none';
+    }
   }
 
   // ── Duration timer ───────────────────────────────────────────────────
@@ -143,9 +158,9 @@ const DriverSession = (() => {
     } catch (err) {
       if (err.status === 404) {
         _showNoSession();
-        _loadRecentHistory(); // still load history
+        _loadRecentHistory();
       } else {
-        _showLoading();
+        $('ds-loading').style.display = '';
         $('ds-loading').innerHTML = `
           <p style="color:var(--color-fault);">Không thể tải phiên sạc. ${_esc(err.message || '')}</p>
           <button class="btn btn--secondary btn--sm" onclick="DriverSession.reload()" style="margin-top:var(--space-3);">Thử lại</button>
@@ -188,6 +203,7 @@ const DriverSession = (() => {
   // ── Notification banner ───────────────────────────────────────────────
   function _showBanner(text, type = 'info', icon = '⚡') {
     const banner = $('ds-notif-banner');
+    if (!banner) return;
     const bannerText = $('ds-notif-text');
     const bannerIcon = $('ds-notif-icon');
     banner.className = `ds-notif-banner ds-notif-banner--${type}`;
@@ -199,7 +215,8 @@ const DriverSession = (() => {
   }
 
   function _hideBanner() {
-    $('ds-notif-banner').classList.add('is-hidden');
+    const banner = $('ds-notif-banner');
+    if (banner) banner.classList.add('is-hidden');
   }
 
   // ── Session ended overlay (SCRUM-97 / SCRUM-98) ───────────────────────
@@ -208,22 +225,24 @@ const DriverSession = (() => {
     _sessionEndedId = sessionId;
 
     const overlay = $('ds-ended-overlay');
-    const icon    = $('ds-ended-icon');
-    const title   = $('ds-ended-title');
-    const sub     = $('ds-ended-sub');
+    const icon = $('ds-ended-icon');
+    const title = $('ds-ended-title');
+    const sub = $('ds-ended-sub');
     const summary = $('ds-ended-summary');
+
+    if (!overlay) return;
 
     // Stopped vs natural end
     if (stopped) {
       icon.className = 'ds-ended-card__icon ds-ended-card__icon--stopped';
       icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>`;
       title.textContent = 'Phiên sạc đã bị dừng';
-      sub.textContent   = 'Phiên sạc của bạn đã bị dừng bởi hệ thống.';
+      sub.textContent = 'Phiên sạc của bạn đã bị dừng bởi hệ thống.';
     } else {
       icon.className = 'ds-ended-card__icon ds-ended-card__icon--done';
       icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
       title.textContent = 'Phiên sạc đã kết thúc';
-      sub.textContent   = 'Cảm ơn bạn đã sử dụng dịch vụ!';
+      sub.textContent = 'Cảm ơn bạn đã sử dụng dịch vụ!';
     }
 
     // Load session details for summary
@@ -232,8 +251,10 @@ const DriverSession = (() => {
 
     try {
       const s = await ApiClient.getSession(sessionId);
+      const suffix1 = (s.started_at || '').endsWith('Z') ? '' : 'Z';
+      const suffix2 = (s.ended_at || '').endsWith('Z') ? '' : 'Z';
       const elMs = s.started_at && s.ended_at
-        ? new Date(s.ended_at + 'Z') - new Date(s.started_at + 'Z') : 0;
+        ? new Date(s.ended_at + suffix2) - new Date(s.started_at + suffix1) : 0;
       const elStr = elMs > 0 ? (() => {
         const h = Math.floor(elMs / 3600000);
         const m = Math.floor((elMs % 3600000) / 60000);
@@ -259,19 +280,19 @@ const DriverSession = (() => {
         </div>
       `;
 
-      // Wire invoice button
+      // Wire invoice button — chuyển thẳng sang trang lịch sử phiên
       const invoiceBtn = $('ds-ended-view-invoice');
       if (invoiceBtn) {
         invoiceBtn.onclick = () => {
           overlay.classList.add('is-hidden');
-          window.location.href = `/sessions/mine`;
+          window.location.href = '/sessions/mine';
         };
       }
     } catch {
       summary.innerHTML = '<div style="font-size:var(--font-size-sm);color:var(--color-text-secondary);text-align:center;">Không thể tải thông tin phiên.</div>';
     }
 
-    // Push browser notification (if permitted)
+    // Push browser notification (if permitted) — SCRUM-97
     _pushBrowserNotification(
       stopped ? '⚡ Phiên sạc bị dừng' : '✅ Phiên sạc hoàn tất',
       stopped ? 'Phiên sạc của bạn đã bị dừng bởi hệ thống.' : 'Pin đã được nạp. Cảm ơn bạn!'
@@ -281,7 +302,7 @@ const DriverSession = (() => {
     setTimeout(_loadRecentHistory, 1000);
   }
 
-  // ── Browser push notification ─────────────────────────────────────────
+  // ── Browser push notification (SCRUM-97) ─────────────────────────────
   async function _pushBrowserNotification(title, body) {
     if (!('Notification' in window)) return;
     if (Notification.permission === 'default') {
@@ -299,39 +320,50 @@ const DriverSession = (() => {
     }
   }
 
-  // ── SSE ───────────────────────────────────────────────────────────────
+  // ── SSE (SCRUM-98) ────────────────────────────────────────────────────
   function _initSSE() {
+    if (!window.SseClient) return;
     SseClient.connect('/api/sse');
 
     SseClient.on('_connected', () => {
       const ind = $('ds-sse-indicator');
-      if (ind) { ind.className = 'sse-indicator connected'; $('ds-sse-label').textContent = 'Nhận thông báo'; }
+      if (ind) {
+        ind.className = 'sse-indicator connected';
+        const lbl = $('ds-sse-label');
+        if (lbl) lbl.textContent = 'Nhận thông báo';
+      }
     });
+
     SseClient.on('_error', () => {
       const ind = $('ds-sse-indicator');
-      if (ind) { ind.className = 'sse-indicator error'; $('ds-sse-label').textContent = 'Mất kết nối'; }
+      if (ind) {
+        ind.className = 'sse-indicator error';
+        const lbl = $('ds-sse-label');
+        if (lbl) lbl.textContent = 'Mất kết nối';
+      }
     });
 
     SseClient.on('session_update', async (payload) => {
-      // payload: { session_id }
       const { session_id } = payload;
       try {
         const session = await ApiClient.getSession(session_id);
 
         if (session.ended_at) {
-          // Session ended
-          const wasStopped = session.stop_reason === 'Remote' || session.stop_reason === 'Local';
-          _showEndedOverlay(session_id, wasStopped);
-          _showBanner(
-            wasStopped ? 'Phiên sạc của bạn vừa bị dừng.' : 'Phiên sạc đã hoàn tất!',
-            wasStopped ? 'warning' : 'success',
-            wasStopped ? '⛔' : '✅'
-          );
-          _currentSession = null;
-          _showNoSession();
-          _stopDurationTimer();
+          // Phiên kết thúc — chỉ hiện overlay nếu đây là phiên của tài xế này
+          if (_currentSession && _currentSession.id === session_id) {
+            const wasStopped = session.stop_reason === 'Remote' || session.stop_reason === 'Local';
+            await _showEndedOverlay(session_id, wasStopped);
+            _showBanner(
+              wasStopped ? 'Phiên sạc của bạn vừa bị dừng.' : 'Phiên sạc đã hoàn tất!',
+              wasStopped ? 'warning' : 'success',
+              wasStopped ? '⛔' : '✅'
+            );
+            _currentSession = null;
+            _showNoSession();
+            _stopDurationTimer();
+          }
         } else {
-          // Session updated (kwh, cost...)
+          // Cập nhật live kWh / cost
           if (_currentSession && _currentSession.id === session_id) {
             _renderSession(session);
           }
@@ -343,15 +375,19 @@ const DriverSession = (() => {
   // ── Init ──────────────────────────────────────────────────────────────
   function init() {
     // Banner close
-    $('ds-notif-close').addEventListener('click', _hideBanner);
+    const notifClose = $('ds-notif-close');
+    if (notifClose) notifClose.addEventListener('click', _hideBanner);
 
     // Overlay dismiss (click outside card)
-    $('ds-ended-overlay').addEventListener('click', (e) => {
-      if (e.target === $('ds-ended-overlay')) {
-        $('ds-ended-overlay').classList.add('is-hidden');
-        _loadCurrentSession();
-      }
-    });
+    const endedOverlay = $('ds-ended-overlay');
+    if (endedOverlay) {
+      endedOverlay.addEventListener('click', (e) => {
+        if (e.target === endedOverlay) {
+          endedOverlay.classList.add('is-hidden');
+          _loadCurrentSession();
+        }
+      });
+    }
 
     _requestNotifPermission();
     _initSSE();

@@ -126,6 +126,10 @@ const ApiClient = (() => {
     listSubscriptionPlans: () => _request('GET', '/subscriptions/plans'),
     getMySubscriptions: () => _request('GET', '/subscriptions/mine'),
     subscribePlan: (planId) => _request('POST', '/subscriptions', { plan_id: planId }),
+
+    // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
+    listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),
+    createStationTariff: (stationId, body) => _request('POST', `/stations/${stationId}/tariffs`, body),
   };
 })();
 
