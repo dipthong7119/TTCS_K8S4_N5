@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     MANUAL_TOPUP_MIN: int = Field(1000, ge=1)
     MANUAL_TOPUP_MAX: int = Field(20_000_000, ge=1)
 
+    # Cảnh báo giám sát vận hành (SCRUM-90 / S-46)
+    ALERT_OFFLINE_THRESHOLD_MINUTES: int = Field(15, ge=1)
+    ALERT_ERROR_COUNT_THRESHOLD: int = Field(3, ge=1)
+    ALERT_ERROR_WINDOW_MINUTES: int = Field(10, ge=1)
+
     @property
     def HEARTBEAT_INTERVAL(self) -> int:
         """Keep the legacy name synchronized with the offline detection interval."""

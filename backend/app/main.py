@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.core.deps import deny_unannotated_route, public_route
+from app.routers.alerts import router as alerts_router
 from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.charge_point_configuration import (
@@ -155,6 +156,7 @@ app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(subscriptions_router, prefix="/api")
+app.include_router(alerts_router, prefix="/api")
 
 app.include_router(pages_router)
 
