@@ -101,6 +101,13 @@ const ApiClient = (() => {
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 
+    // --- Operational Alerts (SCRUM-90) ---
+    listOperationalAlerts: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/monitoring/alerts' + (q ? '?' + q : ''));
+    },
+    acknowledgeAlert: (id) => _request('POST', `/monitoring/alerts/${encodeURIComponent(id)}/acknowledge`),
+
     // --- Audit trail ---
     listAuditLogs: (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
 
