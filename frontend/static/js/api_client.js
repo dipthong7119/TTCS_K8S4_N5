@@ -143,6 +143,25 @@ const ApiClient = (() => {
       _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
     getReservation: (id, opts = {}) =>
       _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
+
+    // --- Wallet Audit Logs (SCRUM-91) ---
+    listWalletAuditLogs: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/wallet/audit' + (q ? '?' + q : ''));
+    },
+
+    // --- Privacy & Data Deletion (SCRUM-92 / S-57 / Nghị định 13/2023/NĐ-CP) ---
+    getPrivacyProfile: () => _request('GET', '/privacy/profile'),
+    requestDataDeletion: (body) => _request('POST', '/privacy/deletion-requests', body),
+    cancelDataDeletionRequest: (id) => _request('POST', `/privacy/deletion-requests/${encodeURIComponent(id)}/cancel`),
+    listDataDeletionRequests: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/privacy/admin/deletion-requests' + (q ? '?' + q : ''));
+    },
+    approveDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/approve`, body),
+    rejectDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/reject`, body),
   };
 })();
 
