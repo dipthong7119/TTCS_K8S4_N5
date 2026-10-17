@@ -1,4 +1,4 @@
-﻿/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
+/** T-09/T-24/T-25: execute the shipped JS with DOM/EventSource doubles.
  * These tests check behavior, not browser layout or rendering performance.
  */
 const assert = require('node:assert/strict');
@@ -1618,4 +1618,91 @@ test('SCRUM-58: completion cancels countdown and ignores late command response',
   await flush();
   assert.equal(page.document.getElementById('ds-notif-text').textContent, 'Phiên sạc của bạn vừa bị dừng.');
   assert.ok(!page.timeouts.some(timer => timer.delay === 120000));
+});
+
+function revenueSharingPage() {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+
+  const context = vm.createContext({
+    document,
+    window: { location: { href: '' } },
+    Date,
+    console,
+    Intl,
+    Math,
+    ApiClient: {},
+  });
+
+  const script = read('pages/revenue_sharing.js');
+  vm.runInContext(script, context);
+  return { document, ids };
+}
+
+test('SCRUM-254: revenue sharing page sets default month period and shows not-ready status without fake data', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  const from = page.document.getElementById('rev-share-from').value;
+  const to = page.document.getElementById('rev-share-to').value;
+  assert.ok(from && from.endsWith('-01'));
+  assert.ok(to);
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, false);
+  // This DOM double runs the JS only; template text is checked by the page test.
+  const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
+  assert.ok(tableMessage.includes('Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.'));
+  assert.ok(!tableMessage.includes('Tạ Như Vinh'));
+  assert.ok(!tableMessage.includes('SCRUM-86'));
+  assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, true);
+});
+
+test('SCRUM-254: inverted date range displays validation error', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  page.document.getElementById('rev-share-from').value = '2026-10-25';
+  page.document.getElementById('rev-share-to').value = '2026-10-10';
+  page.document.getElementById('btn-apply-filter').handlers.click();
+  await flush();
+
+  const errBox = page.document.getElementById('rev-share-error');
+  assert.equal(errBox.hidden, false);
+  assert.ok(errBox.textContent.includes('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc'));
+});
+
+test('SCRUM-254: changing dates resets table message without displaying stale period', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  page.document.getElementById('rev-share-from').value = '2026-10-15';
+  page.document.getElementById('rev-share-from').handlers.input();
+  await flush();
+
+  assert.equal(page.document.getElementById('rev-share-error').hidden, true);
+  const html = page.document.getElementById('rev-share-tbody').innerHTML;
+  assert.ok(html.includes('Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.'));
+  assert.ok(!html.includes('2026-10-01'));
+});
+
+test('SCRUM-254: quick filter buttons update dates and maintain clean state', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  page.document.getElementById('btn-quick-today').handlers.click();
+  await flush();
+
+  const from = page.document.getElementById('rev-share-from').value;
+  const to = page.document.getElementById('rev-share-to').value;
+  assert.equal(from, to);
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, false);
+  assert.equal(page.document.getElementById('rev-share-error').hidden, true);
 });

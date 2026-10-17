@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% set active_page = "revenue-sharing" %}
+
+{% block title %}Chia doanh thu đối tác{% endblock %}
+{% block meta_description %}Bảng kê phân chia doanh thu cho đối tác theo tỉ lệ hợp đồng{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/sessions">Phiên sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Chia doanh thu đối tác</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/revenue_sharing.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="revenue-sharing-page" id="revenue-sharing-page">
+  <div class="page-header">
+    <div class="page-header__info">
+      <h1 class="page-header__title">Chia doanh thu cho đối tác</h1>
+      <p class="page-header__subtitle">
+        Bảng kê phân chia doanh thu theo kỳ đối soát và tỉ lệ hợp đồng của từng đối tác chủ trạm.
+      </p>
+    </div>
+  </div>
+
+  <!-- Filter Card: Kỳ đối soát và đối tác -->
+  <section class="card revenue-sharing-filter" aria-labelledby="filter-heading">
+    <div class="card__body">
+      <h2 id="filter-heading" class="sr-only">Bộ lọc kỳ và đối tác</h2>
+      <div class="filter-grid">
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-share-partner" class="form-label">Đối tác / Chủ trạm</label>
+          <select id="rev-share-partner" class="form-select" disabled>
+            <option value="">Tất cả đối tác</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-share-from" class="form-label">Từ ngày <span class="required">*</span></label>
+          <input type="date" id="rev-share-from" class="form-input" required />
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-share-to" class="form-label">Đến ngày <span class="required">*</span></label>
+          <input type="date" id="rev-share-to" class="form-input" required />
+        </div>
+        <div class="filter-actions">
+          <label class="form-label">&nbsp;</label>
+          <button type="button" class="btn btn--primary" id="btn-apply-filter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Xem bảng kê
+          </button>
+        </div>
+      </div>
+
+      <div class="quick-filter-bar">
+        <span class="quick-filter-bar__label">Chọn nhanh kỳ:</span>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-today">Hôm nay</button>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-week">Tuần này</button>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-month">Tháng này</button>
+      </div>
+
+      <div id="rev-share-error" class="alert alert--danger" role="alert" style="margin-top:var(--space-3);" hidden></div>
+    </div>
+  </section>
+
+  <!-- Not Ready Notice -->
+  <div id="rev-share-not-ready" class="alert alert--warning" role="status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div>Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.</div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="rev-share-loading" class="card revenue-sharing-state" hidden>
+    <div class="spinner spinner--lg" aria-hidden="true"></div>
+    <p>Đang tải dữ liệu chia doanh thu đối tác...</p>
+  </div>
+
+  <!-- KPI Summary Cards -->
+  <section class="stats-grid" aria-label="Tổng hợp chia doanh thu">
+    <div class="stat-card stat-card--blue">
+      <div class="stat-card__label">Doanh thu làm cơ sở</div>
+      <div class="stat-card__value" id="stat-base-revenue">—</div>
+      <div class="stat-card__sub">Doanh thu làm cơ sở phân chia</div>
+    </div>
+
+    <div class="stat-card stat-card--green">
+      <div class="stat-card__label">Tổng tiền chia đối tác</div>
+      <div class="stat-card__value" id="stat-shared-amount">—</div>
+      <div class="stat-card__sub">Tính theo tỉ lệ hợp đồng</div>
+    </div>
+  </section>
+
+  <!-- Table Card: Bảng kê chia doanh thu -->
+  <section class="card" aria-labelledby="table-heading">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="table-heading">Bảng kê chia doanh thu đối tác</h2>
+        <p class="card__subtitle">Chi tiết theo đối tác, mã hợp đồng và tỉ lệ phân chia áp dụng</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="rev-share-table">
+        <thead>
+          <tr>
+            <th scope="col">Đối tác</th>
+            <th scope="col">Hợp đồng</th>
+            <th scope="col" class="text-right">Tỉ lệ áp dụng</th>
+            <th scope="col" class="text-right">Doanh thu làm cơ sở</th>
+            <th scope="col" class="text-right">Số tiền được chia</th>
+          </tr>
+        </thead>
+        <tbody id="rev-share-tbody">
+          <tr>
+            <td colspan="5" class="text-center text-muted py-4" id="rev-share-empty-row">
+              Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.
+            </td>
+          </tr>
+        </tbody>
+        <tfoot id="rev-share-tfoot" hidden>
+          <tr>
+            <th colspan="3">Tổng cộng</th>
+            <th class="text-right" id="tfoot-base-revenue">—</th>
+            <th class="text-right" id="tfoot-shared-amount">—</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/revenue_sharing.js') }}"></script>
+{% endblock %}
