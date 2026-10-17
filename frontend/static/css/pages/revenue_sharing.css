@@ -1,0 +1,72 @@
+/* revenue_sharing.css — CSS đặc thù khung chia doanh thu đối tác (SCRUM-86, SCRUM-254) */
+.revenue-sharing-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 360px;
+}
+
+.revenue-sharing-page [hidden] {
+  display: none !important;
+}
+
+.revenue-sharing-filter {
+  margin-bottom: var(--space-2);
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.2fr auto;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.filter-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.quick-filter-bar__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-right: var(--space-1);
+}
+
+.revenue-sharing-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+#rev-share-tfoot tr th {
+  background: var(--color-surface-alt);
+  border-top: 2px solid var(--color-border-strong);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  padding: 12px var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .filter-actions button {
+    width: 100%;
+  }
+}

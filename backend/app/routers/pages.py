@@ -274,6 +274,23 @@ async def financial_reconciliation_page(
     )
 
 
+# SCRUM-254 / SCRUM-86 — Giao diện chia doanh thu cho đối tác (kế toán)
+@router.get(
+    "/sessions/revenue-sharing",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def revenue_sharing_page(
+    request: Request,
+    current_user: CurrentUser,
+):
+    _require_any_role(current_user, "admin", "accountant")
+    return templates.TemplateResponse(
+        request,
+        "sessions/revenue_sharing.html",
+        _page_context(request, current_user),
+    )
+
+
 # SCRUM-68 — Giao diện đăng ký gói thuê bao hàng tháng (Phạm Văn Tuấn)
 @router.get("/subscriptions", dependencies=[Depends(require_role("driver", "admin"))])
 async def subscriptions_page(request: Request, current_user: CurrentUser):
