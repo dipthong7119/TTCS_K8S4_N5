@@ -1620,7 +1620,15 @@ test('SCRUM-58: completion cancels countdown and ignores late command response',
   assert.ok(!page.timeouts.some(timer => timer.delay === 120000));
 });
 
-function revenueSharingPage() {
+function revenueSharingPage(getReport = async () => ({
+  partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
+  items: [{
+    partner_name: 'Trạm An Phú', partner_email: 'owner@example.test',
+    policy_label: 'Quy tắc mặc định 60%', share_percent: 60,
+    base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20,
+  }],
+  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+})) {
   const ids = new Map();
   const document = {
     handlers: {},
@@ -1632,6 +1640,11 @@ function revenueSharingPage() {
     addEventListener(name, fn) { this.handlers[name] = fn; },
   };
 
+  const partner = document.getElementById('rev-share-partner');
+  partner.options = [];
+  partner.replaceChildren = (...items) => { partner.options = items; partner.value = ''; };
+  partner.add = option => partner.options.push(option);
+
   const context = vm.createContext({
     document,
     window: { location: { href: '' } },
@@ -1639,7 +1652,8 @@ function revenueSharingPage() {
     console,
     Intl,
     Math,
-    ApiClient: {},
+    Option: function (text, value) { return { text, value }; },
+    ApiClient: { getRevenueShareReport: getReport },
   });
 
   const script = read('pages/revenue_sharing.js');
@@ -1647,26 +1661,35 @@ function revenueSharingPage() {
   return { document, ids };
 }
 
-test('SCRUM-254: revenue sharing page sets default month period and shows not-ready status without fake data', async () => {
-  const page = revenueSharingPage();
+test('SCRUM-254: default month loads the 60 percent revenue share report', async () => {
+  let query;
+  const page = revenueSharingPage(async params => {
+    query = params;
+    return {
+      partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
+      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Quy tắc mặc định 60%', share_percent: 60, base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20 }],
+      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+    };
+  });
   await flush();
 
   const from = page.document.getElementById('rev-share-from').value;
   const to = page.document.getElementById('rev-share-to').value;
   assert.ok(from && from.endsWith('-01'));
   assert.ok(to);
-  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, false);
-  // This DOM double runs the JS only; template text is checked by the page test.
+  assert.deepEqual({ date_from: query.date_from, date_to: query.date_to }, { date_from: from, date_to: to });
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
   const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
-  assert.ok(tableMessage.includes('Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.'));
-  assert.ok(!tableMessage.includes('Tạ Như Vinh'));
-  assert.ok(!tableMessage.includes('SCRUM-86'));
+  assert.ok(tableMessage.includes('Trạm An Phú'));
+  assert.ok(tableMessage.includes('Quy tắc mặc định 60%'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '60.000 ₫');
   assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
-  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, true);
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
 });
 
-test('SCRUM-254: inverted date range displays validation error', async () => {
-  const page = revenueSharingPage();
+test('SCRUM-254: inverted date range displays validation error without an extra API call', async () => {
+  let calls = 0;
+  const page = revenueSharingPage(async () => { calls++; return { partners: [], items: [], totals: {} }; });
   await flush();
 
   page.document.getElementById('rev-share-from').value = '2026-10-25';
@@ -1677,9 +1700,10 @@ test('SCRUM-254: inverted date range displays validation error', async () => {
   const errBox = page.document.getElementById('rev-share-error');
   assert.equal(errBox.hidden, false);
   assert.ok(errBox.textContent.includes('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc'));
+  assert.equal(calls, 1);
 });
 
-test('SCRUM-254: changing dates resets table message without displaying stale period', async () => {
+test('SCRUM-254: changing dates hides stale report amounts until filters are applied', async () => {
   const page = revenueSharingPage();
   await flush();
 
@@ -1689,8 +1713,9 @@ test('SCRUM-254: changing dates resets table message without displaying stale pe
 
   assert.equal(page.document.getElementById('rev-share-error').hidden, true);
   const html = page.document.getElementById('rev-share-tbody').innerHTML;
-  assert.ok(html.includes('Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.'));
-  assert.ok(!html.includes('2026-10-01'));
+  assert.ok(html.includes('Áp dụng bộ lọc'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '—');
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, true);
 });
 
 test('SCRUM-254: quick filter buttons update dates and maintain clean state', async () => {
@@ -1703,6 +1728,184 @@ test('SCRUM-254: quick filter buttons update dates and maintain clean state', as
   const from = page.document.getElementById('rev-share-from').value;
   const to = page.document.getElementById('rev-share-to').value;
   assert.equal(from, to);
-  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, false);
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
   assert.equal(page.document.getElementById('rev-share-error').hidden, true);
+});
+
+function revenuePage(getRevenue, options = {}) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+
+  const stationSel = document.getElementById('rev-station');
+  stationSel.value = options.stationId !== undefined ? options.stationId : '101';
+  document.getElementById('rev-report').hidden = true;
+  document.getElementById('rev-load').hidden = true;
+  document.getElementById('rev-empty').hidden = true;
+
+  const context = vm.createContext({
+    document,
+    window: { location: { href: '' } },
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    Date,
+    console,
+    Intl,
+    Math,
+    ApiClient: {
+      getStationRevenue: getRevenue || (async () => ({
+        station_id: 101,
+        station_name: 'Test Station',
+        start_date: '2026-10-01',
+        end_date: '2026-10-16',
+        timezone: 'Asia/Ho_Chi_Minh',
+        session_count: 5,
+        total_kwh: 120.5,
+        revenue_vnd: 480000,
+        occupancy_fee_vnd: 20000,
+        charge_points: [
+          { charge_point_code: 'CP-01', session_count: 3, total_kwh: 70.0, occupancy_fee_vnd: 10000, revenue_vnd: 280000 },
+          { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
+        ],
+      })),
+    },
+  });
+
+  const script = read('pages/stations_revenue.js');
+  vm.runInContext(script, context);
+  return { document, ids };
+}
+
+test('SCRUM-84: revenue page loads initial month data and renders KPI stats and breakdown table', async () => {
+  let calledWith = null;
+  const page = revenuePage(async (id, params, opts) => {
+    calledWith = { id, params };
+    return {
+      station_id: 101,
+      station_name: 'Test Station',
+      start_date: '2026-10-01',
+      end_date: '2026-10-31',
+      timezone: 'Asia/Ho_Chi_Minh',
+      session_count: 5,
+      total_kwh: 120.5,
+      revenue_vnd: 480000,
+      occupancy_fee_vnd: 20000,
+      charge_points: [
+        { charge_point_code: 'CP-01', session_count: 3, total_kwh: 70.0, occupancy_fee_vnd: 10000, revenue_vnd: 280000 },
+        { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
+      ],
+    };
+  });
+  await flush();
+
+  assert.equal(calledWith.id, '101');
+  assert.ok(calledWith.params.start_date);
+  assert.ok(calledWith.params.end_date);
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+  assert.equal(page.document.getElementById('stat-sessions').textContent, '5');
+  assert.ok(page.document.getElementById('stat-rev').textContent.includes('480.000'));
+  assert.ok(page.document.getElementById('stat-kwh').textContent.includes('120,5'));
+  assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-01'));
+  assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-02'));
+});
+
+test('SCRUM-84: inverted date range shows validation error and avoids API call', async () => {
+  let apiCalls = 0;
+  const page = revenuePage(async () => {
+    apiCalls++;
+    return { session_count: 0, total_kwh: 0, revenue_vnd: 0, occupancy_fee_vnd: 0, charge_points: [] };
+  });
+  await flush();
+  assert.equal(apiCalls, 1);
+
+  // Invert dates
+  page.document.getElementById('rev-start').value = '2026-10-25';
+  page.document.getElementById('rev-end').value = '2026-10-10';
+  page.document.getElementById('btn-apply-filter').handlers.click();
+  await flush();
+
+  assert.equal(apiCalls, 1);
+  const errBox = page.document.getElementById('rev-err');
+  assert.ok(errBox.textContent.includes('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc'));
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: changing filter immediately hides stale report results', async () => {
+  let resolve;
+  const pending = new Promise(done => { resolve = done; });
+  const page = revenuePage(async () => pending);
+  await flush();
+
+  // Initially in loading state, report hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, false);
+
+  // Finish initial load
+  resolve({
+    session_count: 2, total_kwh: 10, revenue_vnd: 50000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-10', timezone: 'Asia/Ho_Chi_Minh', charge_points: []
+  });
+  await flush();
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+
+  // Changing start date input clears the report immediately
+  page.document.getElementById('rev-start').handlers.input();
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+
+  // Changing station selector triggers reload and clears old report immediately
+  page.document.getElementById('rev-station').value = '202';
+  page.document.getElementById('rev-station').handlers.change();
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: pending request is invalidated when user changes date input and old response must stay hidden', async () => {
+  let resolve;
+  const pending = new Promise(done => { resolve = done; });
+  const page = revenuePage(async () => pending);
+  await flush();
+
+  // Initially request is pending
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, false);
+
+  // User modifies date input while request is pending
+  page.document.getElementById('rev-start').value = '2026-10-15';
+  page.document.getElementById('rev-start').handlers.input();
+
+  // Ensure loading and report are hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+  assert.equal(page.document.getElementById('rev-load').hidden, true);
+
+  // Old delayed response finally resolves
+  resolve({
+    session_count: 5, total_kwh: 50, revenue_vnd: 200000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-31', timezone: 'Asia/Ho_Chi_Minh',
+    charge_points: [{ charge_point_code: 'CP-01', session_count: 5, total_kwh: 50, occupancy_fee_vnd: 0, revenue_vnd: 200000 }]
+  });
+  await flush();
+
+  // The stale response MUST NOT be rendered; report box MUST remain hidden
+  assert.equal(page.document.getElementById('rev-report').hidden, true);
+});
+
+test('SCRUM-84: charge point code is properly escaped when rendered in table', async () => {
+  const page = revenuePage(async () => ({
+    session_count: 1, total_kwh: 10, revenue_vnd: 40000, occupancy_fee_vnd: 0,
+    start_date: '2026-10-01', end_date: '2026-10-31', timezone: 'Asia/Ho_Chi_Minh',
+    charge_points: [{ charge_point_code: '<CP-01&02>', session_count: 1, total_kwh: 10, occupancy_fee_vnd: 0, revenue_vnd: 40000 }]
+  }));
+  await flush();
+
+  assert.equal(page.document.getElementById('rev-report').hidden, false);
+  const html = page.document.getElementById('rev-tbody').innerHTML;
+  assert.ok(html.includes('&lt;CP-01&amp;02&gt;'));
+  assert.ok(!html.includes('<CP-01&02>'));
 });

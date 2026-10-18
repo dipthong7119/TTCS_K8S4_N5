@@ -2,7 +2,7 @@
 {% set active_page = "revenue-sharing" %}
 
 {% block title %}Chia doanh thu đối tác{% endblock %}
-{% block meta_description %}Bảng kê phân chia doanh thu cho đối tác theo tỉ lệ hợp đồng{% endblock %}
+{% block meta_description %}Bảng kê chia 60% phí gói thuê bao cho chủ trạm theo lượng kWh sử dụng{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -22,7 +22,7 @@
     <div class="page-header__info">
       <h1 class="page-header__title">Chia doanh thu cho đối tác</h1>
       <p class="page-header__subtitle">
-        Bảng kê phân chia doanh thu theo kỳ đối soát và tỉ lệ hợp đồng của từng đối tác chủ trạm.
+        Chủ trạm nhận 60% phí gói thuê bao, phân bổ theo kWh sử dụng trong kỳ.
       </p>
     </div>
   </div>
@@ -34,7 +34,7 @@
       <div class="filter-grid">
         <div class="form-group" style="margin-bottom:0;">
           <label for="rev-share-partner" class="form-label">Đối tác / Chủ trạm</label>
-          <select id="rev-share-partner" class="form-select" disabled>
+          <select id="rev-share-partner" class="form-select">
             <option value="">Tất cả đối tác</option>
           </select>
         </div>
@@ -68,11 +68,11 @@
   </section>
 
   <!-- Not Ready Notice -->
-  <div id="rev-share-not-ready" class="alert alert--warning" role="status">
+  <div id="rev-share-not-ready" class="alert alert--warning" role="status" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <div>Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.</div>
+    <div>Chọn kỳ đối soát để xem bảng kê.</div>
   </div>
 
   <!-- Loading State -->
@@ -92,7 +92,7 @@
     <div class="stat-card stat-card--green">
       <div class="stat-card__label">Tổng tiền chia đối tác</div>
       <div class="stat-card__value" id="stat-shared-amount">—</div>
-      <div class="stat-card__sub">Tính theo tỉ lệ hợp đồng</div>
+      <div class="stat-card__sub">60% phí gói thuê bao, chia theo kWh</div>
     </div>
   </section>
 
@@ -101,7 +101,7 @@
     <div class="card__header">
       <div>
         <h2 class="card__title" id="table-heading">Bảng kê chia doanh thu đối tác</h2>
-        <p class="card__subtitle">Chi tiết theo đối tác, mã hợp đồng và tỉ lệ phân chia áp dụng</p>
+        <p class="card__subtitle">Chi tiết theo chủ trạm, kỳ sử dụng và chính sách chia doanh thu</p>
       </div>
     </div>
     <div class="table-wrap">
@@ -109,7 +109,7 @@
         <thead>
           <tr>
             <th scope="col">Đối tác</th>
-            <th scope="col">Hợp đồng</th>
+            <th scope="col">Chính sách</th>
             <th scope="col" class="text-right">Tỉ lệ áp dụng</th>
             <th scope="col" class="text-right">Doanh thu làm cơ sở</th>
             <th scope="col" class="text-right">Số tiền được chia</th>
@@ -118,7 +118,7 @@
         <tbody id="rev-share-tbody">
           <tr>
             <td colspan="5" class="text-center text-muted py-4" id="rev-share-empty-row">
-              Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.
+              Đang tải bảng kê...
             </td>
           </tr>
         </tbody>

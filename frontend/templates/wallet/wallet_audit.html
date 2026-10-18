@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% set active_page = "wallet-audit" %}
+
+{% block title %}Nhật ký thao tác ví{% endblock %}
+{% block meta_description %}Tra cứu toàn bộ lịch sử giao dịch ví — ai thực hiện, thời điểm nào, số tiền bao nhiêu, lý do gì. Dữ liệu chỉ đọc, không thể xóa.{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Nhật ký thao tác ví</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/wallet_audit.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header" id="wallet-audit-page">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Nhật ký thao tác ví</h1>
+    <p class="page-header__subtitle">Lịch sử đầy đủ mọi giao dịch ví — append-only, không thể sửa hoặc xóa. Truy vết được ai làm gì.</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:var(--space-3);">
+    <button class="btn btn--secondary btn--sm" id="btn-export-wallet-audit" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Xuất CSV
+    </button>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="stats-grid" style="margin-bottom:var(--space-5);">
+  <div class="stat-card stat-card--blue">
+    <div class="stat-card__label">Tổng giao dịch</div>
+    <div class="stat-card__value" id="wa-stat-total">—</div>
+    <div class="stat-card__sub">trong khoảng lọc</div>
+  </div>
+  <div class="stat-card stat-card--green">
+    <div class="stat-card__label">Tổng nạp</div>
+    <div class="stat-card__value" id="wa-stat-credit">—</div>
+    <div class="stat-card__sub">₫ cộng vào ví</div>
+  </div>
+  <div class="stat-card stat-card--orange">
+    <div class="stat-card__label">Tổng trừ</div>
+    <div class="stat-card__value" id="wa-stat-debit">—</div>
+    <div class="stat-card__sub">₫ trừ khỏi ví</div>
+  </div>
+  <div class="stat-card stat-card--blue">
+    <div class="stat-card__label">Người thực hiện</div>
+    <div class="stat-card__value" id="wa-stat-actors">—</div>
+    <div class="stat-card__sub">tài khoản khác nhau</div>
+  </div>
+</div>
+
+<!-- Filters -->
+<form class="wa-filters-bar" id="wa-filters" autocomplete="off">
+  <div class="wa-filter">
+    <label for="wa-filter-driver">Tài xế (tên / email)</label>
+    <input class="form-input" id="wa-filter-driver" name="driver" maxlength="255" placeholder="Tìm tài xế..." />
+  </div>
+  <div class="wa-filter">
+    <label for="wa-filter-actor">Người thực hiện</label>
+    <input class="form-input" id="wa-filter-actor" name="actor" maxlength="255" placeholder="admin@csms.vn..." />
+  </div>
+  <div class="wa-filter">
+    <label for="wa-filter-type">Loại giao dịch</label>
+    <select class="form-select" id="wa-filter-type" name="entry_type">
+      <option value="">Tất cả loại</option>
+      <option value="topup">Nạp tiền</option>
+      <option value="charge">Trừ phí sạc</option>
+      <option value="reservation_fee">Phí đặt chỗ</option>
+      <option value="no_show_fee">Phí không đến</option>
+      <option value="refund">Hoàn tiền</option>
+      <option value="manual_topup">Nạp thủ công</option>
+      <option value="adjustment">Điều chỉnh</option>
+    </select>
+  </div>
+  <div class="wa-filter">
+    <label for="wa-filter-from">Từ ngày</label>
+    <input class="form-input" id="wa-filter-from" type="date" name="date_from" />
+  </div>
+  <div class="wa-filter">
+    <label for="wa-filter-to">Đến ngày</label>
+    <input class="form-input" id="wa-filter-to" type="date" name="date_to" />
+  </div>
+  <div class="wa-filter-actions">
+    <button class="btn btn--primary" id="btn-wa-filter" type="submit">Lọc</button>
+    <button class="btn btn--secondary" id="btn-wa-reset" type="button">Đặt lại</button>
+  </div>
+</form>
+
+<!-- Table -->
+<section class="card wa-card" aria-labelledby="wa-table-heading">
+  <div class="card__header">
+    <div>
+      <h2 class="card__title" id="wa-table-heading">Danh sách giao dịch ví</h2>
+      <p style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin:2px 0 0;">
+        Nhật ký chỉ thêm (append-only) — đảm bảo tính toàn vẹn và trách nhiệm giải trình
+      </p>
+    </div>
+    <span class="tag" id="wa-count">Đang tải...</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table wa-table" aria-label="Bảng nhật ký thao tác ví">
+      <thead>
+        <tr>
+          <th scope="col">Thời điểm</th>
+          <th scope="col">Tài xế</th>
+          <th scope="col">Người thực hiện</th>
+          <th scope="col">Loại giao dịch</th>
+          <th scope="col" class="text-right">Số tiền (₫)</th>
+          <th scope="col" class="text-right">Số dư sau</th>
+          <th scope="col">Ghi chú / Lý do</th>
+          <th scope="col" class="text-right">Chi tiết</th>
+        </tr>
+      </thead>
+      <tbody id="wa-tbody">
+        <tr><td colspan="8">
+          <div class="loading-state" style="padding:var(--space-8);">
+            <div class="spinner" aria-hidden="true"></div>
+            <p style="margin-top:var(--space-3);color:var(--color-text-secondary);">Đang tải nhật ký...</p>
+          </div>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card__footer" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);">
+    <span id="wa-page-label" aria-live="polite" style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trang 1</span>
+    <div class="pagination" role="navigation" aria-label="Phân trang nhật ký ví">
+      <button class="pagination__btn" id="wa-prev" type="button" aria-label="Trang trước" disabled>&#x2039;</button>
+      <span id="wa-pages" style="display:flex;gap:4px;"></span>
+      <button class="pagination__btn" id="wa-next" type="button" aria-label="Trang sau" disabled>&#x203A;</button>
+    </div>
+  </div>
+</section>
+
+<!-- Detail modal -->
+<div class="modal is-hidden" id="wa-detail-modal" role="dialog" aria-modal="true" aria-labelledby="wa-detail-title">
+  <div class="modal__backdrop" id="wa-detail-backdrop"></div>
+  <div class="modal__dialog modal__dialog--md">
+    <div class="modal__header">
+      <h2 class="modal__title" id="wa-detail-title">Chi tiết giao dịch ví</h2>
+      <button class="modal__close" id="wa-detail-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="wa-detail-grid" id="wa-detail-body"><!-- injected --></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="wa-detail-copy" type="button">Sao chép JSON</button>
+      <button class="btn btn--primary" id="wa-detail-ok" type="button">Đóng</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/wallet_audit.js') }}"></script>
+{% endblock %}

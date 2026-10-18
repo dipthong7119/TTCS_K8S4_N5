@@ -45,6 +45,8 @@ def test_asset_url_changes_for_same_size_file_update(tmp_path, monkeypatch):
         ("driver", "/sessions/mine"),
         ("admin", "/sessions/revenue-sharing"),
         ("accountant", "/sessions/revenue-sharing"),
+        ("admin", "/stations/revenue"),
+        ("station_owner", "/stations/revenue"),
     ],
 )
 def test_rendered_pages_use_loadable_versioned_assets(client, user_factory, role, page):

@@ -1,0 +1,79 @@
+/* stations_revenue.css — CSS đặc thù trang báo cáo doanh thu (SCRUM-84, SCRUM-253) */
+.revenue-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 360px;
+}
+
+.revenue-page [hidden] {
+  display: none !important;
+}
+
+.revenue-filter-card {
+  margin-bottom: var(--space-2);
+}
+
+.revenue-filter-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.revenue-filter-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.revenue-quick-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.revenue-quick-bar__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-right: var(--space-1);
+}
+
+.revenue-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.revenue-report-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+#rev-tfoot tr th {
+  background: var(--color-surface-alt);
+  border-top: 2px solid var(--color-border-strong);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  padding: 12px var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .revenue-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .revenue-filter-actions button {
+    width: 100%;
+  }
+}

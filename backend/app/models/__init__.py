@@ -8,6 +8,7 @@ from app.models.charge_point_configuration import ChargePointConfiguration  # no
 from app.models.charging_invoice import ChargingInvoice  # noqa: F401
 from app.models.charging_session import ChargingSession  # noqa: F401
 from app.models.connector_error import ConnectorError  # noqa: F401
+from app.models.data_erasure import DataErasureRequest  # noqa: F401
 from app.models.driver_subscription import DriverSubscription  # noqa: F401
 from app.models.id_tag import IdTag  # noqa: F401
 from app.models.login_ip_attempt import LoginIPAttempt  # noqa: F401

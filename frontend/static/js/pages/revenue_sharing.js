@@ -1,84 +1,154 @@
 (function () {
   'use strict';
-  const fromInput = document.getElementById('rev-share-from'),
-    toInput = document.getElementById('rev-share-to'),
-    errBox = document.getElementById('rev-share-error'),
-    loadBox = document.getElementById('rev-share-loading'),
-    notReadyBox = document.getElementById('rev-share-not-ready'),
-    tbody = document.getElementById('rev-share-tbody'),
-    tfoot = document.getElementById('rev-share-tfoot'),
-    btnApply = document.getElementById('btn-apply-filter');
 
-  const toIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const NOT_READY_TEXT = 'Báo cáo chưa sẵn sàng. Vui lòng thử lại sau.';
+  const fromInput = document.getElementById('rev-share-from');
+  const toInput = document.getElementById('rev-share-to');
+  const partnerInput = document.getElementById('rev-share-partner');
+  const errBox = document.getElementById('rev-share-error');
+  const loadBox = document.getElementById('rev-share-loading');
+  const notReadyBox = document.getElementById('rev-share-not-ready');
+  const tbody = document.getElementById('rev-share-tbody');
+  const tfoot = document.getElementById('rev-share-tfoot');
+  const btnApply = document.getElementById('btn-apply-filter');
+  let requestVersion = 0;
+  const money = value => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
+  const energy = value => `${Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kWh`;
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-  function clearError() {
-    if (errBox) { errBox.textContent = ''; errBox.hidden = true; }
+  function isoDate(value) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
   }
 
-  function showError(msg) {
-    if (errBox) {
-      errBox.textContent = msg;
-      errBox.hidden = false;
-    }
+  function showError(message) {
+    errBox.textContent = message;
+    errBox.hidden = false;
+    notReadyBox.hidden = true;
   }
 
   function onDateChange() {
-    clearError();
-    if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">${NOT_READY_TEXT}</td></tr>`;
-    }
-    if (notReadyBox) notReadyBox.hidden = false;
+    requestVersion += 1;
+    errBox.hidden = true;
+    setLoading(false);
+    notReadyBox.hidden = false;
+    tfoot.hidden = true;
+    document.getElementById('stat-base-revenue').textContent = '—';
+    document.getElementById('stat-shared-amount').textContent = '—';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Áp dụng bộ lọc để tải lại bảng kê.</td></tr>';
   }
 
-  function setDates(start, end) {
-    fromInput.value = toIso(start);
-    toInput.value = toIso(end);
-    clearError();
+  function setLoading(loading) {
+    loadBox.hidden = !loading;
+    if (loading) {
+      errBox.hidden = true;
+      notReadyBox.hidden = true;
+      tfoot.hidden = true;
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Đang tải bảng kê...</td></tr>';
+      document.getElementById('stat-base-revenue').textContent = '—';
+      document.getElementById('stat-shared-amount').textContent = '—';
+      btnApply.disabled = true;
+    } else {
+      btnApply.disabled = false;
+    }
+  }
+
+  function renderPartners(partners) {
+    const selected = partnerInput.value;
+    partnerInput.replaceChildren(new Option('Tất cả đối tác', ''));
+    partners.forEach(partner => {
+      partnerInput.add(new Option(`${partner.name} (${partner.email})`, String(partner.id)));
+    });
+    if ([...partnerInput.options].some(option => option.value === selected)) {
+      partnerInput.value = selected;
+    }
+  }
+
+  function renderReport(report) {
+    renderPartners(report.partners || []);
+    const items = report.items || [];
+    document.getElementById('stat-base-revenue').textContent = money(report.totals?.base_revenue_vnd);
+    document.getElementById('stat-shared-amount').textContent = money(report.totals?.shared_amount_vnd);
+
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có lượt sử dụng gói thuê bao trong kỳ đã chọn.</td></tr>';
+      tfoot.hidden = true;
+      notReadyBox.hidden = true;
+      return;
+    }
+
+    tbody.innerHTML = items.map(item => `<tr>
+      <td><strong>${esc(item.partner_name)}</strong><br><small>${esc(item.partner_email)}</small></td>
+      <td>${esc(item.policy_label)}</td>
+      <td class="text-right">${Number(item.share_percent)}%</td>
+      <td class="text-right">${money(item.base_revenue_vnd)}</td>
+      <td class="text-right"><strong>${money(item.shared_amount_vnd)}</strong><br><small>${energy(item.energy_kwh)}</small></td>
+    </tr>`).join('');
+    document.getElementById('tfoot-base-revenue').textContent = money(report.totals?.base_revenue_vnd);
+    document.getElementById('tfoot-shared-amount').textContent = money(report.totals?.shared_amount_vnd);
+    tfoot.hidden = false;
+    notReadyBox.hidden = true;
+  }
+
+  async function applyFilter() {
+    const version = ++requestVersion;
+    const from = fromInput.value;
+    const to = toInput.value;
+    if (!from || !to) {
+      setLoading(false);
+      showError('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc.');
+      return;
+    }
+    if (from > to) {
+      setLoading(false);
+      showError('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const report = await ApiClient.getRevenueShareReport({
+        date_from: from,
+        date_to: to,
+        station_owner_id: partnerInput.value || undefined,
+      });
+      if (version !== requestVersion) return;
+      renderReport(report);
+    } catch (error) {
+      if (version !== requestVersion) return;
+      showError(error?.message || 'Không tải được bảng kê chia doanh thu.');
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không tải được dữ liệu.</td></tr>';
+      tfoot.hidden = true;
+    } finally {
+      if (version === requestVersion) setLoading(false);
+    }
+  }
+
+  function setDates(from, to) {
+    fromInput.value = isoDate(from);
+    toInput.value = isoDate(to);
     applyFilter();
   }
 
   function setQuickFilter(type) {
     const now = new Date();
-    if (type === 'today') setDates(now, now);
-    else if (type === 'week') {
+    if (type === 'today') return setDates(now, now);
+    if (type === 'week') {
       const day = now.getDay();
-      const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (day === 0 ? -6 : 1 - day));
-      setDates(mon, new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6));
-    } else if (type === 'month') {
-      setDates(new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (day === 0 ? -6 : 1 - day));
+      return setDates(monday, new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6));
     }
+    setDates(new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 0));
   }
 
-  function applyFilter() {
-    clearError();
-    const from = fromInput?.value, to = toInput?.value;
-    if (!from || !to) {
-      showError('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc.');
-      return;
-    }
-    if (from > to) {
-      showError('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
-      return;
-    }
-
-    if (loadBox) loadBox.hidden = true;
-    if (notReadyBox) notReadyBox.hidden = false;
-    if (tfoot) tfoot.hidden = true;
-
-    tbody.innerHTML = `<tr>
-      <td colspan="5" class="text-center text-muted py-4">${NOT_READY_TEXT}</td>
-    </tr>`;
-  }
-
-  ['btn-quick-today:today', 'btn-quick-week:week', 'btn-quick-month:month'].forEach(item => {
-    const [id, type] = item.split(':');
-    document.getElementById(id)?.addEventListener('click', () => setQuickFilter(type));
-  });
-
+  document.getElementById('btn-quick-today')?.addEventListener('click', () => setQuickFilter('today'));
+  document.getElementById('btn-quick-week')?.addEventListener('click', () => setQuickFilter('week'));
+  document.getElementById('btn-quick-month')?.addEventListener('click', () => setQuickFilter('month'));
   btnApply?.addEventListener('click', applyFilter);
+  partnerInput?.addEventListener('change', applyFilter);
   fromInput?.addEventListener('input', onDateChange);
   toInput?.addEventListener('input', onDateChange);
+  fromInput?.addEventListener('change', onDateChange);
+  toInput?.addEventListener('change', onDateChange);
 
   setQuickFilter('month');
 })();

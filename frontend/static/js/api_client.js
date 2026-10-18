@@ -62,6 +62,10 @@ const ApiClient = (() => {
     createStation: (body) => _request('POST', '/stations', body),
     updateStation: (id, body) => _request('PUT', `/stations/${id}`, body),
     deleteStation: (id) => _request('DELETE', `/stations/${id}`),
+    getStationRevenue: (stationId, params = {}, opts = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', `/stations/${encodeURIComponent(stationId)}/revenue` + (q ? '?' + q : ''), null, opts);
+    },
 
     // --- Charge Points ---
     listChargePoints: (stationId) => _request('GET', `/charge-points?station_id=${encodeURIComponent(stationId)}`),
@@ -104,12 +108,15 @@ const ApiClient = (() => {
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 
-    // --- Reservations ---
-    createReservation: (body) => _request('POST', '/reservations', body),
-    listMyReservations: (activeOnly = false) =>
-      _request('GET', `/reservations/me?active_only=${activeOnly}`),
-    cancelReservation: (reservationId) =>
-      _request('POST', `/reservations/${encodeURIComponent(reservationId)}/cancel`),
+
+    // --- Operational Alerts (SCRUM-90) ---
+    listOperationalAlerts: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/alerts' + (q ? '?' + q : ''));
+    },
+    acknowledgeAlert: (id, note = 'Đã xác nhận xử lý') =>
+      _request('POST', `/alerts/${encodeURIComponent(id)}/resolve`, { note }),
+
 
     // --- Audit trail ---
     listAuditLogs: (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
@@ -134,6 +141,16 @@ const ApiClient = (() => {
     listSubscriptionPlans: () => _request('GET', '/subscriptions/plans'),
     getMySubscriptions: () => _request('GET', '/subscriptions/mine'),
     subscribePlan: (planId) => _request('POST', '/subscriptions', { plan_id: planId }),
+    getRevenueShareReport: (params = {}) => {
+      const query = new URLSearchParams(
+        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      ).toString();
+      return _request('GET', '/subscriptions/revenue-share' + (query ? '?' + query : ''));
+    },
+
+    // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
+    listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),
+    createStationTariff: (stationId, body) => _request('POST', `/stations/${stationId}/tariffs`, body),
 
     // --- Reservations (SCRUM-76 / S-48) ---
     listReservations: (params = {}, opts = {}) => {
@@ -148,6 +165,32 @@ const ApiClient = (() => {
       _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
     getReservation: (id, opts = {}) =>
       _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
+
+    // --- Wallet Audit Logs (SCRUM-91) ---
+    listWalletAuditLogs: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/wallet/audit' + (q ? '?' + q : ''));
+    },
+
+    // --- Privacy & Data Deletion (SCRUM-92 / S-57 / Nghị định 13/2023/NĐ-CP) ---
+    getPrivacyProfile: () => _request('GET', '/privacy/profile'),
+    requestDataDeletion: (body) => _request('POST', '/privacy/deletion-requests', body),
+    cancelDataDeletionRequest: (id) => _request('POST', `/privacy/deletion-requests/${encodeURIComponent(id)}/cancel`),
+    listDataDeletionRequests: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/privacy/admin/deletion-requests' + (q ? '?' + q : ''));
+    },
+    approveDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/approve`, body),
+    rejectDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/reject`, body),
+
+    // --- Power capacity (SCRUM-80) ---
+    getStationPowerCapacity: (stationId) => _request('GET', `/stations/${stationId}/power-capacity`),
+    updateStationPowerCapacity: (stationId, body) => _request('PUT', `/stations/${stationId}/power-capacity`, body),
+
+    // --- Nearby stations (SCRUM-96 / S-47) ---
+    getNearbyStations: (params = {}) => _request('GET', '/stations/nearby?' + new URLSearchParams(params)),
   };
 })();
 
