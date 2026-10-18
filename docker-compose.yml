@@ -46,6 +46,10 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    environment:
+      CSMS_SIMULATOR_STATE_DIR: /var/lib/csms-simulator
+    volumes:
+      - simulator_state:/var/lib/csms-simulator
     command:
       - python
       - -m
@@ -82,3 +86,4 @@ services:
 volumes:
   postgres_data:
   postgres_backups:
+  simulator_state:

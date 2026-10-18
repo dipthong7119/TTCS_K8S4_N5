@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    components.css — Form, nút, bảng, thẻ trạng thái — TÁI SỬ DỤNG
    ========================================================================== */
 
@@ -100,6 +100,8 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   outline: none;
   -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 .form-input::placeholder, .form-textarea::placeholder { color: var(--color-text-muted); }
 .form-input:hover, .form-select:hover, .form-textarea:hover { border-color: var(--color-border-strong); }
@@ -290,6 +292,7 @@
 .modal-backdrop {
   position: fixed; inset: 0;
   background: hsla(220,20%,10%,.5);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: var(--z-overlay);
   display: flex; align-items: center; justify-content: center;

@@ -68,42 +68,19 @@
     return [h, m, sec].map(x => String(x).padStart(2, '0')).join(':');
   }
 
-  // ── T-48: Hiển thị và Cập nhật Phiên đang sạc ──────────────────────────────
-  async function loadCurrentActiveSession() {
-    try {
-      // Ưu tiên gọi API phiên hiện tại cho driver (T-47)
-      if (!_isGlobal && ApiClient.getCurrentSession) {
-        const current = await ApiClient.getCurrentSession();
-        if (current && typeof current === 'object' && current.id) {
-          renderActiveBanner(current);
-          return current;
-        }
-      }
-    } catch {
-      // Nếu API trả 403 hoặc lỗi tạm thời, fallback sang tìm trong danh sách
-    }
-    return null;
-  }
-
+  // ── T-48: Giám sát phiên đang sạc trên danh sách toàn hệ thống ─────────────
   function renderActiveBanner(session) {
     _activeSession = session;
     const banner = document.getElementById('active-session-banner');
-    const noSessionCard = document.getElementById('no-active-session-card');
 
     if (!session || (session.status !== 'active' && session.status !== 'charging')) {
       if (banner) banner.style.display = 'none';
       clearInterval(_activeTimer);
       _activeTimer = null;
       _activeSession = null;
-
-      // Tài xế khi không có phiên sạc thì hiển thị card rỗng kèm nút tìm trạm (S-22 AC3)
-      if (!_isGlobal && noSessionCard) {
-        noSessionCard.style.display = 'flex';
-      }
       return;
     }
 
-    if (noSessionCard) noSessionCard.style.display = 'none';
     if (!banner) return;
 
     banner.style.display = 'block';
@@ -311,15 +288,10 @@
       const countEl = document.getElementById('session-count');
       if (countEl) countEl.textContent = `${data.total || items.length} phiên`;
 
-      // Kiểm tra phiên hoạt động
-      const activeInList = items.find(s => s.status === 'active' || s.status === 'charging');
-      if (activeInList) {
-        renderActiveBanner(activeInList);
-      } else {
-        const current = await loadCurrentActiveSession();
-        if (!current) {
-          renderActiveBanner(null);
-        }
+      // Chỉ màn hình phiên toàn hệ thống hiển thị trạng thái phiên đang chạy.
+      if (_isGlobal) {
+        const activeInList = items.find(s => s.status === 'active' || s.status === 'charging');
+        renderActiveBanner(activeInList || null);
       }
     } catch (err) {
       const tbody = document.getElementById('sessions-tbody');

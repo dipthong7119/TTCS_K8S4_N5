@@ -76,7 +76,7 @@
 
 /* Balance Card */
 .wallet-balance-card {
-  background: linear-gradient(145deg, hsl(222,47%,14%) 0%, hsl(210,60%,22%) 100%);
+  background: linear-gradient(145deg, hsl(216, 78%, 31%) 0%, hsl(228, 72%, 43%) 100%);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   box-shadow: var(--shadow-lg);
@@ -96,7 +96,7 @@
   width: 220px;
   height: 220px;
   border-radius: 50%;
-  background: radial-gradient(circle, hsla(210,90%,54%,.25) 0%, transparent 70%);
+  background: radial-gradient(circle, hsla(195, 100%, 90%, 0.28) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -189,12 +189,55 @@
 }
 
 /* Stat Card Colors */
+.wallet-right > .stats-grid .stat-card--green {
+  background: hsl(145, 65%, 96%);
+  border-color: hsl(145, 42%, 82%);
+}
+
+.wallet-right > .stats-grid .stat-card--blue {
+  background: hsl(210, 90%, 97%);
+  border-color: hsl(210, 55%, 82%);
+}
+
 .stat-card--purple {
-  background: var(--color-surface);
-  border-left: 4px solid hsl(270,70%,60%);
+  background: hsl(270, 70%, 97%);
+  border-color: hsl(270, 45%, 84%);
 }
 .stat-card--purple .stat-card__value {
-  color: hsl(270,70%,60%);
+  color: hsl(270, 65%, 43%);
+}
+
+.wallet-quick-info.card {
+  background: hsl(210, 55%, 97%);
+  border-color: hsl(210, 35%, 85%);
+}
+
+/* Subscription promotion uses a softer green palette to distinguish it from the blue wallet card. */
+.wallet-subscription-teaser {
+  background: linear-gradient(135deg, hsl(150, 55%, 94%), hsl(165, 60%, 90%));
+  color: hsl(160, 45%, 18%);
+  border: 1px solid hsl(155, 42%, 74%);
+  box-shadow: 0 6px 18px hsla(155, 55%, 28%, 0.12);
+}
+
+.wallet-subscription-teaser__title {
+  color: hsl(160, 65%, 26%);
+}
+
+.wallet-subscription-teaser__description {
+  color: hsl(160, 25%, 28%);
+}
+
+.wallet-subscription-teaser__button {
+  background: hsl(158, 72%, 34%);
+  border-color: hsl(158, 72%, 34%);
+  color: white;
+}
+
+.wallet-subscription-teaser__button:hover {
+  background: hsl(158, 72%, 29%);
+  border-color: hsl(158, 72%, 29%);
+  color: white;
 }
 
 /* Ledger & Status Badges */

@@ -1,9 +1,18 @@
-﻿"""
+"""
 Models: charge_points, connectors
 Tham chieu: SPRINT_1.md T-10, 02_CODING_STANDARDS.md muc 2.2
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -46,16 +55,23 @@ class Connector(Base):
     charge_point_id = Column(Integer, ForeignKey("charge_points.id", ondelete="CASCADE"), nullable=False)
     # Khop voi connectorId trong tin nhan OCPP, bat dau tu 1 (T-10 NFR)
     connector_id = Column(Integer, nullable=False)
+    # S-47: loai dau noi (CCS2, CHAdeMO, Type2, ...) do quan tri vien khai bao, nullable
+    connector_type = Column(String(50), nullable=True)
     # S-05: status is unknown until the charge point reports it.
     status = Column(String(20), default="unknown", server_default="unknown", nullable=False)
     # Preserve the exact OCPP status separately from the internal UI status.
     ocpp_status = Column(String(50), nullable=True)
     error_code = Column(String(50), default="NoError", nullable=False)
+    rated_power_kw = Column(Numeric(10, 3), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "rated_power_kw IS NULL OR rated_power_kw > 0",
+            name="ck_connectors_rated_power_positive",
+        ),
         # Moi cap (tru, dau noi) phai duy nhat -- DB tu choi neu chon trung (T-10 AC)
         UniqueConstraint("charge_point_id", "connector_id", name="uq_connector_per_charge_point"),
     )

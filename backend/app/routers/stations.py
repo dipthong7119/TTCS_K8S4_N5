@@ -3,7 +3,7 @@ routers/stations.py -- CRUD trạm sạc (S-04, T-09)
 Tham chieu: SPRINT_1.md T-08, T-09, SSD-1, 02_CODING_STANDARDS.md
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
+from app.models.charge_point import ChargePoint
+from app.models.charging_invoice import ChargingInvoice
+from app.models.charging_session import ChargingSession
+from app.models.reservation import Reservation, ReservationStatus
 from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
 from app.schemas.station import (
@@ -21,6 +25,8 @@ from app.schemas.station import (
     StationUpdate,
 )
 from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
+from app.services.connection_manager import manager
+from app.services.ocpp_status import is_charge_point_stale
 from app.services.ownership import filter_by_owner, get_station_for_user
 from app.services.pricing import normalize_daily_bands
 
@@ -76,6 +82,128 @@ async def list_station_tariffs(
         .all()
     )
     return [_tariff_payload(tariff) for tariff in tariffs]
+
+
+@router.get(
+    "/{station_id}/revenue",
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
+async def get_station_revenue(
+    station_id: int,
+    current_user: CurrentUser,
+    start_date: date | None = Query(None, description="Ngày bắt đầu, bao gồm cả ngày này"),
+    end_date: date | None = Query(None, description="Ngày kết thúc, bao gồm cả ngày này"),
+    db: Session = Depends(get_db),
+):
+    """Summarize finalized revenue and energy by charger for a station-local date range."""
+    roles = [role.name for role in current_user.roles]
+    station = get_station_for_user(db, station_id, current_user.id, roles, "view_revenue")
+
+    latest_tariff = (
+        db.query(StationTariff)
+        .filter(StationTariff.station_id == station_id, StationTariff.is_demo.is_(False))
+        .order_by(StationTariff.effective_from.desc(), StationTariff.id.desc())
+        .first()
+    )
+    timezone_name = latest_tariff.timezone_name if latest_tariff else "Asia/Ho_Chi_Minh"
+    try:
+        station_zone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        station_zone = ZoneInfo("Asia/Ho_Chi_Minh")
+        timezone_name = "Asia/Ho_Chi_Minh"
+
+    local_today = datetime.now(UTC).astimezone(station_zone).date()
+    start_date = start_date or local_today.replace(day=1)
+    end_date = end_date or local_today
+    if start_date > end_date:
+        raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
+
+    # Database datetimes are naive UTC; interpret the requested inclusive dates
+    # as calendar dates in the station's configured timezone.
+    start_utc = (
+        datetime.combine(start_date, time.min, tzinfo=station_zone)
+        .astimezone(UTC)
+        .replace(tzinfo=None)
+    )
+    end_utc = (
+        datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=station_zone)
+        .astimezone(UTC)
+        .replace(tzinfo=None)
+    )
+
+    charge_points = (
+        db.query(ChargePoint)
+        .filter(ChargePoint.station_id == station_id)
+        .order_by(ChargePoint.code)
+        .all()
+    )
+    stats: dict[str, dict] = {
+        point.code: {
+            "charge_point_code": point.code,
+            "session_count": 0,
+            "total_kwh": 0.0,
+            "revenue_vnd": 0,
+            "occupancy_fee_vnd": 0,
+        }
+        for point in charge_points
+    }
+    finalized_sessions = (
+        db.query(ChargingSession, ChargingInvoice)
+        .join(ChargingInvoice, ChargingInvoice.session_id == ChargingSession.id)
+        .filter(
+            ChargingSession.station_id == station_id,
+            ChargingSession.started_at >= start_utc,
+            ChargingSession.started_at < end_utc,
+            ChargingSession.status == "completed",
+            ChargingSession.is_demo.is_(False),
+            ChargingInvoice.is_demo.is_(False),
+        )
+        .all()
+    )
+    total_kwh = 0.0
+    total_revenue_vnd = 0
+    total_occupancy_fee_vnd = 0
+    for session, invoice in finalized_sessions:
+        row = stats.setdefault(
+            session.charge_point_code,
+            {
+                "charge_point_code": session.charge_point_code,
+                "session_count": 0,
+                "total_kwh": 0.0,
+                "revenue_vnd": 0,
+                "occupancy_fee_vnd": 0,
+            },
+        )
+        energy = float(session.energy_kwh or 0)
+        revenue = int(invoice.total_vnd or 0)
+        occupancy_fee = sum(
+            int(segment.get("amount_vnd", 0))
+            for segment in (invoice.segments or [])
+            if segment.get("kind") == "occupancy_fee"
+        )
+        row["session_count"] += 1
+        row["total_kwh"] += energy
+        row["revenue_vnd"] += revenue
+        row["occupancy_fee_vnd"] += occupancy_fee
+        total_kwh += energy
+        total_revenue_vnd += revenue
+        total_occupancy_fee_vnd += occupancy_fee
+
+    return {
+        "station_id": station.id,
+        "station_name": station.name,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "timezone": timezone_name,
+        "session_count": len(finalized_sessions),
+        "total_kwh": round(total_kwh, 3),
+        "revenue_vnd": total_revenue_vnd,
+        "occupancy_fee_vnd": total_occupancy_fee_vnd,
+        "charge_points": [
+            {**row, "total_kwh": round(row["total_kwh"], 3)}
+            for row in sorted(stats.values(), key=lambda item: item["charge_point_code"])
+        ],
+    }
 
 
 @router.post(
@@ -240,6 +368,86 @@ async def list_stations(
 
 
 @router.get(
+    "/{station_id}/booking-options",
+    dependencies=[Depends(require_role("driver"))],
+)
+async def get_station_booking_options(
+    station_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Return only public, currently bookable connector identifiers to drivers."""
+    station = db.query(Station).filter(
+        Station.id == station_id,
+        Station.status == "active",
+    ).first()
+    if station is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy trạm đang hoạt động")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    active_reservations = (
+        db.query(Reservation.charge_point_id, Reservation.connector_id)
+        .filter(
+            Reservation.status.in_([
+                ReservationStatus.PENDING,
+                ReservationStatus.ACTIVE,
+            ]),
+            Reservation.expiry_date > now,
+            Reservation.charge_point_id.in_(
+                db.query(ChargePoint.id).filter(ChargePoint.station_id == station.id)
+            ),
+        )
+        .all()
+    )
+    reserved_slots = {(row.charge_point_id, row.connector_id) for row in active_reservations}
+
+    points = (
+        db.query(ChargePoint)
+        .options(joinedload(ChargePoint.connectors))
+        .filter(ChargePoint.station_id == station.id)
+        .order_by(ChargePoint.code)
+        .all()
+    )
+    busy_statuses = {
+        "charging", "suspended_ev", "suspended_evse", "finishing",
+        "reserved", "faulted", "unavailable",
+    }
+    busy_ocpp_statuses = {
+        "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing",
+        "Reserved", "Faulted", "Unavailable", "Occupied",
+    }
+
+    items = []
+    for point in points:
+        point_online = (
+            point.code in manager.active_connections
+            and point.status == "online"
+            and not is_charge_point_stale(point.last_seen_at)
+        )
+        if not point_online:
+            continue
+
+        available_connectors = [
+            {
+                "connector_id": connector.connector_id,
+                "connector_type": connector.connector_type,
+                "rated_power_kw": connector.rated_power_kw,
+            }
+            for connector in point.connectors
+            if connector.status.lower() not in busy_statuses
+            and connector.ocpp_status not in busy_ocpp_statuses
+            and (point.id, connector.connector_id) not in reserved_slots
+        ]
+        if available_connectors:
+            items.append({
+                "charge_point_code": point.code,
+                "connectors": available_connectors,
+            })
+
+    return {"station_id": station.id, "station_name": station.name, "items": items}
+
+
+@router.get(
     "/{station_id}",
     response_model=StationResponse | StationDirectoryResponse,
     dependencies=[Depends(require_role("admin", "station_owner", "operator", "driver"))],
@@ -322,6 +530,7 @@ async def create_station(
         latitude=body.latitude,
         longitude=body.longitude,
         status=body.status,
+        no_show_fee_vnd=body.no_show_fee_vnd,
         owner_id=current_user.id,
         created_at=now,
         updated_at=now,
@@ -371,6 +580,8 @@ async def update_station(
         station.longitude = body.longitude
     if body.status is not None:
         station.status = body.status
+    if body.no_show_fee_vnd is not None:
+        station.no_show_fee_vnd = body.no_show_fee_vnd
     station.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     db.commit()
