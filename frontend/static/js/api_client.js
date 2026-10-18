@@ -108,12 +108,15 @@ const ApiClient = (() => {
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
 
-    // --- Reservations ---
-    createReservation: (body) => _request('POST', '/reservations', body),
-    listMyReservations: (activeOnly = false) =>
-      _request('GET', `/reservations/me?active_only=${activeOnly}`),
-    cancelReservation: (reservationId) =>
-      _request('POST', `/reservations/${encodeURIComponent(reservationId)}/cancel`),
+
+    // --- Operational Alerts (SCRUM-90) ---
+    listOperationalAlerts: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/alerts' + (q ? '?' + q : ''));
+    },
+    acknowledgeAlert: (id, note = 'Đã xác nhận xử lý') =>
+      _request('POST', `/alerts/${encodeURIComponent(id)}/resolve`, { note }),
+
 
     // --- Audit trail ---
     listAuditLogs: (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
@@ -156,6 +159,25 @@ const ApiClient = (() => {
       _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
     getReservation: (id, opts = {}) =>
       _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
+
+    // --- Wallet Audit Logs (SCRUM-91) ---
+    listWalletAuditLogs: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/wallet/audit' + (q ? '?' + q : ''));
+    },
+
+    // --- Privacy & Data Deletion (SCRUM-92 / S-57 / Nghị định 13/2023/NĐ-CP) ---
+    getPrivacyProfile: () => _request('GET', '/privacy/profile'),
+    requestDataDeletion: (body) => _request('POST', '/privacy/deletion-requests', body),
+    cancelDataDeletionRequest: (id) => _request('POST', `/privacy/deletion-requests/${encodeURIComponent(id)}/cancel`),
+    listDataDeletionRequests: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/privacy/admin/deletion-requests' + (q ? '?' + q : ''));
+    },
+    approveDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/approve`, body),
+    rejectDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/reject`, body),
 
     // --- Power capacity (SCRUM-80) ---
     getStationPowerCapacity: (stationId) => _request('GET', `/stations/${stationId}/power-capacity`),

@@ -1,0 +1,160 @@
+/* pages/wallet_audit.css — SCRUM-91: Nhật ký thao tác ví */
+
+/* ── Filter bar ──────────────────────────────────────────────────────────── */
+.wa-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+.wa-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 160px;
+  min-width: 130px;
+}
+.wa-filter label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary);
+}
+.wa-filter-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.wa-card { overflow: hidden; }
+.wa-table { min-width: 960px; }
+
+/* Amount column */
+.wa-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.wa-amount--credit { color: hsl(130, 55%, 38%); }
+.wa-amount--debit  { color: hsl(0, 65%, 45%); }
+
+/* Balance after */
+.wa-balance {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Entry type badge */
+.wa-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.wa-type--topup        { background: hsl(130,55%,92%); color: hsl(130,55%,32%); }
+.wa-type--charge       { background: hsl(210,70%,92%); color: hsl(210,70%,32%); }
+.wa-type--reservation  { background: hsl(260,55%,92%); color: hsl(260,55%,35%); }
+.wa-type--no-show      { background: hsl(0,65%,92%);   color: hsl(0,65%,38%);   }
+.wa-type--refund       { background: hsl(180,55%,90%); color: hsl(180,55%,30%); }
+.wa-type--adjustment   { background: hsl(38,65%,90%);  color: hsl(38,55%,32%);  }
+.wa-type--other        { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+
+/* Actor cell */
+.wa-actor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.wa-actor-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wa-actor-avatar--system {
+  background: var(--color-text-muted);
+}
+.wa-actor-name {
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-actor-role {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+/* Note cell */
+.wa-note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Detail modal ────────────────────────────────────────────────────────── */
+.wa-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+@media (max-width: 540px) { .wa-detail-grid { grid-template-columns: 1fr; } }
+.wa-detail-item { display: flex; flex-direction: column; gap: 4px; }
+.wa-detail-item--full { grid-column: 1 / -1; }
+.wa-detail-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.wa-detail-value {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  word-break: break-all;
+}
+.wa-json-box {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre;
+  color: var(--color-text);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wa-filters-bar { padding: var(--space-3) var(--space-4); }
+  .wa-table th:nth-child(6),
+  .wa-table td:nth-child(6) { display: none; }
+}

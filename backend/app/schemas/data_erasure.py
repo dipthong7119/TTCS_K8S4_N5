@@ -14,6 +14,23 @@ class DataErasureCreateRequest(BaseModel):
     reason: str | None = Field(
         None, max_length=500, description="Lý do yêu cầu xóa dữ liệu cá nhân"
     )
+    reason_label: str | None = Field(None, max_length=255)
+    reason_detail: str | None = Field(None, max_length=2000)
+
+
+class PrivacyDeletionCreateRequest(BaseModel):
+    """Payload used by the privacy page, including password confirmation."""
+
+    reason: str = Field(..., min_length=1, max_length=500)
+    reason_label: str | None = Field(None, max_length=255)
+    reason_detail: str | None = Field(None, max_length=2000)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class PrivacyDeletionRejectRequest(BaseModel):
+    """Compatibility payload expected by the privacy administration page."""
+
+    reason: str = Field(..., min_length=3, max_length=500)
 
 
 class DataErasureRejectRequest(BaseModel):

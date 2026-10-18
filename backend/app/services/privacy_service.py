@@ -48,7 +48,12 @@ def to_erasure_response(req: DataErasureRequest) -> DataErasureResponse:
 
 
 def create_erasure_request(
-    db: Session, driver: User, reason: str | None = None
+    db: Session,
+    driver: User,
+    reason: str | None = None,
+    *,
+    reason_label: str | None = None,
+    reason_detail: str | None = None,
 ) -> DataErasureRequest:
     """
     Tài xế gửi yêu cầu xóa/ẩn danh hóa dữ liệu cá nhân (SCRUM-92 / S-57).
@@ -119,6 +124,8 @@ def create_erasure_request(
     req = DataErasureRequest(
         user_id=driver.id,
         request_reason=clean_reason,
+        request_reason_label=reason_label.strip() if reason_label else None,
+        request_reason_detail=reason_detail.strip() if reason_detail else None,
         status="pending",
     )
     db.add(req)
@@ -136,8 +143,49 @@ def create_erasure_request(
         details={
             "driver_id": driver.id,
             "request_reason": clean_reason,
+            "request_reason_label": req.request_reason_label,
             "status": "pending",
         },
+    )
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+def cancel_erasure_request(
+    db: Session, request_id: int, driver: User
+) -> DataErasureRequest:
+    """Cancel a driver's own pending privacy request and record the action."""
+    req = (
+        db.query(DataErasureRequest)
+        .filter(
+            DataErasureRequest.id == request_id,
+            DataErasureRequest.user_id == driver.id,
+        )
+        .first()
+    )
+    if not req:
+        raise HTTPException(
+            status_code=404, detail="Không tìm thấy yêu cầu xóa dữ liệu."
+        )
+    if req.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Yêu cầu đã ở trạng thái '{req.status}', không thể hủy.",
+        )
+
+    req.status = "cancelled"
+    req.processed_at = datetime.now(UTC).replace(tzinfo=None)
+    append_audit(
+        db=db,
+        action="privacy.request_cancelled",
+        object_type="data_erasure_request",
+        object_id=req.id,
+        actor_id=driver.id,
+        actor_email=driver.email,
+        actor_name=driver.full_name,
+        target_user_id=driver.id,
+        details={"driver_id": driver.id, "status": "cancelled"},
     )
     db.commit()
     db.refresh(req)

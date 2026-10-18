@@ -33,6 +33,8 @@ class DataErasureRequest(Base):
         String(20), nullable=False, default="pending", server_default="pending"
     )
     request_reason = Column(String(500), nullable=True)
+    request_reason_label = Column(String(255), nullable=True)
+    request_reason_detail = Column(String(2000), nullable=True)
     rejection_reason = Column(String(500), nullable=True)
     requested_at = Column(DateTime, nullable=False, server_default=func.now())
     processed_at = Column(DateTime, nullable=True)
@@ -49,7 +51,7 @@ class DataErasureRequest(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'approved', 'rejected')",
+            "status IN ('pending', 'approved', 'rejected', 'cancelled')",
             name="ck_data_erasure_requests_status",
         ),
         Index("ix_data_erasure_requests_user_status", "user_id", "status"),

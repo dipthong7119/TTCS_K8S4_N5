@@ -314,6 +314,36 @@ async def reservations_page(request: Request, current_user: CurrentUser):
         request, "reservations/list.html", _page_context(request, current_user)
     )
 
+
+
+# SCRUM-90 — Cảnh báo vận hành (Phạm Văn Tuấn)
+@router.get("/monitoring/alerts", dependencies=[Depends(require_role("admin", "operator"))])
+async def monitoring_alerts_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "monitoring/alerts.html", _page_context(request, current_user)
+    )
+
+
+# SCRUM-91 — Nhật ký thao tác ví (Phạm Văn Tuấn)
+@router.get("/wallet/audit", dependencies=[Depends(require_role("admin", "operator", "accountant"))])
+async def wallet_audit_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator", "accountant")
+    return templates.TemplateResponse(
+        request, "wallet/wallet_audit.html", _page_context(request, current_user)
+    )
+
+
+# SCRUM-92 — Quyền riêng tư & Yêu cầu xóa dữ liệu cá nhân (Phạm Văn Tuấn)
+@router.get("/privacy", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+async def privacy_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin", "operator")
+    return templates.TemplateResponse(
+        request, "privacy/privacy.html", _page_context(request, current_user)
+    )
+
+
+
 # SCRUM-96 (FE) — Tài xế tìm trạm gần & xem đầu nối rảnh (Vy Hoàng Tú)
 @router.get("/driver/stations", dependencies=[Depends(require_role("driver"))])
 async def driver_station_finder_page(request: Request, current_user: CurrentUser):
@@ -336,3 +366,4 @@ async def driver_session_page(request: Request, current_user: CurrentUser):
         "driver/driver_session.html",
         _page_context(request, current_user),
     )
+
