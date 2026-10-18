@@ -45,15 +45,14 @@ def is_overdue(
     Returns:
         True nếu now >= expiry_at + grace_seconds.
     """
-    expiry_naive = reservation.expiry_at
-    if expiry_naive is None:
+    expiry = reservation.expiry_at
+    if expiry is None:
         return False
-    # Đảm bảo naive
-    if hasattr(expiry_naive, "tzinfo") and expiry_naive.tzinfo is not None:
-        expiry_naive = expiry_naive.astimezone(UTC).replace(tzinfo=None)
-    deadline = expiry_naive.timestamp() + grace_seconds
-    now_ts = now.timestamp()
-    return now_ts >= deadline
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    return now >= expiry + timedelta(seconds=grace_seconds)
 
 
 def decide_fee(
