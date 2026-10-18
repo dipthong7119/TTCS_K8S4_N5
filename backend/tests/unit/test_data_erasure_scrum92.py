@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -28,7 +29,6 @@ from app.models.data_erasure import DataErasureRequest
 from app.models.id_tag import IdTag
 from app.models.reservation import Reservation, ReservationStatus
 from app.models.station import Station
-from app.models.station_tariff import StationTariff
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.privacy_service import (
@@ -344,8 +344,8 @@ def test_admin_reject_erasure_request_with_reason():
 
     req = create_erasure_request(db, driver, reason="Yêu cầu xóa")
 
-    # Từ chối không có lý do -> Báo lỗi
-    with pytest.raises(Exception):
+    # Từ chối không có lý do -> Báo lỗi (HTTPException 400)
+    with pytest.raises(HTTPException):
         reject_erasure_request(db, req.id, admin, rejection_reason="")
 
     # Từ chối có lý do hợp lệ
