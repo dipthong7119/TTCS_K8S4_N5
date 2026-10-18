@@ -10,7 +10,6 @@ Bao phủ:
 """
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -23,12 +22,9 @@ from app.core.deps import get_current_user
 from app.database import Base, get_db
 from app.main import app
 from app.models.audit_log import AuditLog
-from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
-from app.models.data_erasure import DataErasureRequest
 from app.models.id_tag import IdTag
 from app.models.reservation import Reservation, ReservationStatus
-from app.models.station import Station
 from app.models.user import Role, User, user_roles
 from app.models.wallet_ledger import WalletLedgerEntry
 from app.services.privacy_service import (
