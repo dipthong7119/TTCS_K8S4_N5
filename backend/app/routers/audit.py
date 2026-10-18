@@ -137,9 +137,19 @@ async def list_audit_logs(
                 "actor_role": actor_roles.get(entry.actor_id, "system"),
                 "target_user_id": entry.target_user_id,
                 "driver_name": (entry.details or {}).get("driver_name")
-                or (target_users.get(entry.target_user_id).full_name if entry.target_user_id in target_users else None),
+                or (
+                    target_users[entry.target_user_id].full_name
+                    if entry.target_user_id is not None
+                    and entry.target_user_id in target_users
+                    else None
+                ),
                 "driver_email": (entry.details or {}).get("driver_email")
-                or (target_users.get(entry.target_user_id).email if entry.target_user_id in target_users else None),
+                or (
+                    target_users[entry.target_user_id].email
+                    if entry.target_user_id is not None
+                    and entry.target_user_id in target_users
+                    else None
+                ),
                 "action": entry.action,
                 "object_type": entry.object_type,
                 "object_id": entry.object_id,
