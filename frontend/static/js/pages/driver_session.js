@@ -99,12 +99,13 @@ const DriverSession = (() => {
     $('ds-station-name').textContent = stationName;
 
     // Connector
-    $('ds-connector').textContent = session.connector_id != null
-      ? `Đầu nối #${session.connector_id}`
+    const connectorNumber = session.connector_number ?? session.connector_id;
+    $('ds-connector').textContent = connectorNumber != null
+      ? `Đầu nối #${connectorNumber}`
       : '—';
 
     // Energy
-    const kwh = session.live_kwh ?? session.total_kwh;
+    const kwh = session.live_kwh ?? session.total_kwh ?? session.kwh;
     $('ds-kwh').textContent = _fmtKwh(kwh);
 
     // Cost estimate
@@ -342,7 +343,7 @@ const DriverSession = (() => {
       summary.innerHTML = `
         <div class="ds-ended-row">
           <span class="ds-ended-row__label">Điện năng nạp</span>
-          <span class="ds-ended-row__value">${_fmtKwh(s.total_kwh)}</span>
+          <span class="ds-ended-row__value">${_fmtKwh(s.total_kwh ?? s.kwh)}</span>
         </div>
         <div class="ds-ended-row">
           <span class="ds-ended-row__label">Thời gian sạc</span>

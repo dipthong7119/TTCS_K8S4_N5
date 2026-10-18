@@ -45,48 +45,40 @@
 
   /* ── Entry type config ────────────────────────────────────────────────── */
   const ENTRY_TYPES = {
-    topup:           { label: '💳 Nạp tiền',        cls: 'wa-type--topup',       dir: 'credit' },
-    charge:          { label: '⚡ Phí sạc',          cls: 'wa-type--charge',      dir: 'debit'  },
-    reservation_fee: { label: '📅 Phí đặt chỗ',     cls: 'wa-type--reservation', dir: 'debit'  },
-    no_show_fee:     { label: '⏰ Phí không đến',    cls: 'wa-type--no-show',     dir: 'debit'  },
-    refund:          { label: '↩️ Hoàn tiền',        cls: 'wa-type--refund',      dir: 'credit' },
-    manual_topup:    { label: '🛠 Nạp thủ công',     cls: 'wa-type--topup',       dir: 'credit' },
-    adjustment:      { label: '⚖️ Điều chỉnh',       cls: 'wa-type--adjustment',  dir: 'both'   },
+    'wallet.manual_topup': { label: '🛠 Nạp thủ công', cls: 'wa-type--topup',      dir: 'credit' },
+    'wallet.adjust':       { label: '⚖️ Điều chỉnh',   cls: 'wa-type--adjustment', dir: 'both'   },
+    'wallet.lock':         { label: '🔒 Khóa ví',      cls: 'wa-type--other',      dir: 'both'   },
+    'wallet.unlock':       { label: '🔓 Mở khóa ví',   cls: 'wa-type--other',      dir: 'both'   },
+    'wallet.sandbox_topup_created': { label: '🧾 Nạp sandbox · chờ thanh toán', cls: 'wa-type--other', dir: 'both' },
+    'wallet.sandbox_topup_success': { label: '💳 Nạp sandbox · thành công', cls: 'wa-type--topup', dir: 'credit' },
+    'wallet.sandbox_simulated_pay': { label: '💳 Nạp sandbox · mô phỏng', cls: 'wa-type--topup', dir: 'credit' },
+    'wallet.sandbox_topup_refunded': { label: '↩️ Hoàn nạp sandbox', cls: 'wa-type--adjustment', dir: 'debit' },
+    'wallet.sandbox_simulated_refund': { label: '↩️ Hoàn nạp sandbox', cls: 'wa-type--adjustment', dir: 'debit' },
   };
   function entryTypeInfo(type) {
     return ENTRY_TYPES[type] || { label: type || '—', cls: 'wa-type--other', dir: 'both' };
   }
 
-  /* ── Mock data (fallback khi BE chưa sẵn) ────────────────────────────── */
-  function getMockEntries() {
-    const now = Date.now();
+  function normalizeAuditEntry(entry) {
+    const details = entry.details || {};
+    let amountVnd = Number(details.amount_vnd || 0);
+    const action = entry.action || '';
+    if (action === 'wallet.sandbox_topup_refunded' || action === 'wallet.sandbox_simulated_refund') {
+      amountVnd = -Math.abs(amountVnd);
+    } else if (action.startsWith('wallet.sandbox_') && ![
+      'wallet.sandbox_topup_success',
+      'wallet.sandbox_simulated_pay',
+    ].includes(action)) {
+      amountVnd = 0;
+    }
     return {
-      items: [
-        { id: 1, created_at: new Date(now - 5*60_000).toISOString(), driver_name: 'Nguyễn Văn An', driver_email: 'an.nguyen@driver.vn',
-          actor_name: 'Admin CSMS', actor_email: 'admin@csms.vn', actor_role: 'admin',
-          entry_type: 'manual_topup', amount_vnd: 200000, balance_after_vnd: 350000,
-          note: 'Nạp hỗ trợ sự cố thanh toán', metadata: { reason: 'support', ticket: 'TKT-0042' } },
-        { id: 2, created_at: new Date(now - 30*60_000).toISOString(), driver_name: 'Trần Thị Bình', driver_email: 'binh.tran@driver.vn',
-          actor_name: 'Hệ thống', actor_email: 'system', actor_role: 'system',
-          entry_type: 'charge', amount_vnd: -45000, balance_after_vnd: 155000,
-          note: 'Phiên sạc #2041 — 15.2 kWh', metadata: { session_id: 2041, kwh: 15.2 } },
-        { id: 3, created_at: new Date(now - 2*3600_000).toISOString(), driver_name: 'Lê Minh Châu', driver_email: 'chau.le@driver.vn',
-          actor_name: 'Hệ thống', actor_email: 'system', actor_role: 'system',
-          entry_type: 'no_show_fee', amount_vnd: -15000, balance_after_vnd: 85000,
-          note: 'Phí không đến — đặt chỗ #R-108', metadata: { reservation_id: 108 } },
-        { id: 4, created_at: new Date(now - 5*3600_000).toISOString(), driver_name: 'Phạm Quốc Dũng', driver_email: 'dung.pham@driver.vn',
-          actor_name: 'Operator Hà Nội', actor_email: 'hn.operator@csms.vn', actor_role: 'operator',
-          entry_type: 'refund', amount_vnd: 30000, balance_after_vnd: 230000,
-          note: 'Hoàn tiền do sự cố trụ CP_HANOI_02', metadata: { charge_point: 'CP_HANOI_02' } },
-        { id: 5, created_at: new Date(now - 24*3600_000).toISOString(), driver_name: 'Nguyễn Văn An', driver_email: 'an.nguyen@driver.vn',
-          actor_name: 'Nguyễn Văn An', actor_email: 'an.nguyen@driver.vn', actor_role: 'driver',
-          entry_type: 'topup', amount_vnd: 500000, balance_after_vnd: 650000,
-          note: 'Nạp qua PayOS', metadata: { order_code: 'PO-20241017-001', gateway: 'payos' } },
-      ],
-      total: 5,
-      total_credit_vnd: 730000,
-      total_debit_vnd: 60000,
-      unique_actors: 4,
+      ...entry,
+      entry_type: entry.action,
+      amount_vnd: amountVnd,
+      note: details.reason || details.receipt_code || details.reference_code || entry.action,
+      metadata: details,
+      actor_name: entry.actor_name || 'Hệ thống',
+      actor_role: entry.actor_role || 'system',
     };
   }
 
@@ -96,10 +88,17 @@
     let data;
     try {
       data = await ApiClient.listWalletAuditLogs(params);
-    } catch (_) {
-      data = getMockEntries();
+    } catch (error) {
+      _items = [];
+      _total = 0;
+      updateStats({ total: 0, total_credit_vnd: 0, total_debit_vnd: 0, unique_actors: 0 });
+      renderTable();
+      renderPagination();
+      document.getElementById('wa-count').textContent = 'Không tải được dữ liệu';
+      showToast(error?.message || 'Không tải được nhật ký ví.', 'error');
+      return;
     }
-    _items = data.items || data;
+    _items = (data.items || []).map(normalizeAuditEntry);
     _total = data.total || _items.length;
     updateStats(data);
     renderTable();
@@ -266,6 +265,26 @@
     showToast('Đã xuất file CSV', 'success');
   }
 
+  async function exportAllCsv() {
+    try {
+      const items = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const data = await ApiClient.listWalletAuditLogs({ ..._filters, page, page_size: PAGE_SIZE });
+        items.push(...(data.items || []).map(normalizeAuditEntry));
+        total = data.total || 0;
+        page++;
+      } while (items.length < total);
+      const original = _items;
+      _items = items;
+      exportCsv();
+      _items = original;
+    } catch (error) {
+      showToast(error?.message || 'Không xuất được báo cáo CSV.', 'error');
+    }
+  }
+
   /* ── DOMContentLoaded ────────────────────────────────────────────────── */
   document.addEventListener('DOMContentLoaded', () => {
     load();
@@ -276,7 +295,7 @@
       _filters = {
         driver:     document.getElementById('wa-filter-driver').value.trim(),
         actor:      document.getElementById('wa-filter-actor').value.trim(),
-        entry_type: document.getElementById('wa-filter-type').value,
+        action:     document.getElementById('wa-filter-type').value,
         date_from:  document.getElementById('wa-filter-from').value,
         date_to:    document.getElementById('wa-filter-to').value,
       };
@@ -303,7 +322,7 @@
     });
 
     // Export
-    document.getElementById('btn-export-wallet-audit').addEventListener('click', exportCsv);
+    document.getElementById('btn-export-wallet-audit').addEventListener('click', exportAllCsv);
 
     // ESC
     document.addEventListener('keydown', e => {

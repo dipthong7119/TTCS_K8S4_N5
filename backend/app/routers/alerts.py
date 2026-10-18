@@ -28,11 +28,15 @@ def _to_alert_response(alert: Alert) -> AlertResponse:
     code = None
     if alert.charge_point:
         code = alert.charge_point.code
+    station_name = alert.charge_point.station.name if alert.charge_point and alert.charge_point.station else None
+    error_code = alert.connector.error_code if alert.connector else None
     return AlertResponse(
         id=alert.id,
         charge_point_id=alert.charge_point_id,
         charge_point_code=code,
+        station_name=station_name,
         connector_id=alert.connector_id,
+        error_code=error_code,
         alert_type=alert.alert_type,
         severity=alert.severity,
         status=alert.status,

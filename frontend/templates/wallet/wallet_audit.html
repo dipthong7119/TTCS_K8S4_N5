@@ -68,15 +68,13 @@
   </div>
   <div class="wa-filter">
     <label for="wa-filter-type">Loại giao dịch</label>
-    <select class="form-select" id="wa-filter-type" name="entry_type">
+    <select class="form-select" id="wa-filter-type" name="action">
       <option value="">Tất cả loại</option>
-      <option value="topup">Nạp tiền</option>
-      <option value="charge">Trừ phí sạc</option>
-      <option value="reservation_fee">Phí đặt chỗ</option>
-      <option value="no_show_fee">Phí không đến</option>
-      <option value="refund">Hoàn tiền</option>
-      <option value="manual_topup">Nạp thủ công</option>
-      <option value="adjustment">Điều chỉnh</option>
+      <option value="wallet.manual_topup">Nạp thủ công</option>
+      <option value="wallet.adjust">Điều chỉnh số dư</option>
+      <option value="wallet.sandbox">Thanh toán sandbox</option>
+      <option value="wallet.lock">Khóa ví</option>
+      <option value="wallet.unlock">Mở khóa ví</option>
     </select>
   </div>
   <div class="wa-filter">
@@ -141,9 +139,9 @@
 </section>
 
 <!-- Detail modal -->
-<div class="modal is-hidden" id="wa-detail-modal" role="dialog" aria-modal="true" aria-labelledby="wa-detail-title">
-  <div class="modal__backdrop" id="wa-detail-backdrop"></div>
-  <div class="modal__dialog modal__dialog--md">
+<div class="wa-detail-modal is-hidden" id="wa-detail-modal" role="dialog" aria-modal="true" aria-labelledby="wa-detail-title">
+  <div class="wa-detail-modal__backdrop" id="wa-detail-backdrop"></div>
+  <div class="modal__dialog wa-detail-dialog">
     <div class="modal__header">
       <h2 class="modal__title" id="wa-detail-title">Chi tiết giao dịch ví</h2>
       <button class="modal__close" id="wa-detail-close" type="button" aria-label="Đóng">

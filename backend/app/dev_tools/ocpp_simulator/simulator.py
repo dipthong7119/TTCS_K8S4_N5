@@ -431,6 +431,9 @@ class SimpleSimulator:
                 "timestamp": now_iso,
             })
             if isinstance(res, dict) and res.get("idTagInfo", {}).get("status") == "Accepted":
+                for reservation_id, reserved_connector in tuple(self._reservations.items()):
+                    if reserved_connector == connector_id:
+                        self._reservations.pop(reservation_id, None)
                 transaction_id = res.get("transactionId")
                 if transaction_id is not None:
                     self._active_transactions[connector_id] = {

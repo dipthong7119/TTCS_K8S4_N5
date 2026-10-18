@@ -34,7 +34,7 @@ class RemoteStartStatus(str, Enum):
 
 
 class RemoteStartRequest(Base):
-    """Yêu cầu gắn với một tài xế, đầu nối và thẻ ảo."""
+    """Yêu cầu gắn với một tài xế, đầu nối và thẻ sạc được dùng để bắt đầu."""
 
     __tablename__ = "remote_start_requests"
 

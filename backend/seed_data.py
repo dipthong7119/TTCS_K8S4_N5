@@ -599,6 +599,7 @@ def seed_data(db: Session | None = None) -> None:
     try:
         owner = db.query(User).filter(User.email == "owner@csms.local").first()
         driver = db.query(User).filter(User.email == "driver@csms.local").first()
+        second_driver = db.query(User).filter(User.email == "driver2@csms.local").first()
         if owner is None or driver is None:
             print("Demo seed skipped: required demo owner/driver is not present.")
             return
@@ -618,6 +619,9 @@ def seed_data(db: Session | None = None) -> None:
         _ensure_demo_subscription_plans(db, counts)
         sessions = _ensure_sessions(db, driver, active_tag, all_points, now, counts)
         _ensure_demo_wallet(db, driver, sessions, counts)
+        if second_driver is not None:
+            _ensure_driver_tags(db, second_driver, counts)
+            _ensure_demo_wallet(db, second_driver, [], counts)
         _ensure_audit_samples(db, now, set(all_points), counts)
         db.commit()
         summary = ", ".join(f"{amount} {name}" for name, amount in counts.items() if amount)

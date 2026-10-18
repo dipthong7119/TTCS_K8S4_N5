@@ -162,8 +162,8 @@
 </section>
 
 <!-- Alert detail modal -->
-<div class="modal is-hidden" id="alert-detail-modal" role="dialog" aria-modal="true" aria-labelledby="alert-detail-title">
-  <div class="modal__backdrop" id="alert-detail-backdrop"></div>
+<div class="alerts-modal alerts-modal--detail is-hidden" id="alert-detail-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="alert-detail-title">
+  <div class="alerts-modal__backdrop" id="alert-detail-backdrop"></div>
   <div class="modal__dialog modal__dialog--md">
     <div class="modal__header">
       <h2 class="modal__title" id="alert-detail-title">Chi tiết cảnh báo</h2>
@@ -194,8 +194,8 @@
 </div>
 
 <!-- Acknowledge / confirm modal -->
-<div class="modal is-hidden" id="modal-ack-confirm" role="dialog" aria-modal="true" aria-labelledby="modal-ack-title">
-  <div class="modal__backdrop" id="modal-ack-backdrop"></div>
+<div class="alerts-modal alerts-modal--ack is-hidden" id="modal-ack-dialog" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-ack-title">
+  <div class="alerts-modal__backdrop" id="modal-ack-backdrop"></div>
   <div class="modal__dialog">
     <div class="modal__header">
       <h2 class="modal__title" id="modal-ack-title">Xác nhận đã biết</h2>
@@ -214,7 +214,7 @@
         </svg>
       </div>
       <p class="alert-ack-message">Bạn xác nhận đã biết cảnh báo của trụ <strong id="ack-cp-code">—</strong>?</p>
-      <p class="alert-ack-sub">Thao tác này ghi chú "đã xem xét" vào nhật ký kiểm tra. Cảnh báo vẫn hiện nếu trụ chưa phục hồi.</p>
+      <p class="alert-ack-sub">Thao tác này đóng cảnh báo và ghi người xử lý vào nhật ký kiểm tra.</p>
     </div>
     <div class="modal__footer">
       <button class="btn btn--secondary" id="modal-ack-cancel" type="button">Huỷ bỏ</button>
@@ -223,25 +223,12 @@
           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
-        Xác nhận đã biết
+        Đóng cảnh báo
       </button>
     </div>
   </div>
 </div>
 
-<!-- 🧪 SCRUM-90 test chip -->
-<div style="position:fixed;bottom:var(--space-4);left:50%;transform:translateX(-50%);z-index:9999;display:flex;gap:var(--space-2);">
-  <button class="btn btn--sm"
-    style="background:hsl(260,60%,50%);color:#fff;font-size:11px;opacity:.85;"
-    id="btn-test-scrum90-offline" type="button">
-    &#9888;&#65039; Test offline (SCRUM-90)
-  </button>
-  <button class="btn btn--sm"
-    style="background:hsl(0,60%,50%);color:#fff;font-size:11px;opacity:.85;"
-    id="btn-test-scrum90-fault" type="button">
-    &#128308; Test fault (SCRUM-90)
-  </button>
-</div>
 {% endblock %}
 
 {% block extra_js %}

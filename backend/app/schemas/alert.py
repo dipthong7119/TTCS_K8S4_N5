@@ -23,7 +23,9 @@ class AlertResponse(BaseModel):
     id: int
     charge_point_id: int
     charge_point_code: str | None = None
+    station_name: str | None = None
     connector_id: int | None = None
+    error_code: str | None = None
     alert_type: Literal["offline", "connector_error"]
     severity: Literal["warning", "critical"]
     status: Literal["active", "resolved"]
