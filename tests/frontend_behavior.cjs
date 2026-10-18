@@ -1620,6 +1620,118 @@ test('SCRUM-58: completion cancels countdown and ignores late command response',
   assert.ok(!page.timeouts.some(timer => timer.delay === 120000));
 });
 
+function revenueSharingPage(getReport = async () => ({
+  partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
+  items: [{
+    partner_name: 'Trạm An Phú', partner_email: 'owner@example.test',
+    policy_label: 'Quy tắc mặc định 60%', share_percent: 60,
+    base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20,
+  }],
+  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+})) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement: element,
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+
+  const partner = document.getElementById('rev-share-partner');
+  partner.options = [];
+  partner.replaceChildren = (...items) => { partner.options = items; partner.value = ''; };
+  partner.add = option => partner.options.push(option);
+
+  const context = vm.createContext({
+    document,
+    window: { location: { href: '' } },
+    Date,
+    console,
+    Intl,
+    Math,
+    Option: function (text, value) { return { text, value }; },
+    ApiClient: { getRevenueShareReport: getReport },
+  });
+
+  const script = read('pages/revenue_sharing.js');
+  vm.runInContext(script, context);
+  return { document, ids };
+}
+
+test('SCRUM-254: default month loads the 60 percent revenue share report', async () => {
+  let query;
+  const page = revenueSharingPage(async params => {
+    query = params;
+    return {
+      partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
+      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Quy tắc mặc định 60%', share_percent: 60, base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20 }],
+      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+    };
+  });
+  await flush();
+
+  const from = page.document.getElementById('rev-share-from').value;
+  const to = page.document.getElementById('rev-share-to').value;
+  assert.ok(from && from.endsWith('-01'));
+  assert.ok(to);
+  assert.deepEqual({ date_from: query.date_from, date_to: query.date_to }, { date_from: from, date_to: to });
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
+  const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
+  assert.ok(tableMessage.includes('Trạm An Phú'));
+  assert.ok(tableMessage.includes('Quy tắc mặc định 60%'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '60.000 ₫');
+  assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
+});
+
+test('SCRUM-254: inverted date range displays validation error without an extra API call', async () => {
+  let calls = 0;
+  const page = revenueSharingPage(async () => { calls++; return { partners: [], items: [], totals: {} }; });
+  await flush();
+
+  page.document.getElementById('rev-share-from').value = '2026-10-25';
+  page.document.getElementById('rev-share-to').value = '2026-10-10';
+  page.document.getElementById('btn-apply-filter').handlers.click();
+  await flush();
+
+  const errBox = page.document.getElementById('rev-share-error');
+  assert.equal(errBox.hidden, false);
+  assert.ok(errBox.textContent.includes('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc'));
+  assert.equal(calls, 1);
+});
+
+test('SCRUM-254: changing dates hides stale report amounts until filters are applied', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  page.document.getElementById('rev-share-from').value = '2026-10-15';
+  page.document.getElementById('rev-share-from').handlers.input();
+  await flush();
+
+  assert.equal(page.document.getElementById('rev-share-error').hidden, true);
+  const html = page.document.getElementById('rev-share-tbody').innerHTML;
+  assert.ok(html.includes('Áp dụng bộ lọc'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '—');
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, true);
+});
+
+test('SCRUM-254: quick filter buttons update dates and maintain clean state', async () => {
+  const page = revenueSharingPage();
+  await flush();
+
+  page.document.getElementById('btn-quick-today').handlers.click();
+  await flush();
+
+  const from = page.document.getElementById('rev-share-from').value;
+  const to = page.document.getElementById('rev-share-to').value;
+  assert.equal(from, to);
+  assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
+  assert.equal(page.document.getElementById('rev-share-error').hidden, true);
+});
+
 function revenuePage(getRevenue, options = {}) {
   const ids = new Map();
   const document = {
@@ -1797,5 +1909,3 @@ test('SCRUM-84: charge point code is properly escaped when rendered in table', a
   assert.ok(html.includes('&lt;CP-01&amp;02&gt;'));
   assert.ok(!html.includes('<CP-01&02>'));
 });
-
-

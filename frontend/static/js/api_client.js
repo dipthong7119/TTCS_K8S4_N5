@@ -141,6 +141,12 @@ const ApiClient = (() => {
     listSubscriptionPlans: () => _request('GET', '/subscriptions/plans'),
     getMySubscriptions: () => _request('GET', '/subscriptions/mine'),
     subscribePlan: (planId) => _request('POST', '/subscriptions', { plan_id: planId }),
+    getRevenueShareReport: (params = {}) => {
+      const query = new URLSearchParams(
+        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      ).toString();
+      return _request('GET', '/subscriptions/revenue-share' + (query ? '?' + query : ''));
+    },
 
     // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
     listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),

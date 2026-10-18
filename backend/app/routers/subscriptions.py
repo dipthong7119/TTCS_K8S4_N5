@@ -1,6 +1,6 @@
 """Driver subscription and platform-wide monthly package APIs (SCRUM-68)."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.services.subscriptions import (
     get_current_subscription,
     list_active_plans,
     list_owner_revenue_share,
+    list_revenue_share_report,
     list_user_subscriptions,
     purchase_subscription,
     update_plan,
@@ -147,3 +148,21 @@ async def get_my_revenue_share(
 ):
     """Show the owner's proportional 60% share for package charging usage."""
     return list_owner_revenue_share(db, current_user.id)
+
+
+@router.get(
+    "/revenue-share",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def get_revenue_share_report(
+    date_from: date,
+    date_to: date,
+    station_owner_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Admin/accountant report for the 60% subscription fee share by kWh."""
+    if date_from > date_to:
+        raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
+    return list_revenue_share_report(
+        db, date_from, date_to, station_owner_id=station_owner_id
+    )
