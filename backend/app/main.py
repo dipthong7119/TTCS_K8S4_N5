@@ -29,6 +29,7 @@ from app.routers.nearby import router as nearby_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
 from app.routers.power_capacity import router as power_capacity_router
+from app.routers.privacy import router as privacy_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
 from app.routers.remote_starts import router as remote_starts_router
@@ -163,6 +164,7 @@ app.include_router(wallet_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(subscriptions_router, prefix="/api")
 app.include_router(alerts_router, prefix="/api")
+app.include_router(privacy_router, prefix="/api")
 
 app.include_router(pages_router)
 
