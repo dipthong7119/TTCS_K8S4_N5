@@ -66,6 +66,31 @@ class Settings(BaseSettings):
     REMOTE_STOP_REVIEW_SECONDS: int = 120
     UNKNOWN_CONNECTOR_WARN_INTERVAL: int = 300
 
+    # S-52: đặt chỗ quá hạn không tới
+    # Ân hạn trước khi job giành quyền (giây); lý do: StartTransaction bù từ trụ ngoại tuyến
+    # có thể tới muộn sau expiry_at một chút — ân hạn cho phép nó còn được coi là fulfilled.
+    NO_SHOW_GRACE_SECONDS: int = Field(120, ge=0)
+    # Chu kỳ job quét đặt chỗ quá hạn (giây)
+    RESERVATION_EXPIRY_JOB_INTERVAL: int = Field(60, ge=1)
+    # Tối đa đặt chỗ xử lý mỗi lần quét
+    RESERVATION_EXPIRY_BATCH: int = Field(100, ge=1)
+    # Miễn phí lần đầu không đến (false = an toàn, không miễn; bật bằng env)
+    NO_SHOW_FIRST_FREE: bool = False
+    # Số lần thử tối đa gửi CancelReservation
+    CANCEL_RESERVATION_MAX_ATTEMPTS: int = Field(5, ge=1)
+    # Cửa sổ thời gian thử lại CancelReservation (giây); sau đó chuyển abandoned
+    CANCEL_RESERVATION_RETRY_WINDOW: int = Field(86400, ge=60)
+    # S-51: Khoảng thời gian trước expiry_at không còn được huỷ (giây). Mặc định 0 = huỷ sát giờ.
+    CANCEL_CUTOFF_SECONDS: int = Field(0, ge=0)
+
+    # S-47: Tìm trạm gần (nearby stations)
+    NEARBY_DEFAULT_RADIUS_KM: float = Field(20.0, gt=0)
+    NEARBY_MAX_RADIUS_KM: float = Field(100.0, gt=0)
+    NEARBY_DEFAULT_LIMIT: int = Field(20, ge=1, le=50)
+    NEARBY_MAX_LIMIT: int = Field(50, ge=1, le=50)
+    # Múi giờ vận hành để chọn đúng khung giờ biểu giá
+    STATION_TIMEZONE: str = "Asia/Ho_Chi_Minh"
+
     # Optional global override for SCRUM-72. If omitted, the wallet service
     # derives the floor from 5 kWh at the highest effective station tariff.
     WALLET_MINIMUM_BALANCE_VND: int | None = Field(default=None, ge=0)
@@ -73,6 +98,11 @@ class Settings(BaseSettings):
     # Giới hạn nạp tiền thủ công
     MANUAL_TOPUP_MIN: int = Field(1000, ge=1)
     MANUAL_TOPUP_MAX: int = Field(20_000_000, ge=1)
+
+    # Cảnh báo giám sát vận hành (SCRUM-90 / S-46)
+    ALERT_OFFLINE_THRESHOLD_MINUTES: int = Field(15, ge=1)
+    ALERT_ERROR_COUNT_THRESHOLD: int = Field(3, ge=1)
+    ALERT_ERROR_WINDOW_MINUTES: int = Field(10, ge=1)
 
     @property
     def HEARTBEAT_INTERVAL(self) -> int:

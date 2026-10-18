@@ -391,7 +391,7 @@
   }
 
   function openApproveModal(id) {
-    const item = _adminRequests.find(x => x.id === id);
+    const item = _adminRequests.find(x => String(x.id) === String(id));
     if (!item) return;
     _selectedReqId = id;
 
@@ -491,20 +491,21 @@
 
         try {
           if (ApiClient.requestDataDeletion) {
-            await ApiClient.requestDataDeletion(payload);
+            _activeRequest = await ApiClient.requestDataDeletion(payload);
+          } else {
+            _activeRequest = {
+              id: `REQ-${Date.now().toString().slice(-6)}`,
+              created_at: new Date().toISOString(),
+              status: 'pending',
+              reason: payload.reason,
+              reason_label: payload.reason_label,
+              reason_detail: payload.reason_detail,
+            };
           }
-        } catch (_) {
-          // Fallback mock
+        } catch (error) {
+          showToast(error?.message || 'Không thể gửi yêu cầu. Vui lòng thử lại.', 'error');
+          return;
         }
-
-        _activeRequest = {
-          id: `REQ-${Date.now().toString().slice(-6)}`,
-          created_at: new Date().toISOString(),
-          status: 'pending',
-          reason: payload.reason,
-          reason_label: payload.reason_label,
-          reason_detail: payload.reason_detail,
-        };
 
         showToast('Đã nộp yêu cầu xóa dữ liệu cá nhân thành công', 'success');
         renderDriverRequestState();
@@ -520,8 +521,9 @@
           if (ApiClient.cancelDataDeletionRequest && _activeRequest?.id) {
             await ApiClient.cancelDataDeletionRequest(_activeRequest.id);
           }
-        } catch (_) {
-          // Fallback
+        } catch (error) {
+          showToast(error?.message || 'Không thể hủy yêu cầu. Vui lòng thử lại.', 'error');
+          return;
         }
         _activeRequest = null;
         showToast('Đã hủy yêu cầu xóa dữ liệu', 'info');
@@ -557,10 +559,11 @@
         if (ApiClient.approveDataDeletionRequest) {
           await ApiClient.approveDataDeletionRequest(_selectedReqId);
         }
-      } catch (_) {
-        // Fallback
+      } catch (error) {
+        showToast(error?.message || 'Không thể duyệt yêu cầu. Vui lòng thử lại.', 'error');
+        return;
       }
-      const item = _adminRequests.find(x => x.id === _selectedReqId);
+      const item = _adminRequests.find(x => String(x.id) === String(_selectedReqId));
       if (item) {
         item.status = 'approved';
         item.anonymized_at = new Date().toISOString();
@@ -582,10 +585,11 @@
         if (ApiClient.rejectDataDeletionRequest) {
           await ApiClient.rejectDataDeletionRequest(_selectedReqId, { reason });
         }
-      } catch (_) {
-        // Fallback
+      } catch (error) {
+        showToast(error?.message || 'Không thể từ chối yêu cầu. Vui lòng thử lại.', 'error');
+        return;
       }
-      const item = _adminRequests.find(x => x.id === _selectedReqId);
+      const item = _adminRequests.find(x => String(x.id) === String(_selectedReqId));
       if (item) {
         item.status = 'rejected';
         item.reject_reason = reason;

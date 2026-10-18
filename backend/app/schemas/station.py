@@ -15,6 +15,7 @@ class StationCreate(BaseModel):
     latitude: float | None = Field(None, ge=-90, le=90, json_schema_extra={"example": 10.762622})
     longitude: float | None = Field(None, ge=-180, le=180, json_schema_extra={"example": 106.660172})
     status: str = Field("inactive", pattern="^(active|inactive|maintenance|locked)$")
+    no_show_fee_vnd: int = Field(0, ge=0)
 
 
 class StationUpdate(BaseModel):
@@ -23,6 +24,7 @@ class StationUpdate(BaseModel):
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
     status: str | None = Field(None, pattern="^(active|inactive|maintenance|locked)$")
+    no_show_fee_vnd: int | None = Field(None, ge=0)
 
 
 # -- Response ---
@@ -37,6 +39,7 @@ class StationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     charge_point_count: int = 0  # số trụ trong trạm (hiển thị trên danh sách)
+    no_show_fee_vnd: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

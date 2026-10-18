@@ -258,8 +258,8 @@ def test_remote_stop_disconnect(monkeypatch):
 
 
 def test_remote_stop_forbidden_role():
-    """Chỉ admin và operator mới có quyền dừng phiên từ xa (NFR)."""
-    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["driver"])
+    """Driver không được dừng phiên không thuộc tài khoản của mình."""
+    app.dependency_overrides[get_current_user] = lambda: MockUser(2, ["driver"])
     resp = client.post("/api/sessions/101/remote-stop")
     assert resp.status_code == 403
 

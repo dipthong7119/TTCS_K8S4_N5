@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% set active_page = "station-revenue" %}
+
+{% block title %}Báo cáo doanh thu & sản lượng điện{% endblock %}
+{% block meta_description %}Báo cáo doanh thu từ hóa đơn và sản lượng điện tiêu thụ theo trạm sạc và từng trụ.{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/stations">Trạm sạc</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Báo cáo doanh thu</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/stations_revenue.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="revenue-page" id="revenue-page">
+  <div class="page-header">
+    <div class="page-header__info">
+      <h1 class="page-header__title">Báo cáo doanh thu & sản lượng điện</h1>
+      <p class="page-header__subtitle">
+        Thống kê doanh thu từ hóa đơn đã hoàn thành, sản lượng điện tiêu thụ và số phiên sạc theo từng trụ.
+      </p>
+    </div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="card revenue-filter-card">
+    <div class="card__body">
+      <div class="revenue-filter-grid">
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-station" class="form-label">Trạm sạc <span class="required">*</span></label>
+          <select id="rev-station" class="form-select">
+            {% if not stations %}
+            <option value="" disabled selected>Chưa có trạm sạc nào</option>
+            {% else %}
+            {% for s in stations %}
+            <option value="{{ s.id }}" {% if selected_station_id == s.id %}selected{% elif loop.first and not selected_station_id %}selected{% endif %}>
+              {{ s.name }}{% if s.address %} — {{ s.address }}{% endif %}
+            </option>
+            {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-start" class="form-label">Từ ngày <span class="required">*</span></label>
+          <input type="date" id="rev-start" class="form-input" />
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="rev-end" class="form-label">Đến ngày <span class="required">*</span></label>
+          <input type="date" id="rev-end" class="form-input" />
+        </div>
+
+        <div class="revenue-filter-actions">
+          <label class="form-label">&nbsp;</label>
+          <button type="button" class="btn btn--primary" id="btn-apply-filter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Xem báo cáo
+          </button>
+        </div>
+      </div>
+
+      <div class="revenue-quick-bar">
+        <span class="revenue-quick-bar__label">Chọn nhanh:</span>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-today">Hôm nay</button>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-week">Tuần này</button>
+        <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-month">Tháng này</button>
+      </div>
+
+      <div id="rev-err" class="form-error" role="alert" style="margin-top:var(--space-2);"></div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="rev-load" class="revenue-state card" hidden>
+    <div class="spinner spinner--lg" aria-hidden="true"></div>
+    <p>Đang tải báo cáo doanh thu và sản lượng điện...</p>
+  </div>
+
+  <!-- Empty State -->
+  <div id="rev-empty" class="card empty-state" hidden>
+    <div class="empty-state__icon">📊</div>
+    <h2 class="empty-state__title">Chưa có dữ liệu</h2>
+    <p class="empty-state__desc" id="rev-empty-desc">
+      Không tìm thấy dữ liệu doanh thu cho trạm sạc và khoảng thời gian đã chọn.
+    </p>
+  </div>
+
+  <!-- Report Content -->
+  <div id="rev-report" hidden>
+    <div class="revenue-report-meta">
+      <span class="badge badge--online" id="rev-period-badge">—</span>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="stats-grid">
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Tổng doanh thu (hóa đơn)</div>
+        <div class="stat-card__value" id="stat-rev">—</div>
+        <div class="stat-card__sub">Doanh thu từ hóa đơn hoàn thành</div>
+      </div>
+
+      <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Tổng sản lượng điện</div>
+        <div class="stat-card__value" id="stat-kwh">—</div>
+        <div class="stat-card__sub">Tổng điện năng đã cấp</div>
+      </div>
+
+      <div class="stat-card stat-card--purple">
+        <div class="stat-card__label">Tổng số phiên sạc</div>
+        <div class="stat-card__value" id="stat-sessions">—</div>
+        <div class="stat-card__sub">Phiên hoàn thành trong kỳ</div>
+      </div>
+
+      <div class="stat-card stat-card--orange">
+        <div class="stat-card__label">Phí chiếm trụ</div>
+        <div class="stat-card__value" id="stat-occ">—</div>
+        <div class="stat-card__sub">Ghi nhận trong hóa đơn</div>
+      </div>
+    </div>
+
+    <!-- Breakdown Table -->
+    <div class="card">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Chi tiết theo từng trụ sạc</h2>
+          <p class="card__subtitle">Sản lượng điện, số phiên và doanh thu hóa đơn phân bổ theo trụ</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="rev-table">
+          <thead>
+            <tr>
+              <th>Mã trụ sạc</th>
+              <th class="text-right">Số phiên</th>
+              <th class="text-right">Sản lượng (kWh)</th>
+              <th class="text-right">Phí chiếm trụ</th>
+              <th class="text-right">Doanh thu hóa đơn</th>
+            </tr>
+          </thead>
+          <tbody id="rev-tbody"></tbody>
+          <tfoot id="rev-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/stations_revenue.js') }}"></script>
+{% endblock %}

@@ -36,6 +36,7 @@ class ChargingSession(Base):
     meter_start_wh = Column(Integer, nullable=False)
     meter_stop_wh = Column(Integer, nullable=True)
     energy_kwh = Column(Numeric(12, 3), nullable=True)
+    requested_power_limit_w = Column(Integer, nullable=True)
     started_at = Column(DateTime, nullable=False)
     occupancy_started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
@@ -56,6 +57,10 @@ class ChargingSession(Base):
         CheckConstraint(
             "status IN ('active', 'completed', 'anomaly', 'needs_review')",
             name="ck_charging_sessions_status",
+        ),
+        CheckConstraint(
+            "requested_power_limit_w IS NULL OR requested_power_limit_w >= 0",
+            name="ck_charging_sessions_power_limit_nonnegative",
         ),
         Index("ix_charging_sessions_user_started", "user_id", "started_at"),
         Index("ix_charging_sessions_cp_started", "charge_point_code", "started_at"),

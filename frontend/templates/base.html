@@ -72,6 +72,18 @@
       </a>
       {% endif %}
 
+      {% if 'admin' in current_user.roles or 'station_owner' in current_user.roles %}
+      <a href="/stations/revenue" id="nav-station-revenue"
+         class="sidebar__link {% if active_page == 'station-revenue' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'station-revenue' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="1" x2="12" y2="23"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        Báo cáo doanh thu
+      </a>
+      {% endif %}
+
       {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'accountant' in current_user.roles or 'station_owner' in current_user.roles %}
       <a href="/sessions" id="nav-sessions"
          class="sidebar__link {% if active_page == 'sessions' %}is-active{% endif %}"
@@ -120,6 +132,18 @@
       </a>
       {% endif %}
 
+      {% if 'admin' in current_user.roles or 'accountant' in current_user.roles %}
+      <a href="/sessions/financial-reconciliation" id="nav-financial-reconciliation"
+         class="sidebar__link {% if active_page == 'financial-reconciliation' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'financial-reconciliation' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 9v12M9 15h12" />
+        </svg>
+        Đối soát điện và tiền
+      </a>
+      {% endif %}
+
       <div class="sidebar__section-label">Tài khoản</div>
 
       {% if 'admin' in current_user.roles or 'accountant' in current_user.roles or 'driver' in current_user.roles %}
@@ -135,6 +159,22 @@
       {% endif %}
 
       {% if 'driver' in current_user.roles %}
+      <a href="/driver/stations" id="nav-driver-stations"
+         class="sidebar__link {% if active_page == 'station-finder' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'station-finder' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+        Tìm trạm sạc
+      </a>
+      <a href="/driver/session" id="nav-driver-session"
+         class="sidebar__link {% if active_page == 'driver-session' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'driver-session' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        Phiên sạc của tôi
+      </a>
       <a href="/sessions/mine" id="nav-my-sessions"
          class="sidebar__link {% if active_page == 'my-sessions' %}is-active{% endif %}"
          aria-current="{% if active_page == 'my-sessions' %}page{% endif %}">
