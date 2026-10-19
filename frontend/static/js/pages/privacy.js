@@ -17,6 +17,7 @@
   let _currentDriverBalance = 0;
   let _activeRequest = null;
   let _adminRequests = [];
+  let _adminLoadError = null;
   let _selectedReqId = null;
 
   /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -54,104 +55,18 @@
     setTimeout(() => t.remove(), 3500);
   }
 
-  /* ── Mock Data Fallbacks ──────────────────────────────────────────────── */
-  function getMockProfile() {
-    return {
-      display_name: 'Nguyễn Văn An',
-      email: 'an.nguyen@driver.vn',
-      phone: '0912 345 678',
-      plate_number: '29A-998.24',
-      charging_sessions_count: 14,
-      balance_vnd: 0, // Mặc định 0 ₫ để test đủ điều kiện
-      active_request: null,
-    };
-  }
-
-  function getMockAdminRequests() {
-    const now = Date.now();
-    return [
-      {
-        id: 'REQ-20261017-001',
-        driver_name: 'Trần Văn Hùng',
-        driver_email: 'hung.tran@gmail.com',
-        driver_phone: '0988 123 456',
-        plate_number: '30E-123.45',
-        reason: 'privacy_location_concern',
-        reason_label: 'Lo ngại rò rỉ dữ liệu vị trí',
-        reason_detail: 'Tôi đã bán xe điện và muốn xóa toàn bộ lịch sử di chuyển.',
-        balance_vnd: 0,
-        active_sessions_count: 0,
-        status: 'pending',
-        created_at: new Date(now - 2 * 3600_000).toISOString(),
-      },
-      {
-        id: 'REQ-20261016-002',
-        driver_name: 'Lê Hoàng Yến',
-        driver_email: 'yen.le@outlook.com',
-        driver_phone: '0903 555 777',
-        plate_number: '51G-888.99',
-        reason: 'right_to_be_forgotten',
-        reason_label: 'Thực hiện quyền theo Nghị định 13/2023/NĐ-CP',
-        reason_detail: 'Yêu cầu xóa tài khoản và ẩn danh hóa lịch sử sạc.',
-        balance_vnd: 150000, // Còn số dư dương -> Không đủ điều kiện duyệt
-        active_sessions_count: 0,
-        status: 'pending',
-        created_at: new Date(now - 24 * 3600_000).toISOString(),
-      },
-      {
-        id: 'REQ-20261014-003',
-        driver_name: 'Phạm Quốc Bảo',
-        driver_email: 'bao.pham@driver.vn',
-        driver_phone: '0934 999 111',
-        plate_number: '43A-667.12',
-        reason: 'no_longer_using_ev',
-        reason_label: 'Không còn sử dụng xe điện',
-        reason_detail: 'Chuyển công tác nước ngoài.',
-        balance_vnd: 0,
-        active_sessions_count: 0,
-        status: 'approved',
-        created_at: new Date(now - 72 * 3600_000).toISOString(),
-        anonymized_at: new Date(now - 48 * 3600_000).toISOString(),
-      },
-      {
-        id: 'REQ-20261012-004',
-        driver_name: 'Đặng Mai Phương',
-        driver_email: 'phuong.dang@gmail.com',
-        driver_phone: '0911 222 333',
-        plate_number: '60B-345.67',
-        reason: 'other',
-        reason_label: 'Lý do khác',
-        reason_detail: 'Tài khoản không dùng nữa.',
-        balance_vnd: 50000,
-        active_sessions_count: 0,
-        status: 'rejected',
-        reject_reason: 'Ví còn số dư 50.000 ₫, vui lòng rút tiền trước khi nộp yêu cầu.',
-        created_at: new Date(now - 120 * 3600_000).toISOString(),
-      },
-    ];
-  }
-
   /* ── Driver View Functions ────────────────────────────────────────────── */
   async function loadDriverData() {
     let profile;
     try {
-      if (ApiClient.getPrivacyProfile) {
-        profile = await ApiClient.getPrivacyProfile();
-      } else {
-        profile = getMockProfile();
-      }
-    } catch (_) {
-      profile = getMockProfile();
-    }
-
-    // Try fetching real wallet balance
-    try {
-      if (ApiClient.getWallet) {
-        const wallet = await ApiClient.getWallet();
-        profile.balance_vnd = wallet.balance_vnd ?? profile.balance_vnd;
-      }
-    } catch (_) {
-      // Keep profile.balance_vnd
+      profile = await ApiClient.getPrivacyProfile();
+    } catch (error) {
+      showToast(error?.message || 'Không tải được hồ sơ quyền riêng tư.', 'error');
+      const balanceEl = document.getElementById('wallet-check-amount');
+      if (balanceEl) balanceEl.textContent = 'Không tải được';
+      const submitBtn = document.getElementById('btn-submit-deletion');
+      if (submitBtn) submitBtn.disabled = true;
+      return;
     }
 
     _currentDriverBalance = Number(profile.balance_vnd || 0);
@@ -165,8 +80,8 @@
 
     if (nameEl) nameEl.textContent = profile.display_name || 'Tài xế';
     if (emailEl) emailEl.textContent = profile.email || '—';
-    if (phoneEl) phoneEl.textContent = profile.phone || '—';
-    if (plateEl) plateEl.textContent = profile.plate_number || '—';
+    if (phoneEl) phoneEl.textContent = profile.phone || 'Không lưu';
+    if (plateEl) plateEl.textContent = profile.plate_number || 'Không lưu';
     if (sessionsEl) sessionsEl.textContent = profile.charging_sessions_count ?? 0;
 
     // Check balance logic (AC S-57)
@@ -178,10 +93,10 @@
 
     if (amountEl) amountEl.textContent = fmtVnd(_currentDriverBalance);
 
-    if (_currentDriverBalance > 0) {
+    if (_currentDriverBalance !== 0) {
       if (tagWallet) {
         tagWallet.className = 'tag tag--warning';
-        tagWallet.textContent = 'Còn số dư';
+        tagWallet.textContent = 'Chưa bằng 0';
       }
       if (alertPos) alertPos.classList.remove('is-hidden');
       if (alertZero) alertZero.classList.add('is-hidden');
@@ -203,7 +118,7 @@
     }
 
     // Check active request
-    _activeRequest = profile.active_request || _activeRequest;
+    _activeRequest = profile.active_request || null;
     renderDriverRequestState();
   }
 
@@ -211,7 +126,7 @@
     const cardForm = document.getElementById('card-request-form');
     const cardActive = document.getElementById('card-active-request');
 
-    if (!_activeRequest || _activeRequest.status === 'cancelled') {
+    if (!_activeRequest || ['cancelled', 'rejected'].includes(_activeRequest.status)) {
       if (cardForm) cardForm.classList.remove('is-hidden');
       if (cardActive) cardActive.classList.add('is-hidden');
     } else {
@@ -260,23 +175,27 @@
 
   /* ── Admin View Functions ─────────────────────────────────────────────── */
   async function loadAdminData() {
-    let requests;
     try {
-      if (ApiClient.listDataDeletionRequests) {
-        requests = await ApiClient.listDataDeletionRequests();
-      } else {
-        requests = getMockAdminRequests();
-      }
-    } catch (_) {
-      requests = getMockAdminRequests();
+      const requests = await ApiClient.listDataDeletionRequests();
+      _adminRequests = requests.items || [];
+      _adminLoadError = null;
+    } catch (error) {
+      _adminRequests = [];
+      _adminLoadError = error?.message || 'Không tải được danh sách yêu cầu.';
+      showToast(error?.message || 'Không tải được danh sách yêu cầu.', 'error');
     }
-
-    _adminRequests = requests.items || requests;
     updateAdminStats();
     renderAdminTable();
   }
 
   function updateAdminStats() {
+    if (_adminLoadError) {
+      ['adm-stat-total', 'adm-stat-pending', 'adm-stat-approved', 'adm-stat-rejected']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
+      const countEl = document.getElementById('adm-req-count');
+      if (countEl) countEl.textContent = 'Không tải được';
+      return;
+    }
     const total = _adminRequests.length;
     const pending = _adminRequests.filter(x => x.status === 'pending').length;
     const approved = _adminRequests.filter(x => x.status === 'approved').length;
@@ -299,6 +218,14 @@
   function renderAdminTable() {
     const tbody = document.getElementById('adm-tbody');
     if (!tbody) return;
+
+    if (_adminLoadError) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+        <div class="empty-state__title">Không tải được danh sách yêu cầu</div>
+        <div class="empty-state__desc">${esc(_adminLoadError)}</div>
+      </div></td></tr>`;
+      return;
+    }
 
     const search = document.getElementById('adm-filter-search')?.value.toLowerCase().trim() || '';
     const statusFilter = document.getElementById('adm-filter-status')?.value || '';
@@ -341,9 +268,9 @@
       }
 
       let balanceDisplay = '';
-      if (item.balance_vnd > 0) {
+      if (Number(item.balance_vnd) !== 0) {
         balanceDisplay = `<span style="color:hsl(0,70%,45%);font-weight:700;">${fmtVnd(item.balance_vnd)}</span>
-          <div style="font-size:10px;color:hsl(0,70%,45%);">Phải hoàn tiền trước</div>`;
+          <div style="font-size:10px;color:hsl(0,70%,45%);">Số dư phải đúng 0 ₫</div>`;
       } else {
         balanceDisplay = `<span style="color:hsl(140,65%,38%);font-weight:700;">0 ₫</span>
           <div style="font-size:10px;color:hsl(140,65%,38%);">Đủ điều kiện</div>`;
@@ -398,10 +325,22 @@
     const summaryEl = document.getElementById('approve-summary-content');
     if (summaryEl) {
       summaryEl.innerHTML = `
-        <div><strong>Tài xế:</strong> ${esc(item.driver_name)} (${esc(item.driver_email)})</div>
-        <div><strong>Biển số:</strong> ${esc(item.plate_number)}</div>
-        <div><strong>Số dư ví:</strong> ${fmtVnd(item.balance_vnd)} (Xác nhận = 0 ₫)</div>
-        <div><strong>Lý do yêu cầu:</strong> ${esc(item.reason_label || item.reason)}</div>
+        <div class="approve-summary__item">
+          <span class="approve-summary__label">Tài xế</span>
+          <span class="approve-summary__value">${esc(item.driver_name)} (${esc(item.driver_email)})</span>
+        </div>
+        <div class="approve-summary__item">
+          <span class="approve-summary__label">Biển số</span>
+          <span class="approve-summary__value">${esc(item.plate_number)}</span>
+        </div>
+        <div class="approve-summary__item">
+          <span class="approve-summary__label">Số dư ví</span>
+          <span class="approve-summary__value">${fmtVnd(item.balance_vnd)} (Xác nhận = 0 ₫)</span>
+        </div>
+        <div class="approve-summary__item approve-summary__item--full">
+          <span class="approve-summary__label">Lý do yêu cầu</span>
+          <span class="approve-summary__value">${esc(item.reason_label || item.reason)}</span>
+        </div>
       `;
     }
 
@@ -423,14 +362,20 @@
 
   /* ── DOMContentLoaded ────────────────────────────────────────────────── */
   document.addEventListener('DOMContentLoaded', () => {
-    // 1. Load Driver Data
-    loadDriverData();
-
-    // 2. Role tab switcher
+    const root = document.getElementById('privacy-root');
+    const isDriver = root?.dataset.isDriver === 'true';
     const tabDriver = document.getElementById('tab-driver-view');
     const tabAdmin = document.getElementById('tab-admin-view');
     const secDriver = document.getElementById('section-driver-view');
     const secAdmin = document.getElementById('section-admin-view');
+
+    if (isDriver) {
+      loadDriverData();
+    } else {
+      secDriver?.classList.add('is-hidden');
+      secAdmin?.classList.remove('is-hidden');
+      loadAdminData();
+    }
 
     if (tabDriver && tabAdmin) {
       tabDriver.addEventListener('click', () => {
@@ -459,8 +404,8 @@
       form.addEventListener('submit', async e => {
         e.preventDefault();
 
-        if (_currentDriverBalance > 0) {
-          showToast('Ví của bạn còn số dư dương. Vui lòng rút tiền trước khi nộp yêu cầu.', 'error');
+        if (_currentDriverBalance !== 0) {
+          showToast('Số dư ví phải đúng bằng 0 đồng trước khi gửi yêu cầu.', 'error');
           return;
         }
 
@@ -489,26 +434,18 @@
           password: pwd,
         };
 
+        const submitBtn = document.getElementById('btn-submit-deletion');
+        submitBtn.disabled = true;
         try {
-          if (ApiClient.requestDataDeletion) {
-            _activeRequest = await ApiClient.requestDataDeletion(payload);
-          } else {
-            _activeRequest = {
-              id: `REQ-${Date.now().toString().slice(-6)}`,
-              created_at: new Date().toISOString(),
-              status: 'pending',
-              reason: payload.reason,
-              reason_label: payload.reason_label,
-              reason_detail: payload.reason_detail,
-            };
-          }
+          _activeRequest = await ApiClient.requestDataDeletion(payload);
+          document.getElementById('req-password-confirm').value = '';
+          showToast('Đã nộp yêu cầu xóa dữ liệu cá nhân thành công', 'success');
+          renderDriverRequestState();
         } catch (error) {
-          showToast(error?.message || 'Không thể gửi yêu cầu. Vui lòng thử lại.', 'error');
-          return;
+          showToast(error?.message || 'Không gửi được yêu cầu.', 'error');
+        } finally {
+          submitBtn.disabled = _currentDriverBalance !== 0;
         }
-
-        showToast('Đã nộp yêu cầu xóa dữ liệu cá nhân thành công', 'success');
-        renderDriverRequestState();
       });
     }
 
@@ -518,16 +455,12 @@
       btnCancel.addEventListener('click', async () => {
         if (!confirm('Bạn có chắc chắn muốn hủy yêu cầu xóa dữ liệu này?')) return;
         try {
-          if (ApiClient.cancelDataDeletionRequest && _activeRequest?.id) {
-            await ApiClient.cancelDataDeletionRequest(_activeRequest.id);
-          }
+          _activeRequest = await ApiClient.cancelDataDeletionRequest(_activeRequest.id);
+          showToast('Đã hủy yêu cầu xóa dữ liệu', 'info');
+          renderDriverRequestState();
         } catch (error) {
-          showToast(error?.message || 'Không thể hủy yêu cầu. Vui lòng thử lại.', 'error');
-          return;
+          showToast(error?.message || 'Không hủy được yêu cầu.', 'error');
         }
-        _activeRequest = null;
-        showToast('Đã hủy yêu cầu xóa dữ liệu', 'info');
-        renderDriverRequestState();
       });
     }
 
@@ -556,22 +489,13 @@
     document.getElementById('modal-approve-confirm')?.addEventListener('click', async () => {
       if (!_selectedReqId) return;
       try {
-        if (ApiClient.approveDataDeletionRequest) {
-          await ApiClient.approveDataDeletionRequest(_selectedReqId);
-        }
+        await ApiClient.approveDataDeletionRequest(_selectedReqId);
+        showToast('Đã phê duyệt và hoàn tất ẩn danh hóa dữ liệu', 'success');
+        closeModals();
+        await loadAdminData();
       } catch (error) {
-        showToast(error?.message || 'Không thể duyệt yêu cầu. Vui lòng thử lại.', 'error');
-        return;
+        showToast(error?.message || 'Không thể phê duyệt yêu cầu.', 'error');
       }
-      const item = _adminRequests.find(x => String(x.id) === String(_selectedReqId));
-      if (item) {
-        item.status = 'approved';
-        item.anonymized_at = new Date().toISOString();
-      }
-      showToast('Đã phê duyệt và hoàn tất ẩn danh hóa dữ liệu', 'success');
-      closeModals();
-      updateAdminStats();
-      renderAdminTable();
     });
 
     document.getElementById('modal-reject-confirm')?.addEventListener('click', async () => {
@@ -582,22 +506,13 @@
         return;
       }
       try {
-        if (ApiClient.rejectDataDeletionRequest) {
-          await ApiClient.rejectDataDeletionRequest(_selectedReqId, { reason });
-        }
+        await ApiClient.rejectDataDeletionRequest(_selectedReqId, { reason });
+        showToast('Đã từ chối yêu cầu xóa dữ liệu', 'info');
+        closeModals();
+        await loadAdminData();
       } catch (error) {
-        showToast(error?.message || 'Không thể từ chối yêu cầu. Vui lòng thử lại.', 'error');
-        return;
+        showToast(error?.message || 'Không thể từ chối yêu cầu.', 'error');
       }
-      const item = _adminRequests.find(x => String(x.id) === String(_selectedReqId));
-      if (item) {
-        item.status = 'rejected';
-        item.reject_reason = reason;
-      }
-      showToast('Đã từ chối yêu cầu xóa dữ liệu', 'info');
-      closeModals();
-      updateAdminStats();
-      renderAdminTable();
     });
 
     // ESC to close modals

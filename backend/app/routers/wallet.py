@@ -311,6 +311,7 @@ async def create_sandbox_topup(
         actor_id=current_user.id,
         actor_email=current_user.email,
         actor_name=current_user.full_name,
+        target_user_id=current_user.id,
         details={"order_code": tx.order_code, "amount_vnd": tx.amount_vnd},
     )
     db.commit()
@@ -377,6 +378,7 @@ async def sandbox_topup_webhook(
             actor_id=tx.user_id,
             actor_email=None,
             actor_name=None,
+            target_user_id=tx.user_id,
             details={
                 "order_code": tx.order_code,
                 "amount_vnd": tx.amount_vnd,
@@ -448,6 +450,7 @@ async def simulate_sandbox_payment(
             actor_id=current_user.id,
             actor_email=current_user.email,
             actor_name=current_user.full_name,
+            target_user_id=current_user.id,
             details={
                 "order_code": tx.order_code,
                 "amount_vnd": tx.amount_vnd,

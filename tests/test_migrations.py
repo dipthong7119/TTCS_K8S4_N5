@@ -270,6 +270,7 @@ def test_seeded_demo_users_have_working_documented_passwords(migrated_database) 
         "operator@csms.local": "Operator@2024!",
         "accountant@csms.local": "Accountant@2024!",
         "driver@csms.local": "Driver@2024!",
+        "driver2@csms.local": "Driver2@2024!",
     }
 
     with engine.connect() as connection:

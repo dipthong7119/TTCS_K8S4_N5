@@ -26,8 +26,7 @@
   let _pendingAckId = null;
   let _pendingAckCode = null;
   let _tickTimer    = null;   // cập nhật duration mỗi giây
-  let _prevCount    = null;   // phát hiện cảnh báo mới qua SSE
-  let _useMock      = false;
+  let _prevCount    = null;   // phát hiện cảnh báo mới qua SSE/poll
 
   /* ── Helpers ──────────────────────────────────────────────────────────── */
   function esc(s) {
@@ -62,6 +61,7 @@
 
   /** Tính mức độ dựa trên loại và thời gian */
   function getSeverity(alert) {
+    if (alert.severity === 'critical' || alert.severity === 'warning') return alert.severity;
     if (alert.alert_type === 'faulted') {
       const mins = minutesSince(alert.started_at);
       return mins >= OFFLINE_CRIT_MIN ? 'critical' : mins >= OFFLINE_WARN_MIN ? 'warning' : 'info';
@@ -87,54 +87,47 @@
       <line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
   };
 
-  /* ── Mock data (fallback khi chưa có BE) ─────────────────────────────── */
-  function getMockAlerts() {
-    const now = Date.now();
-    return [
-      { id: 'mock-1', alert_type: 'offline', charge_point_code: 'CP_VINCOM_01',
-        station_name: 'Trạm Vincom Center', started_at: new Date(now - 150 * 60_000).toISOString(),
-        error_code: null, vendor_error_code: null, info: null, acknowledged_by: null },
-      { id: 'mock-2', alert_type: 'faulted', charge_point_code: 'CP_HANOI_03',
-        station_name: 'Trạm Hà Nội City', started_at: new Date(now - 45 * 60_000).toISOString(),
-        error_code: 'GroundFailure', vendor_error_code: 'E04', info: 'Ground fault detected on connector 1',
-        acknowledged_by: null },
-      { id: 'mock-3', alert_type: 'offline', charge_point_code: 'CP_TIMES_02',
-        station_name: 'Trạm Times City', started_at: new Date(now - 20 * 60_000).toISOString(),
-        error_code: null, vendor_error_code: null, info: null, acknowledged_by: null },
-      { id: 'mock-4', alert_type: 'faulted', charge_point_code: 'CP_ROYAL_01',
-        station_name: 'Trạm Royal City', started_at: new Date(now - 200 * 60_000).toISOString(),
-        error_code: 'EVCommunicationError', vendor_error_code: null, info: 'Repeated EV comm errors',
-        acknowledged_by: 'operator@csms.vn' },
-      { id: 'mock-5', alert_type: 'offline', charge_point_code: 'CP_ECOPARK_01',
-        station_name: 'Trạm Eco Park', started_at: new Date(now - 310 * 60_000).toISOString(),
-        error_code: null, vendor_error_code: null, info: null, acknowledged_by: null },
-    ];
-  }
-
   /* ── API calls ─────────────────────────────────────────────────────────── */
   async function fetchAlerts() {
     try {
-      const data = await ApiClient.listOperationalAlerts();
-      _useMock = false;
-      return Array.isArray(data) ? data : (data.items || []);
-    } catch (_) {
-      _useMock = true;
-      return getMockAlerts();
+      const first = await ApiClient.listOperationalAlerts({ skip: 0, limit: 100 });
+      const items = [...(first.items || [])];
+      for (let skip = items.length; skip < first.total; skip += 100) {
+        const page = await ApiClient.listOperationalAlerts({ skip, limit: 100 });
+        items.push(...(page.items || []));
+      }
+      return items.map(item => ({
+        ...item,
+        alert_type: item.alert_type === 'connector_error' ? 'faulted' : item.alert_type,
+        started_at: item.triggered_at,
+        station_name: item.station_name || item.charge_point_code,
+        error_code: item.error_code || (item.error_count ? `${item.error_count} lỗi liên tiếp` : null),
+        info: item.message,
+        acknowledged_by: item.status === 'resolved'
+          ? (item.resolved_by_id ? `Tài khoản #${item.resolved_by_id}` : 'Đã xử lý tự động')
+          : null,
+      }));
+    } catch (error) {
+      showToast(error?.message || 'Không tải được cảnh báo vận hành.', 'error');
+      return null;
     }
   }
 
   async function acknowledgeAlert(id) {
-    try {
-      await ApiClient.acknowledgeAlert(id);
-    } catch (_) {
-      // mock: no-op
-    }
+    return ApiClient.acknowledgeAlert(id, 'Đã xác nhận xử lý từ trang cảnh báo vận hành');
   }
 
   /* ── Load & render ─────────────────────────────────────────────────────── */
   async function load() {
     const raw = await fetchAlerts();
+    if (raw === null) {
+      document.getElementById('alerts-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state__title">Không tải được cảnh báo</div><div class="empty-state__desc">Kiểm tra kết nối rồi bấm Làm mới.</div></div></td></tr>';
+      document.getElementById('stat-total').textContent = '—';
+      document.getElementById('alerts-result-count').textContent = 'Không có dữ liệu';
+      return;
+    }
     const prevCount = _prevCount;
+    const activeAlerts = raw.filter(alert => alert.status === 'active');
 
     // apply filters
     const typeF   = document.getElementById('alert-type-filter').value;
@@ -142,7 +135,7 @@
     const sortF   = document.getElementById('alert-sort-filter').value;
     const search  = (document.getElementById('alert-search').value || '').toLowerCase().trim();
 
-    let list = raw.map(a => ({ ...a, _sev: getSeverity(a), _mins: minutesSince(a.started_at) }));
+    let list = activeAlerts.map(a => ({ ...a, _sev: getSeverity(a), _mins: minutesSince(a.started_at) }));
 
     if (typeF)   list = list.filter(a => a.alert_type === typeF);
     if (sevF)    list = list.filter(a => a._sev === sevF);
@@ -156,11 +149,11 @@
     else list.sort((a, b) => (a.station_name || '').localeCompare(b.station_name || '', 'vi'));
 
     _allAlerts = list;
-    _prevCount = raw.length;
+    _prevCount = activeAlerts.length;
 
     // detect new alerts via SSE
-    if (prevCount !== null && raw.length > prevCount) {
-      showNewBanner(raw.length - prevCount);
+    if (prevCount !== null && activeAlerts.length > prevCount) {
+      showNewBanner(activeAlerts.length - prevCount);
     }
 
     updateStats(raw);
@@ -171,10 +164,12 @@
   }
 
   function updateStats(raw) {
-    const offline  = raw.filter(a => a.alert_type === 'offline').length;
-    const faulted  = raw.filter(a => a.alert_type === 'faulted').length;
-    const resolved = raw.filter(a => a.acknowledged_by).length;
-    document.getElementById('stat-total').textContent   = raw.length;
+    const active = raw.filter(a => a.status === 'active');
+    const offline  = active.filter(a => a.alert_type === 'offline').length;
+    const faulted  = active.filter(a => a.alert_type === 'faulted').length;
+    const today = new Date().toISOString().slice(0, 10);
+    const resolved = raw.filter(a => a.status === 'resolved' && a.resolved_at?.slice(0, 10) === today).length;
+    document.getElementById('stat-total').textContent   = active.length;
     document.getElementById('stat-offline').textContent = offline;
     document.getElementById('stat-faulted').textContent = faulted;
     document.getElementById('stat-resolved').textContent = resolved;
@@ -396,11 +391,15 @@
         </div>
       </div>`;
 
-    document.getElementById('alert-detail-modal').classList.remove('is-hidden');
+    const modal = document.getElementById('alert-detail-modal');
+    modal.classList.remove('is-hidden');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   function closeDetailModal() {
-    document.getElementById('alert-detail-modal').classList.add('is-hidden');
+    const modal = document.getElementById('alert-detail-modal');
+    modal.classList.add('is-hidden');
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   /* ── Acknowledge modal ────────────────────────────────────────────────── */
@@ -408,11 +407,15 @@
     _pendingAckId   = id;
     _pendingAckCode = code;
     document.getElementById('ack-cp-code').textContent = code;
-    document.getElementById('modal-ack-confirm').classList.remove('is-hidden');
+    const modal = document.getElementById('modal-ack-dialog');
+    modal.classList.remove('is-hidden');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   function closeAckModal() {
-    document.getElementById('modal-ack-confirm').classList.add('is-hidden');
+    const modal = document.getElementById('modal-ack-dialog');
+    modal.classList.add('is-hidden');
+    modal.setAttribute('aria-hidden', 'true');
     _pendingAckId = _pendingAckCode = null;
   }
 
@@ -436,7 +439,9 @@
 
     if (typeof SseClient !== 'undefined') {
       SseClient.connect('/api/monitoring/sse');
-      SseClient.on('status_change', () => load());
+      SseClient.on('status_update', () => load());
+      SseClient.on('_connected', setConnected);
+      SseClient.on('_error', setDisconnected);
       setConnected();
     } else {
       setDisconnected();
@@ -454,32 +459,6 @@
     _pollTimer = setInterval(() => {
       if (!document.hidden) load();
     }, POLL_INTERVAL_MS);
-  }
-
-  /* ── Test helpers (SCRUM-90 debug chips) ─────────────────────────────── */
-  function injectMockAlert(type) {
-    const now = Date.now();
-    const mins = type === 'offline' ? 150 : 45;
-    const fake = {
-      id: `test-${Date.now()}`,
-      alert_type: type,
-      charge_point_code: type === 'offline' ? 'CP_TEST_OFFLINE' : 'CP_TEST_FAULT',
-      station_name: 'Trạm Kiểm Thử',
-      started_at: new Date(now - mins * 60_000).toISOString(),
-      error_code: type === 'faulted' ? 'GroundFailure' : null,
-      vendor_error_code: type === 'faulted' ? 'E04' : null,
-      info: type === 'faulted' ? 'Kiểm thử lỗi SCRUM-90' : null,
-      acknowledged_by: null,
-    };
-    // inject into current list and re-render
-    const existing = _allAlerts.find(a => a.id === fake.id);
-    if (!existing) {
-      _allAlerts.unshift({ ...fake, _sev: getSeverity(fake), _mins: minutesSince(fake.started_at) });
-      _page = 1;
-      renderTable();
-      renderPagination();
-      showToast(`Test: Đã thêm cảnh báo ${type === 'offline' ? 'ngoại tuyến' : 'báo lỗi'}`, 'info');
-    }
   }
 
   /* ── DOMContentLoaded ────────────────────────────────────────────────── */
@@ -545,14 +524,11 @@
     });
 
     // Test chips
-    document.getElementById('btn-test-scrum90-offline')?.addEventListener('click', () => injectMockAlert('offline'));
-    document.getElementById('btn-test-scrum90-fault')?.addEventListener('click',   () => injectMockAlert('faulted'));
-
     // ESC to close modals
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       if (!document.getElementById('alert-detail-modal').classList.contains('is-hidden')) closeDetailModal();
-      if (!document.getElementById('modal-ack-confirm').classList.contains('is-hidden'))  closeAckModal();
+      if (!document.getElementById('modal-ack-dialog').classList.contains('is-hidden')) closeAckModal();
     });
   });
 })();
