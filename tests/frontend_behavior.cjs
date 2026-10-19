@@ -687,17 +687,26 @@ test('SCRUM-85 financial reconciliation client calls the real report endpoint wi
     charge_point_code: 'CP-42', status: 'review',
   });
   await api.lockFinancialReconciliationPeriod({ station_id: 42, from_date: '2026-10-01', to_date: '2026-10-05' });
+  await api.reopenFinancialReconciliationPeriod({
+    station_id: 42, from_date: '2026-10-01', to_date: '2026-10-05', reason: 'Rà soát lại',
+  });
 
   assert.equal(requestedUrls[0],
     '/api/reconciliation/financial?from_date=2026-10-01&to_date=2026-10-19&station_id=42&charge_point_code=CP-42&status=review');
   assert.equal(requestedUrls[1], '/api/reconciliation/financial/lock');
+  assert.equal(requestedUrls[2], '/api/reconciliation/financial/reopen');
 });
 
 function financialPage(getReport, options = {}) {
   const ids = new Map();
+  const adminOnlyIds = new Set([
+    'financial-reopen', 'financial-reopen-modal', 'financial-reopen-reason',
+    'financial-reopen-confirm', 'financial-reopen-cancel', 'financial-reopen-close',
+  ]);
   const document = {
     handlers: {},
     getElementById(id) {
+      if (!options.canReopen && adminOnlyIds.has(id)) return null;
       if (!ids.has(id)) ids.set(id, element());
       return ids.get(id);
     },
@@ -737,6 +746,7 @@ function financialPage(getReport, options = {}) {
         getFinancialReconciliation: getReport,
         lockFinancialReconciliationPeriod: options.lockPeriod || (async () => financialFixture),
         exportFinancialReconciliationCsv: options.exportCsv || (async () => 'financial.csv'),
+        reopenFinancialReconciliationPeriod: options.reopenPeriod || (async () => financialFixture),
       },
       confirm: options.confirm || (() => false),
     },
@@ -856,6 +866,130 @@ test('SCRUM-87 financial page confirms closing and then disables a locked period
   assert.equal(page.document.getElementById('financial-lock').disabled, true);
   assert.equal(page.document.getElementById('financial-lock').textContent, 'Kỳ đã khóa');
   assert.match(page.document.getElementById('financial-period-state').textContent, /Đã khóa lúc/);
+});
+
+test('SCRUM-87 reopen control is shown only for an admin on a locked period', async () => {
+  const openPage = financialPage(async () => financialFixture, {
+    canReopen: true,
+    stationId: 42,
+  });
+  await flush();
+  assert.equal(openPage.document.getElementById('financial-reopen').hidden, true);
+
+  const lockedPage = financialPage(async params => ({
+    ...financialFixture,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), { canReopen: true, stationId: 42 });
+  await flush();
+  assert.equal(lockedPage.document.getElementById('financial-reopen').hidden, false);
+  assert.equal(lockedPage.document.getElementById('financial-reopen').disabled, false);
+});
+
+test('SCRUM-87 reopen confirmation sends period and optional reason, then refreshes state', async () => {
+  let reopenPayload;
+  const cleanReport = structuredClone(financialFixture);
+  cleanReport.rows[0].issues = [];
+  cleanReport.summary.review_count = 0;
+  const page = financialPage(async params => ({
+    ...cleanReport,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), {
+    canReopen: true,
+    stationId: 42,
+    reopenPeriod: async payload => {
+      reopenPayload = payload;
+      return {
+        ...cleanReport,
+        period: { from_date: payload.from_date, to_date: payload.to_date, station_id: 42 },
+        period_state: 'open',
+        locked_at: null,
+        locked_by: null,
+      };
+    },
+  });
+  await flush();
+  page.document.getElementById('financial-from').value = '2020-10-01';
+  page.document.getElementById('financial-to').value = '2020-10-05';
+  page.document.getElementById('financial-filter-form').handlers.submit({ preventDefault() { } });
+  await flush();
+
+  page.document.getElementById('financial-reopen').handlers.click();
+  assert.equal(page.document.getElementById('financial-reopen-modal').classList.contains('is-hidden'), false);
+  page.document.getElementById('financial-reopen-reason').value = 'Rà soát số liệu';
+  await page.document.getElementById('financial-reopen-confirm').handlers.click();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(reopenPayload)), {
+    station_id: 42,
+    from_date: '2020-10-01',
+    to_date: '2020-10-05',
+    status: 'all',
+    reason: 'Rà soát số liệu',
+  });
+  assert.equal(page.document.getElementById('financial-reopen-modal').classList.contains('is-hidden'), true);
+  assert.equal(page.document.getElementById('financial-reopen').hidden, true);
+  assert.equal(page.document.getElementById('financial-lock').disabled, false);
+  assert.match(page.document.getElementById('financial-message').textContent, /đã được mở lại/);
+});
+
+test('SCRUM-87 reopen reports permission, state, missing-period, and network errors', async () => {
+  const cases = [
+    [{ status: 403, message: 'Forbidden' }, /Chỉ quản trị viên/],
+    [{ status: 400, message: 'Kỳ đối soát chưa được chốt' }, /chưa được chốt/],
+    [{ status: 404, message: 'Not found' }, /Không tìm thấy kỳ/],
+    [new Error('network'), /Không kết nối được máy chủ/],
+  ];
+  for (const [failure, expected] of cases) {
+    const page = financialPage(async params => ({
+      ...financialFixture,
+      period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+      period_state: 'locked',
+      locked_at: '2026-10-20T00:00:00Z',
+      locked_by: 7,
+    }), {
+      canReopen: true,
+      stationId: 42,
+      reopenPeriod: async () => { throw failure; },
+    });
+    await flush();
+    page.document.getElementById('financial-reopen').handlers.click();
+    await page.document.getElementById('financial-reopen-confirm').handlers.click();
+    const message = page.document.getElementById('financial-message');
+    assert.match(message.textContent, expected);
+    assert.equal(message.className, 'alert alert--danger');
+    assert.equal(page.document.getElementById('financial-reopen').hidden, false);
+    assert.equal(page.document.getElementById('financial-reopen').disabled, false);
+  }
+});
+
+test('SCRUM-87 reopen control shows a pending state while the API request is running', async () => {
+  let resolveReopen;
+  const page = financialPage(async params => ({
+    ...financialFixture,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), {
+    canReopen: true,
+    stationId: 42,
+    reopenPeriod: () => new Promise(resolve => { resolveReopen = resolve; }),
+  });
+  await flush();
+  page.document.getElementById('financial-reopen').handlers.click();
+  const request = page.document.getElementById('financial-reopen-confirm').handlers.click();
+  const confirm = page.document.getElementById('financial-reopen-confirm');
+  assert.equal(confirm.disabled, true);
+  assert.equal(confirm.textContent, 'Đang mở lại…');
+  resolveReopen({ ...financialFixture, period_state: 'open' });
+  await request;
+  assert.equal(confirm.disabled, false);
+  assert.equal(confirm.textContent, 'Xác nhận mở lại');
 });
 
 function auditPage(fetchResponse, filters = {}) {

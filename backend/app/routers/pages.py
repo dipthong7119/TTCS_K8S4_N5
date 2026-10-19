@@ -289,11 +289,15 @@ async def financial_reconciliation_page(
     request: Request,
     current_user: CurrentUser,
 ):
-    _require_any_role(current_user, "admin", "accountant", "station_owner")
+    roles = _require_any_role(current_user, "admin", "accountant", "station_owner")
     return templates.TemplateResponse(
         request,
         "sessions/financial_reconciliation.html",
-        _page_context(request, current_user),
+        _page_context(
+            request,
+            current_user,
+            can_reopen_period="admin" in roles,
+        ),
     )
 
 

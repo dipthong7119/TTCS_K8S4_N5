@@ -181,6 +181,8 @@ const ApiClient = (() => {
       _downloadCsv('/reconciliation/financial.csv', params, opts),
     lockFinancialReconciliationPeriod: (body, opts = {}) =>
       _request('POST', '/reconciliation/financial/lock', body, opts),
+    reopenFinancialReconciliationPeriod: (body, opts = {}) =>
+      _request('POST', '/reconciliation/financial/reopen', body, opts),
 
     // --- Wallet ---
     getWallet: () => _request('GET', '/wallet'),

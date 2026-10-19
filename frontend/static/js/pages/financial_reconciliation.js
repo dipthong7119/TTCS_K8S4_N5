@@ -12,6 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const lockButton = get('lock');
   const exportButton = get('export');
   const exportMessage = get('export-message');
+  const reopenButton = get('reopen');
+  const reopenModal = get('reopen-modal');
+  const reopenReason = get('reopen-reason');
+  const reopenConfirm = get('reopen-confirm');
+  const reopenCancel = get('reopen-cancel');
+  const reopenClose = get('reopen-close');
   const message = get('message');
   const periodState = get('period-state');
   const tbody = get('table-body');
@@ -58,6 +64,10 @@ document.addEventListener('DOMContentLoaded', () => {
     exportMessage.hidden = true;
     lockButton.disabled = true;
     lockButton.textContent = 'Chốt kỳ';
+    if (reopenButton) {
+      reopenButton.hidden = true;
+      reopenButton.disabled = true;
+    }
     periodState.textContent = 'Trạng thái kỳ chưa được tải.';
     Object.keys(fields).forEach(id => { get(id).textContent = '—'; });
     get('review-count').textContent = '—';
@@ -155,7 +165,15 @@ document.addEventListener('DOMContentLoaded', () => {
       periodState.textContent = `Đã khóa${lockedAt ? ` lúc ${lockedAt}` : ''}. Báo cáo đang dùng ảnh chụp đã chốt.`;
       lockButton.textContent = 'Kỳ đã khóa';
       lockButton.disabled = true;
+      if (reopenButton) {
+        reopenButton.hidden = false;
+        reopenButton.disabled = false;
+      }
       return;
+    }
+    if (reopenButton) {
+      reopenButton.hidden = true;
+      reopenButton.disabled = true;
     }
     periodState.textContent = 'Kỳ đang mở.';
     const endedPeriod = report.period?.to_date < todayInStationZone();
@@ -269,6 +287,58 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       notice(error.message || 'Không chốt được kỳ đối soát.', 'danger');
       if (lastReport) updatePeriodControls(lastReport);
+    }
+  });
+  function closeReopenModal() {
+    reopenModal?.classList.add('is-hidden');
+  }
+  function reopenErrorMessage(error) {
+    if (error.status === 403) return 'Chỉ quản trị viên mới được mở lại kỳ đối soát.';
+    if (error.status === 400) return error.message || 'Kỳ này chưa chốt hoặc đã được mở lại.';
+    if (error.status === 404) return 'Không tìm thấy kỳ đối soát đã chốt.';
+    if (!error.status) return 'Không kết nối được máy chủ. Hãy thử lại.';
+    return error.message || 'Không mở lại được kỳ đối soát.';
+  }
+  reopenButton?.addEventListener('click', () => {
+    if (!lastReport || lastReport.period_state !== 'locked' || reopenButton.disabled) return;
+    if (reopenReason) reopenReason.value = '';
+    reopenModal?.classList.remove('is-hidden');
+    reopenReason?.focus();
+  });
+  reopenCancel?.addEventListener('click', closeReopenModal);
+  reopenClose?.addEventListener('click', closeReopenModal);
+  reopenModal?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeReopenModal();
+  });
+  reopenConfirm?.addEventListener('click', async () => {
+    if (!lastReport || lastReport.period_state !== 'locked' || !station.value) return;
+    const payload = {
+      station_id: Number(station.value),
+      from_date: from.value,
+      to_date: to.value,
+      status: status.value,
+    };
+    if (chargePoint.value) payload.charge_point_code = chargePoint.value;
+    const reason = reopenReason?.value.trim();
+    if (reason) payload.reason = reason;
+    reopenConfirm.disabled = true;
+    reopenConfirm.textContent = 'Đang mở lại…';
+    reopenCancel.disabled = true;
+    if (reopenClose) reopenClose.disabled = true;
+    if (reopenButton) reopenButton.disabled = true;
+    try {
+      const report = await window.ApiClient.reopenFinancialReconciliationPeriod(payload);
+      closeReopenModal();
+      render(report);
+      notice('Kỳ đối soát đã được mở lại. Báo cáo đang dùng dữ liệu hiện tại.', 'info');
+    } catch (error) {
+      notice(reopenErrorMessage(error), 'danger');
+      if (lastReport) updatePeriodControls(lastReport);
+    } finally {
+      reopenConfirm.disabled = false;
+      reopenConfirm.textContent = 'Xác nhận mở lại';
+      reopenCancel.disabled = false;
+      if (reopenClose) reopenClose.disabled = false;
     }
   });
   station.addEventListener('change', () => updateFilters(filterOptions));

@@ -73,10 +73,35 @@
                 <button class="btn btn--secondary" id="financial-lock" type="button" disabled>
                     Chốt kỳ
                 </button>
+                {% if can_reopen_period %}
+                <button class="btn btn--danger" id="financial-reopen" type="button" hidden disabled>
+                    Mở lại kỳ
+                </button>
+                {% endif %}
             </div>
         </form>
     </div>
 </section>
+
+{% if can_reopen_period %}
+<div class="modal-backdrop is-hidden" id="financial-reopen-modal" role="dialog" aria-modal="true" aria-labelledby="financial-reopen-title">
+    <div class="modal">
+        <div class="modal__header">
+            <h2 class="modal__title" id="financial-reopen-title">Mở lại kỳ đối soát</h2>
+            <button class="modal__close" id="financial-reopen-close" type="button" aria-label="Đóng">×</button>
+        </div>
+        <div class="modal__body">
+            <p>Kỳ sẽ dùng số liệu hiện tại; snapshot đã chốt vẫn được giữ để đối chiếu.</p>
+            <label class="form-label" for="financial-reopen-reason">Lý do (không bắt buộc)</label>
+            <textarea class="form-input" id="financial-reopen-reason" maxlength="500" rows="3"></textarea>
+        </div>
+        <div class="modal__footer">
+            <button class="btn btn--secondary" id="financial-reopen-cancel" type="button">Huỷ</button>
+            <button class="btn btn--danger" id="financial-reopen-confirm" type="button">Xác nhận mở lại</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <p class="alert alert--info" id="financial-message" role="status">
     Chưa tải dữ liệu đối soát.
