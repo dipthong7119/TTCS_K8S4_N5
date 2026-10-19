@@ -2,7 +2,8 @@
 {% set active_page = "station-revenue" %}
 
 {% block title %}Báo cáo doanh thu & sản lượng điện{% endblock %}
-{% block meta_description %}Báo cáo doanh thu từ hóa đơn và sản lượng điện tiêu thụ theo trạm sạc và từng trụ.{% endblock %}
+{% block meta_description %}Báo cáo doanh thu từ hóa đơn và sản lượng điện tiêu thụ theo trạm sạc và từng trụ.{%
+endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -38,7 +39,8 @@
             <option value="" disabled selected>Chưa có trạm sạc nào</option>
             {% else %}
             {% for s in stations %}
-            <option value="{{ s.id }}" {% if selected_station_id == s.id %}selected{% elif loop.first and not selected_station_id %}selected{% endif %}>
+            <option value="{{ s.id }}" {% if selected_station_id==s.id %}selected{% elif loop.first and not
+              selected_station_id %}selected{% endif %}>
               {{ s.name }}{% if s.address %} — {{ s.address }}{% endif %}
             </option>
             {% endfor %}
@@ -59,8 +61,10 @@
         <div class="revenue-filter-actions">
           <label class="form-label">&nbsp;</label>
           <button type="button" class="btn btn--primary" id="btn-apply-filter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             Xem báo cáo
           </button>
@@ -73,7 +77,12 @@
         <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-week">Tuần này</button>
         <button type="button" class="btn btn--secondary btn--sm" id="btn-quick-month">Tháng này</button>
       </div>
-
+      <button class="btn btn--secondary" id="rev-export-csv" type="button" aria-describedby="rev-export-help" disabled>
+        Tải CSV doanh thu
+      </button>
+      <p id="rev-export-help" class="text-muted" role="status">
+        Chức năng tải CSV doanh thu chưa sẵn sàng.
+      </p>
       <div id="rev-err" class="form-error" role="alert" style="margin-top:var(--space-2);"></div>
     </div>
   </div>
