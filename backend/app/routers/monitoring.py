@@ -49,8 +49,17 @@ def notify_status_change(station_id: int, charge_points_data: list, owner_id: in
                 continue
 
 
-def notify_session_change(user_id: int | None, owner_id: int | None, session_id: int) -> None:
-    event = {"event": "session_update", "data": json.dumps({"session_id": session_id})}
+def notify_session_change(
+    user_id: int | None,
+    owner_id: int | None,
+    session_id: int,
+    *,
+    requested_power_limit_w: int | None = None,
+) -> None:
+    payload = {"session_id": session_id}
+    if requested_power_limit_w is not None:
+        payload["requested_power_limit_w"] = requested_power_limit_w
+    event = {"event": "session_update", "data": json.dumps(payload)}
     for subscriber in tuple(sse_clients):
         if (
             subscriber["global_access"]

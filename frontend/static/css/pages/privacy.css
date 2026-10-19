@@ -113,8 +113,15 @@
 .privacy-admin-table td:nth-child(5),
 .privacy-admin-table td:nth-child(6),
 .privacy-admin-table td:nth-child(7) {
-  white-space: nowrap;
+  white-space: normal;
 }
+.privacy-admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.privacy-admin-actions .btn { white-space: nowrap; }
 
 .privacy-admin-filters {
   display: grid;

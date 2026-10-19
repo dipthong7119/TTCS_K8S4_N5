@@ -36,6 +36,7 @@ def to_erasure_response(req: DataErasureRequest) -> DataErasureResponse:
         driver_name=driver_name,
         driver_email=driver_email,
         status=req.status,
+        resolution_action=req.resolution_action,
         request_reason=req.request_reason,
         rejection_reason=req.rejection_reason,
         requested_at=req.requested_at,
@@ -277,6 +278,20 @@ def approve_erasure_request(
             detail="Tài xế hiện có phiên sạc đang hoạt động, không thể thực hiện ẩn danh hóa.",
         )
 
+    active_reservation = (
+        db.query(Reservation)
+        .filter(
+            Reservation.user_id == target_user.id,
+            Reservation.status.in_([ReservationStatus.PENDING, ReservationStatus.ACTIVE]),
+        )
+        .first()
+    )
+    if active_reservation:
+        raise HTTPException(
+            status_code=400,
+            detail="Tài xế còn đặt chỗ chưa hoàn tất; hãy xử lý đặt chỗ trước khi xóa thông tin.",
+        )
+
     totals = wallet_totals(db, target_user.id)
     balance_vnd = totals.get("balance_vnd", 0)
     if balance_vnd > 0:
@@ -327,6 +342,7 @@ def approve_erasure_request(
 
     # 5. Cập nhật trạng thái yêu cầu
     req.status = "approved"
+    req.resolution_action = "delete_personal_data"
     req.processed_at = datetime.now(UTC).replace(tzinfo=None)
     req.processed_by = admin_user.id
 
@@ -342,9 +358,94 @@ def approve_erasure_request(
         target_user_id=target_user.id,
         details={
             "driver_id": target_user.id,
+            "resolution_action": req.resolution_action,
             "anonymized_sessions_count": len(sessions),
             "anonymized_tags_count": len(tags),
             "anonymized_reservations_count": len(reservations),
+            "status": "approved",
+        },
+    )
+
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+def hide_erasure_request(
+    db: Session, request_id: int, admin_user: User
+) -> DataErasureRequest:
+    """Disable driver sign-in while keeping the profile and all history intact."""
+    req = (
+        db.query(DataErasureRequest)
+        .filter(DataErasureRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu dữ liệu.")
+    if req.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Yêu cầu đã ở trạng thái '{req.status}', không thể xử lý lại.",
+        )
+
+    target_user = db.query(User).filter(User.id == req.user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản tài xế.")
+
+    active_session = (
+        db.query(ChargingSession)
+        .filter(
+            ChargingSession.user_id == target_user.id,
+            ChargingSession.status == "active",
+        )
+        .first()
+    )
+    if active_session:
+        raise HTTPException(
+            status_code=400,
+            detail="Tài xế đang có phiên sạc hoạt động; chưa thể ẩn tài khoản.",
+        )
+
+    active_reservation = (
+        db.query(Reservation)
+        .filter(
+            Reservation.user_id == target_user.id,
+            Reservation.status.in_([ReservationStatus.PENDING, ReservationStatus.ACTIVE]),
+        )
+        .first()
+    )
+    if active_reservation:
+        raise HTTPException(
+            status_code=400,
+            detail="Tài xế còn đặt chỗ chưa hoàn tất; hãy xử lý đặt chỗ trước khi ẩn tài khoản.",
+        )
+
+    balance_vnd = wallet_totals(db, target_user.id).get("balance_vnd", 0)
+    if balance_vnd > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ví tài xế còn số dư ({balance_vnd:,} đ); cần xử lý số dư trước khi ẩn tài khoản.",
+        )
+
+    target_user.is_active = False
+    req.status = "approved"
+    req.resolution_action = "hide_account"
+    req.processed_at = datetime.now(UTC).replace(tzinfo=None)
+    req.processed_by = admin_user.id
+
+    append_audit(
+        db=db,
+        action="privacy.request_hidden",
+        object_type="data_erasure_request",
+        object_id=req.id,
+        actor_id=admin_user.id,
+        actor_email=admin_user.email,
+        actor_name=admin_user.full_name,
+        target_user_id=target_user.id,
+        details={
+            "driver_id": target_user.id,
+            "resolution_action": req.resolution_action,
+            "profile_and_history_preserved": True,
             "status": "approved",
         },
     )

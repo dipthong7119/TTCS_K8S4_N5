@@ -77,8 +77,8 @@
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
         </div>
-        <h2 class="login-form-title">Đăng nhập</h2>
-        <p class="login-form-subtitle">Vui lòng nhập thông tin tài khoản của bạn</p>
+        <h2 class="login-form-title" id="login-view-title">Đăng nhập</h2>
+        <p class="login-form-subtitle" id="login-view-subtitle">Vui lòng nhập thông tin tài khoản của bạn</p>
       </div>
 
       <!-- Alert area (lỗi đăng nhập hiển thị ở đây) -->
@@ -91,6 +91,8 @@
         </svg>
         <span id="login-alert-text"></span>
       </div>
+      <div class="alert alert--success" id="register-success" role="status" aria-live="polite" hidden
+           style="margin-bottom:20px;"></div>
 
       <form id="login-form" novalidate>
         <div class="form-group">
@@ -141,6 +143,54 @@
           Đăng nhập
         </button>
       </form>
+
+      <button type="button" class="login-form-switch" id="show-register">
+        Chưa có tài khoản tài xế? <strong>Đăng ký</strong>
+      </button>
+
+      <form id="register-form" novalidate hidden>
+        <div class="alert alert--danger" id="register-alert" role="alert" aria-live="assertive" hidden></div>
+
+        <div class="form-group">
+          <label class="form-label" for="register-full-name">Họ và tên <span class="required" aria-hidden="true">*</span></label>
+          <input id="register-full-name" name="full_name" type="text" class="form-input"
+                 placeholder="Nguyễn Văn A" autocomplete="name" minlength="2" maxlength="255"
+                 required aria-required="true" aria-describedby="register-full-name-error" />
+          <p class="form-error" id="register-full-name-error" data-error="full_name" role="alert"></p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="register-email">Email <span class="required" aria-hidden="true">*</span></label>
+          <input id="register-email" name="email" type="email" class="form-input"
+                 placeholder="ten@email.com" autocomplete="email" maxlength="255"
+                 required aria-required="true" aria-describedby="register-email-error" />
+          <p class="form-error" id="register-email-error" data-error="email" role="alert"></p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="register-password">Mật khẩu <span class="required" aria-hidden="true">*</span></label>
+          <input id="register-password" name="password" type="password" class="form-input"
+                 placeholder="Ít nhất 8 ký tự" autocomplete="new-password" minlength="8" maxlength="128"
+                 required aria-required="true" aria-describedby="register-password-error" />
+          <p class="form-error" id="register-password-error" data-error="password" role="alert"></p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="register-password-confirm">Nhập lại mật khẩu <span class="required" aria-hidden="true">*</span></label>
+          <input id="register-password-confirm" name="password_confirm" type="password" class="form-input"
+                 placeholder="Nhập lại mật khẩu" autocomplete="new-password" required aria-required="true"
+                 aria-describedby="register-password-confirm-error" />
+          <p class="form-error" id="register-password-confirm-error" data-error="password_confirm" role="alert"></p>
+        </div>
+
+        <button type="submit" class="btn btn--primary" id="register-btn" style="width:100%;justify-content:center;margin-top:8px;">
+          Tạo tài khoản tài xế
+        </button>
+      </form>
+
+      <button type="button" class="login-form-switch" id="show-login" hidden>
+        Đã có tài khoản? <strong>Đăng nhập</strong>
+      </button>
 
       <p class="login-form-footer">
         Phiên bản <strong>1.0.0</strong> &mdash; CSMS &copy; 2026

@@ -283,17 +283,21 @@ async def sandbox_checkout_page(request: Request, current_user: CurrentUser, ord
 # SCRUM-231 / SCRUM-85 — Giao diện đối soát cho kế toán
 @router.get(
     "/sessions/financial-reconciliation",
-    dependencies=[Depends(require_role("admin", "accountant"))],
+    dependencies=[Depends(require_role("admin", "accountant", "station_owner"))],
 )
 async def financial_reconciliation_page(
     request: Request,
     current_user: CurrentUser,
 ):
-    _require_any_role(current_user, "admin", "accountant")
+    roles = _require_any_role(current_user, "admin", "accountant", "station_owner")
     return templates.TemplateResponse(
         request,
         "sessions/financial_reconciliation.html",
-        _page_context(request, current_user),
+        _page_context(
+            request,
+            current_user,
+            can_reopen_period="admin" in roles,
+        ),
     )
 
 

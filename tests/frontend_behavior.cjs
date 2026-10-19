@@ -580,7 +580,7 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
   assert.equal(instances[0].closes, 1);
 });
 
-function authClient(fetchResponse) {
+function authClient(fetchResponse, browser = {}) {
   const redirects = [];
   const window = {
     location: {
@@ -588,10 +588,409 @@ function authClient(fetchResponse) {
       search: '?status=fault', replace: url => redirects.push(url)
     }
   };
-  const context = vm.createContext({ window, fetch: fetchResponse, URL, URLSearchParams });
+  const context = vm.createContext({
+    window, fetch: fetchResponse, URL: browser.URL || URL, URLSearchParams,
+    document: browser.document,
+  });
   vm.runInContext(read('api_client.js'), context);
   return { api: window.ApiClient, redirects };
 }
+
+test('SCRUM-91 wallet audit client calls the backend audit endpoint', async () => {
+  let requestedUrl;
+  const { api } = authClient(async url => {
+    requestedUrl = url;
+    return auditResponse({ items: [], total: 0 });
+  });
+
+  await api.listWalletAuditLogs({ page: 1, page_size: 50 });
+
+  assert.equal(requestedUrl, '/api/audit?page=1&page_size=50');
+});
+
+test('SCRUM-83 power-band client exposes the backend CRUD routes', async () => {
+  const requested = [];
+  const { api } = authClient(async (url, config) => {
+    requested.push({ url, method: config.method });
+    return auditResponse({});
+  });
+
+  await api.listStationPowerCapacityBands(12);
+  await api.createStationPowerCapacityBand(12, { start_minute: 60 });
+  await api.updateStationPowerCapacityBand(12, 3, { start_minute: 60 });
+  await api.deleteStationPowerCapacityBand(12, 3);
+
+  assert.deepEqual(requested, [
+    { url: '/api/stations/12/power-capacity-bands', method: 'GET' },
+    { url: '/api/stations/12/power-capacity-bands', method: 'POST' },
+    { url: '/api/stations/12/power-capacity-bands/3', method: 'PUT' },
+    { url: '/api/stations/12/power-capacity-bands/3', method: 'DELETE' },
+  ]);
+});
+
+test('SCRUM-86 revenue-share client reads and creates contract versions', async () => {
+  const requested = [];
+  const { api } = authClient(async (url, config) => {
+    requested.push({ url, method: config.method, body: config.body });
+    return auditResponse({});
+  });
+
+  await api.listRevenueShareContracts();
+  await api.createRevenueShareContract({ station_owner_id: 7, partner_share_percent: 35 });
+
+  assert.equal(requested[0].url, '/api/subscriptions/revenue-share/contracts');
+  assert.equal(requested[0].method, 'GET');
+  assert.equal(requested[1].url, '/api/subscriptions/revenue-share/contracts');
+  assert.equal(requested[1].method, 'POST');
+  assert.deepEqual(JSON.parse(requested[1].body), { station_owner_id: 7, partner_share_percent: 35 });
+});
+
+test('SCRUM-88 CSV client applies filters and downloads the named file', async () => {
+  const calls = [];
+  const downloads = [];
+  const fakeUrl = {
+    createObjectURL: blob => { downloads.push(blob); return 'blob:report'; },
+    revokeObjectURL: value => downloads.push(`revoked:${value}`),
+  };
+  const document = {
+    body: { appendChild: link => { downloads.push(link); } },
+    createElement: tag => ({ tag, click() { downloads.push('clicked'); }, remove() { downloads.push('removed'); } }),
+  };
+  const { api } = authClient(async (url, config) => {
+    calls.push({ url, config });
+    return {
+      ok: true, status: 200,
+      headers: { get: name => name === 'Content-Disposition' ? 'attachment; filename="financial.csv"' : 'text/csv' },
+      blob: async () => ({ csv: true }),
+    };
+  }, { URL: fakeUrl, document });
+
+  const filename = await api.exportFinancialReconciliationCsv({ from_date: '2026-10-01', station_id: 42, status: 'all' });
+
+  assert.equal(filename, 'financial.csv');
+  assert.equal(calls[0].url, '/api/reconciliation/financial.csv?from_date=2026-10-01&station_id=42&status=all');
+  assert.equal(calls[0].config.headers.Accept, 'text/csv');
+  assert.equal(calls[0].config.credentials, 'include');
+  assert.ok(downloads.includes('clicked'));
+  assert.ok(downloads.includes('revoked:blob:report'));
+});
+
+test('SCRUM-85 financial reconciliation client calls the real report endpoint with filters', async () => {
+  const requestedUrls = [];
+  const { api } = authClient(async url => {
+    requestedUrls.push(url);
+    return auditResponse({ rows: [], summary: {}, filters: {} });
+  });
+
+  await api.getFinancialReconciliation({
+    from_date: '2026-10-01', to_date: '2026-10-19', station_id: 42,
+    charge_point_code: 'CP-42', status: 'review',
+  });
+  await api.lockFinancialReconciliationPeriod({ station_id: 42, from_date: '2026-10-01', to_date: '2026-10-05' });
+  await api.reopenFinancialReconciliationPeriod({
+    station_id: 42, from_date: '2026-10-01', to_date: '2026-10-05', reason: 'Rà soát lại',
+  });
+
+  assert.equal(requestedUrls[0],
+    '/api/reconciliation/financial?from_date=2026-10-01&to_date=2026-10-19&station_id=42&charge_point_code=CP-42&status=review');
+  assert.equal(requestedUrls[1], '/api/reconciliation/financial/lock');
+  assert.equal(requestedUrls[2], '/api/reconciliation/financial/reopen');
+});
+
+function financialPage(getReport, options = {}) {
+  const ids = new Map();
+  const adminOnlyIds = new Set([
+    'financial-reopen', 'financial-reopen-modal', 'financial-reopen-reason',
+    'financial-reopen-confirm', 'financial-reopen-cancel', 'financial-reopen-close',
+  ]);
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!options.canReopen && adminOnlyIds.has(id)) return null;
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement() {
+      const node = element();
+      node.append = function (...children) { this.children.push(...children); };
+      node.replaceChildren = function (...children) { this.children = children; };
+      node.setAttribute = function () { };
+      return node;
+    },
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  for (const name of ['filter-form', 'from', 'to', 'status', 'station', 'charge-point', 'apply']) {
+    document.getElementById(`financial-${name}`);
+  }
+  document.getElementById('financial-filter-form').reportValidity = () => true;
+  document.getElementById('financial-station').value = options.stationId ? String(options.stationId) : '';
+  document.getElementById('financial-status').value = 'all';
+  document.getElementById('financial-from').setCustomValidity = () => { };
+  document.getElementById('financial-from').reportValidity = () => true;
+  document.getElementById('financial-table-body').replaceChildren = function (...children) {
+    this.children = children;
+  };
+  document.getElementById('financial-table-body').append = function (child) {
+    this.children.push(child);
+  };
+  document.getElementById('financial-table-body').setAttribute = function () { };
+  for (const name of ['financial-review-list', 'financial-station', 'financial-charge-point']) {
+    const node = document.getElementById(name);
+    node.append = function (child) { this.children.push(child); };
+    node.replaceChildren = function (...children) { this.children = children; };
+  }
+  const context = vm.createContext({
+    document,
+    window: {
+      ApiClient: {
+        getFinancialReconciliation: getReport,
+        lockFinancialReconciliationPeriod: options.lockPeriod || (async () => financialFixture),
+        exportFinancialReconciliationCsv: options.exportCsv || (async () => 'financial.csv'),
+        reopenFinancialReconciliationPeriod: options.reopenPeriod || (async () => financialFixture),
+      },
+      confirm: options.confirm || (() => false),
+    },
+    Intl,
+    Date,
+    console,
+  });
+  vm.runInContext(read('pages/financial_reconciliation.js'), context);
+  document.handlers.DOMContentLoaded();
+  return { document };
+}
+
+const financialFixture = {
+  period: { from_date: '2026-10-01', to_date: '2026-10-19', station_id: 42 },
+  period_state: 'open',
+  locked_at: null,
+  locked_by: null,
+  rows: [{
+    session_id: 85, date: '2026-10-05', station_name: 'Station A', charge_point_code: 'CP-A',
+    energy_kwh: 2, expected_vnd: 8000, invoiced_vnd: 9000, collected_vnd: 8500,
+    difference_vnd: -500, invoice_difference_vnd: 1000,
+    issues: ['amount_mismatch', 'collection_mismatch'],
+  }],
+  summary: {
+    total_kwh: 2, total_expected_vnd: 8000, total_invoiced_vnd: 9000,
+    total_collected_vnd: 8500, total_difference_vnd: 500,
+    total_invoice_difference_vnd: 1000, review_count: 1,
+  },
+  filters: {
+    stations: [{ id: 42, name: 'Station A' }],
+    charge_points: [{ code: 'CP-A', station_id: 42 }],
+  },
+};
+
+test('SCRUM-85 financial page renders API totals and session mismatches', async () => {
+  let params;
+  const page = financialPage(async value => {
+    params = value;
+    return financialFixture;
+  });
+  await flush();
+
+  assert.ok(params.from_date);
+  assert.ok(params.to_date);
+  assert.equal(page.document.getElementById('financial-total-expected').textContent, '8.000',
+    page.document.getElementById('financial-message').textContent);
+  assert.equal(page.document.getElementById('financial-total-collected').textContent, '8.500');
+  assert.equal(page.document.getElementById('financial-review-count').textContent, '1');
+  const row = page.document.getElementById('financial-table-body').children[0];
+  assert.equal(row.children[0].textContent, 85);
+  assert.equal(row.children[5].textContent, '8.000');
+  assert.match(row.children[10].children[0].textContent, /Tiền thu lệch hóa đơn/);
+  assert.match(page.document.getElementById('financial-message').textContent, /Số liệu được tổng hợp từ phiên sạc/);
+});
+
+test('SCRUM-88 financial page exports the currently selected report filters', async () => {
+  let exported;
+  const page = financialPage(async () => financialFixture, {
+    stationId: 42,
+    exportCsv: async params => { exported = params; },
+  });
+  await flush();
+  await page.document.getElementById('financial-export').handlers.click();
+
+  assert.equal(exported.station_id, '42');
+  assert.equal(exported.from_date, page.document.getElementById('financial-from').value);
+  assert.equal(exported.to_date, page.document.getElementById('financial-to').value);
+  assert.equal(exported.status, 'all');
+  assert.equal(page.document.getElementById('financial-export-message').textContent, 'Đã tải báo cáo CSV.');
+});
+
+test('SCRUM-85 financial page reports loading and API failure states', async () => {
+  let rejectReport;
+  const page = financialPage(() => new Promise((_, reject) => { rejectReport = reject; }));
+  assert.equal(page.document.getElementById('financial-apply').textContent, 'Đang tải…');
+  rejectReport({ message: 'Máy chủ không phản hồi' });
+  await flush();
+  assert.equal(page.document.getElementById('financial-message').textContent, 'Máy chủ không phản hồi');
+  assert.equal(page.document.getElementById('financial-apply').disabled, false);
+});
+
+test('SCRUM-87 financial page confirms closing and then disables a locked period', async () => {
+  let lockPayload;
+  const cleanReport = structuredClone(financialFixture);
+  cleanReport.rows[0].issues = [];
+  cleanReport.summary.review_count = 0;
+  const page = financialPage(async params => ({
+    ...cleanReport,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+  }), {
+    stationId: 42,
+    confirm: () => true,
+    lockPeriod: async payload => {
+      lockPayload = payload;
+      return {
+        ...cleanReport,
+        period: { from_date: payload.from_date, to_date: payload.to_date, station_id: 42 },
+        period_state: 'locked',
+        locked_at: '2026-10-20T00:00:00Z',
+        locked_by: 7,
+      };
+    },
+  });
+  await flush();
+  page.document.getElementById('financial-from').value = '2020-10-01';
+  page.document.getElementById('financial-to').value = '2020-10-05';
+  page.document.getElementById('financial-filter-form').handlers.submit({ preventDefault() { } });
+  await flush();
+  assert.equal(page.document.getElementById('financial-lock').disabled, false,
+    page.document.getElementById('financial-period-state').textContent);
+  page.document.getElementById('financial-lock').handlers.click();
+  await flush();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(lockPayload)), {
+    station_id: 42, from_date: '2020-10-01', to_date: '2020-10-05',
+  });
+  assert.equal(page.document.getElementById('financial-lock').disabled, true);
+  assert.equal(page.document.getElementById('financial-lock').textContent, 'Kỳ đã khóa');
+  assert.match(page.document.getElementById('financial-period-state').textContent, /Đã khóa lúc/);
+});
+
+test('SCRUM-87 reopen control is shown only for an admin on a locked period', async () => {
+  const openPage = financialPage(async () => financialFixture, {
+    canReopen: true,
+    stationId: 42,
+  });
+  await flush();
+  assert.equal(openPage.document.getElementById('financial-reopen').hidden, true);
+
+  const lockedPage = financialPage(async params => ({
+    ...financialFixture,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), { canReopen: true, stationId: 42 });
+  await flush();
+  assert.equal(lockedPage.document.getElementById('financial-reopen').hidden, false);
+  assert.equal(lockedPage.document.getElementById('financial-reopen').disabled, false);
+});
+
+test('SCRUM-87 reopen confirmation sends period and optional reason, then refreshes state', async () => {
+  let reopenPayload;
+  const cleanReport = structuredClone(financialFixture);
+  cleanReport.rows[0].issues = [];
+  cleanReport.summary.review_count = 0;
+  const page = financialPage(async params => ({
+    ...cleanReport,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), {
+    canReopen: true,
+    stationId: 42,
+    reopenPeriod: async payload => {
+      reopenPayload = payload;
+      return {
+        ...cleanReport,
+        period: { from_date: payload.from_date, to_date: payload.to_date, station_id: 42 },
+        period_state: 'open',
+        locked_at: null,
+        locked_by: null,
+      };
+    },
+  });
+  await flush();
+  page.document.getElementById('financial-from').value = '2020-10-01';
+  page.document.getElementById('financial-to').value = '2020-10-05';
+  page.document.getElementById('financial-filter-form').handlers.submit({ preventDefault() { } });
+  await flush();
+
+  page.document.getElementById('financial-reopen').handlers.click();
+  assert.equal(page.document.getElementById('financial-reopen-modal').classList.contains('is-hidden'), false);
+  page.document.getElementById('financial-reopen-reason').value = 'Rà soát số liệu';
+  await page.document.getElementById('financial-reopen-confirm').handlers.click();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(reopenPayload)), {
+    station_id: 42,
+    from_date: '2020-10-01',
+    to_date: '2020-10-05',
+    status: 'all',
+    reason: 'Rà soát số liệu',
+  });
+  assert.equal(page.document.getElementById('financial-reopen-modal').classList.contains('is-hidden'), true);
+  assert.equal(page.document.getElementById('financial-reopen').hidden, true);
+  assert.equal(page.document.getElementById('financial-lock').disabled, false);
+  assert.match(page.document.getElementById('financial-message').textContent, /đã được mở lại/);
+});
+
+test('SCRUM-87 reopen reports permission, state, missing-period, and network errors', async () => {
+  const cases = [
+    [{ status: 403, message: 'Forbidden' }, /Chỉ quản trị viên/],
+    [{ status: 400, message: 'Kỳ đối soát chưa được chốt' }, /chưa được chốt/],
+    [{ status: 404, message: 'Not found' }, /Không tìm thấy kỳ/],
+    [new Error('network'), /Không kết nối được máy chủ/],
+  ];
+  for (const [failure, expected] of cases) {
+    const page = financialPage(async params => ({
+      ...financialFixture,
+      period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+      period_state: 'locked',
+      locked_at: '2026-10-20T00:00:00Z',
+      locked_by: 7,
+    }), {
+      canReopen: true,
+      stationId: 42,
+      reopenPeriod: async () => { throw failure; },
+    });
+    await flush();
+    page.document.getElementById('financial-reopen').handlers.click();
+    await page.document.getElementById('financial-reopen-confirm').handlers.click();
+    const message = page.document.getElementById('financial-message');
+    assert.match(message.textContent, expected);
+    assert.equal(message.className, 'alert alert--danger');
+    assert.equal(page.document.getElementById('financial-reopen').hidden, false);
+    assert.equal(page.document.getElementById('financial-reopen').disabled, false);
+  }
+});
+
+test('SCRUM-87 reopen control shows a pending state while the API request is running', async () => {
+  let resolveReopen;
+  const page = financialPage(async params => ({
+    ...financialFixture,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+    period_state: 'locked',
+    locked_at: '2026-10-20T00:00:00Z',
+    locked_by: 7,
+  }), {
+    canReopen: true,
+    stationId: 42,
+    reopenPeriod: () => new Promise(resolve => { resolveReopen = resolve; }),
+  });
+  await flush();
+  page.document.getElementById('financial-reopen').handlers.click();
+  const request = page.document.getElementById('financial-reopen-confirm').handlers.click();
+  const confirm = page.document.getElementById('financial-reopen-confirm');
+  assert.equal(confirm.disabled, true);
+  assert.equal(confirm.textContent, 'Đang mở lại…');
+  resolveReopen({ ...financialFixture, period_state: 'open' });
+  await request;
+  assert.equal(confirm.disabled, false);
+  assert.equal(confirm.textContent, 'Xác nhận mở lại');
+});
 
 function auditPage(fetchResponse, filters = {}) {
   const ids = new Map();
@@ -1624,11 +2023,11 @@ function revenueSharingPage(getReport = async () => ({
   partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
   items: [{
     partner_name: 'Trạm An Phú', partner_email: 'owner@example.test',
-    policy_label: 'Quy tắc mặc định 60%', share_percent: 60,
-    base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20,
+    policy_label: 'Hợp đồng #27', share_percent: 37.5,
+    base_revenue_vnd: 100000, shared_amount_vnd: 37500, energy_kwh: 20,
   }],
-  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
-})) {
+  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 37500 },
+}), options = {}) {
   const ids = new Map();
   const document = {
     handlers: {},
@@ -1653,7 +2052,14 @@ function revenueSharingPage(getReport = async () => ({
     Intl,
     Math,
     Option: function (text, value) { return { text, value }; },
-    ApiClient: { getRevenueShareReport: getReport },
+    ApiClient: {
+      getRevenueShareReport: getReport,
+      listRevenueShareContracts: async () => ({
+        partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }], items: []
+      }),
+      createRevenueShareContract: async () => ({}),
+      exportRevenueShareCsv: options.exportCsv || (async () => 'revenue-share.csv'),
+    },
   });
 
   const script = read('pages/revenue_sharing.js');
@@ -1661,14 +2067,14 @@ function revenueSharingPage(getReport = async () => ({
   return { document, ids };
 }
 
-test('SCRUM-254: default month loads the 60 percent revenue share report', async () => {
+test('SCRUM-86: report displays the ratio returned by the effective contract', async () => {
   let query;
   const page = revenueSharingPage(async params => {
     query = params;
     return {
       partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
-      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Quy tắc mặc định 60%', share_percent: 60, base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20 }],
-      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Hợp đồng #27', share_percent: 37.5, base_revenue_vnd: 100000, shared_amount_vnd: 37500, energy_kwh: 20 }],
+      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 37500 },
     };
   });
   await flush();
@@ -1681,10 +2087,24 @@ test('SCRUM-254: default month loads the 60 percent revenue share report', async
   assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
   const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
   assert.ok(tableMessage.includes('Trạm An Phú'));
-  assert.ok(tableMessage.includes('Quy tắc mặc định 60%'));
-  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '60.000 ₫');
+  assert.ok(tableMessage.includes('Hợp đồng #27'));
+  assert.ok(tableMessage.includes('37,5%'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '37.500 ₫');
   assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
   assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
+});
+
+test('SCRUM-88 revenue-share page exports the displayed period and partner filters', async () => {
+  let exported;
+  const page = revenueSharingPage(undefined, { exportCsv: async params => { exported = params; } });
+  await flush();
+  page.document.getElementById('rev-share-partner').value = '7';
+  await page.document.getElementById('btn-export-csv').handlers.click();
+
+  assert.equal(exported.date_from, page.document.getElementById('rev-share-from').value);
+  assert.equal(exported.date_to, page.document.getElementById('rev-share-to').value);
+  assert.equal(exported.station_owner_id, '7');
+  assert.equal(page.document.getElementById('rev-share-export-message').textContent, 'Đã tải bảng kê CSV.');
 });
 
 test('SCRUM-254: inverted date range displays validation error without an extra API call', async () => {
@@ -1847,6 +2267,7 @@ function revenuePage(getRevenue, options = {}) {
           { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
         ],
       })),
+      exportStationRevenueCsv: options.exportRevenue || (async () => 'station.csv'),
     },
   });
 
@@ -1886,6 +2307,17 @@ test('SCRUM-84: revenue page loads initial month data and renders KPI stats and 
   assert.ok(page.document.getElementById('stat-kwh').textContent.includes('120,5'));
   assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-01'));
   assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-02'));
+});
+
+test('SCRUM-88 station revenue page exports the selected station and date range', async () => {
+  let exported;
+  const page = revenuePage(null, { exportRevenue: async (id, params) => { exported = { id, params }; } });
+  await flush();
+  await page.document.getElementById('btn-export-csv').handlers.click();
+
+  assert.equal(exported.id, '101');
+  assert.equal(exported.params.start_date, page.document.getElementById('rev-start').value);
+  assert.equal(exported.params.end_date, page.document.getElementById('rev-end').value);
 });
 
 test('SCRUM-84: inverted date range shows validation error and avoids API call', async () => {

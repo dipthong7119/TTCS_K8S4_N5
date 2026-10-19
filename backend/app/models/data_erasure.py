@@ -35,6 +35,7 @@ class DataErasureRequest(Base):
     request_reason = Column(String(500), nullable=True)
     request_reason_label = Column(String(255), nullable=True)
     request_reason_detail = Column(String(2000), nullable=True)
+    resolution_action = Column(String(32), nullable=True)
     rejection_reason = Column(String(500), nullable=True)
     requested_at = Column(DateTime, nullable=False, server_default=func.now())
     processed_at = Column(DateTime, nullable=True)
@@ -53,6 +54,10 @@ class DataErasureRequest(Base):
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'cancelled')",
             name="ck_data_erasure_requests_status",
+        ),
+        CheckConstraint(
+            "resolution_action IS NULL OR resolution_action IN ('delete_personal_data', 'hide_account')",
+            name="ck_data_erasure_requests_resolution_action",
         ),
         Index("ix_data_erasure_requests_user_status", "user_id", "status"),
     )

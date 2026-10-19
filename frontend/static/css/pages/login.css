@@ -120,6 +120,22 @@
   color: var(--color-text-muted);
 }
 
+.login-form-switch {
+  display: block;
+  margin: var(--space-5) auto 0;
+  padding: var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.login-form-switch strong { color: var(--color-primary); font-weight: 700; }
+.login-form-switch:hover strong { text-decoration: underline; }
+.login-form-switch:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: var(--radius-sm); }
+#register-form .alert { margin-bottom: var(--space-4); }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .login-brand { display: none; }

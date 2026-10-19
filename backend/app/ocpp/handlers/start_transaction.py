@@ -10,6 +10,10 @@ from app.models.station import Station
 from app.ocpp.handlers.authorize import authorize_tag
 from app.services.ocpp_handlers import _parse_timestamp
 from app.services.ocpp_parser import pack_call_error, pack_call_result
+from app.services.reconciliation_periods import (
+    FinancialPeriodLocked,
+    ensure_station_period_open,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,20 @@ def handle_start_transaction(db: Session, point: ChargePoint, msg_id: str, paylo
     station = db.query(Station).filter(Station.id == point.station_id).first()
     effective_status = auth_status if connector is not None else "Invalid"
     accepted = effective_status == "Accepted"
+
+    try:
+        ensure_station_period_open(
+            db,
+            station.id if station else None,
+            started_at,
+            started_at,
+        )
+    except FinancialPeriodLocked as exc:
+        logger.warning(
+            "StartTransaction rejected because reconciliation period is locked: cp=%s",
+            point.code,
+        )
+        return pack_call_error(msg_id, "SecurityError", str(exc))
 
     if accepted:
         previous = (
