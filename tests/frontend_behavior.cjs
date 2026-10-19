@@ -2088,7 +2088,7 @@ test('SCRUM-86: report displays the ratio returned by the effective contract', a
   const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
   assert.ok(tableMessage.includes('Trạm An Phú'));
   assert.ok(tableMessage.includes('Hợp đồng #27'));
-  assert.ok(tableMessage.includes('37.5%'));
+  assert.ok(tableMessage.includes('37,5%'));
   assert.equal(page.document.getElementById('stat-shared-amount').textContent, '37.500 ₫');
   assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
   assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
