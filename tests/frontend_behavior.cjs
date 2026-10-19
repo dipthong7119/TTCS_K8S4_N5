@@ -1732,6 +1732,77 @@ test('SCRUM-254: quick filter buttons update dates and maintain clean state', as
   assert.equal(page.document.getElementById('rev-share-error').hidden, true);
 });
 
+test('SCRUM-254: page copy does not assume the same 60 percent policy for all partners', () => {
+  const template = fs.readFileSync(path.join(root, 'frontend/templates/sessions/revenue_sharing.html'), 'utf8');
+  assert.ok(template.includes('Xem chính sách, tỉ lệ áp dụng và số tiền được chia cho từng đối tác'));
+  assert.ok(!template.includes('60%'));
+});
+
+test('SCRUM-254: displays separate partner percentages and supplied amounts without a common rate', async () => {
+  const page = revenueSharingPage(async () => ({
+    partners: [{ id: 7, name: 'Đối tác A', email: 'a@example.test' }, { id: 8, name: 'Đối tác B', email: 'b@example.test' }],
+    items: [
+      { partner_name: 'Đối tác A', policy_label: 'Chính sách A', share_percent: 35, base_revenue_vnd: 100000, shared_amount_vnd: 35000, energy_kwh: 10 },
+      { partner_name: 'Đối tác B', policy_label: 'Chính sách B', share_percent: 72.5, base_revenue_vnd: 200000, shared_amount_vnd: 145000, energy_kwh: 20 },
+    ],
+    totals: { base_revenue_vnd: 300000, shared_amount_vnd: 180000 },
+  }));
+  await flush();
+  const rows = page.document.getElementById('rev-share-tbody').innerHTML.match(/<tr>[\s\S]*?<\/tr>/g);
+  assert.equal(rows.length, 2);
+  assert.ok(rows[0].includes('Chính sách A') && rows[0].includes('35%') && rows[0].includes('35.000 ₫'));
+  assert.ok(rows[1].includes('Chính sách B') && rows[1].includes('72,5%') && rows[1].includes('145.000 ₫'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '180.000 ₫');
+  assert.equal(page.document.getElementById('tfoot-shared-amount').textContent, '180.000 ₫');
+});
+
+test('SCRUM-254: unknown or invalid percentages are unavailable rather than a fabricated zero rate', async () => {
+  for (const share_percent of [undefined, null, '', '60', -1, 101, NaN, Infinity]) {
+    const page = revenueSharingPage(async () => ({
+      partners: [], items: [{ partner_name: 'Đối tác A', policy_label: 'Chưa xác định', share_percent,
+        base_revenue_vnd: 10000, shared_amount_vnd: 5000, energy_kwh: 1 }],
+      totals: { base_revenue_vnd: 10000, shared_amount_vnd: 5000 },
+    }));
+    await flush();
+    const html = page.document.getElementById('rev-share-tbody').innerHTML;
+    assert.ok(html.includes('<td class="text-right">—</td>'));
+    assert.ok(!html.includes('NaN%') && !html.includes('0%'));
+  }
+});
+
+test('SCRUM-254: a supplied zero percentage remains a valid zero', async () => {
+  const page = revenueSharingPage(async () => ({
+    partners: [], items: [{ partner_name: 'Đối tác A', policy_label: 'Miễn chia', share_percent: 0,
+      base_revenue_vnd: 10000, shared_amount_vnd: 0, energy_kwh: 1 }],
+    totals: { base_revenue_vnd: 10000, shared_amount_vnd: 0 },
+  }));
+  await flush();
+  assert.ok(page.document.getElementById('rev-share-tbody').innerHTML.includes('<td class="text-right">0%</td>'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '0 ₫');
+});
+
+test('SCRUM-254: preserves backend rounded dong amounts instead of multiplying by the displayed rate', async () => {
+  const page = revenueSharingPage(async () => ({
+    partners: [], items: [{ partner_name: 'Đối tác A', policy_label: 'Quy tắc mặc định 60%', share_percent: 60,
+      base_revenue_vnd: 10001, shared_amount_vnd: 6001, energy_kwh: 1 }],
+    totals: { base_revenue_vnd: 10001, shared_amount_vnd: 6001 },
+  }));
+  await flush();
+  assert.ok(page.document.getElementById('rev-share-tbody').innerHTML.includes('6.001 ₫'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '6.001 ₫');
+  assert.equal(page.document.getElementById('tfoot-shared-amount').textContent, '6.001 ₫');
+});
+
+test('SCRUM-254: empty report does not claim a subscription-specific cause', async () => {
+  const page = revenueSharingPage(async () => ({
+    partners: [], items: [], totals: { base_revenue_vnd: 0, shared_amount_vnd: 0 },
+  }));
+  await flush();
+  const html = page.document.getElementById('rev-share-tbody').innerHTML;
+  assert.ok(html.includes('Không có dữ liệu chia doanh thu trong kỳ đã chọn.'));
+  assert.equal(page.document.getElementById('rev-share-tfoot').hidden, true);
+});
+
 function revenuePage(getRevenue, options = {}) {
   const ids = new Map();
   const document = {
