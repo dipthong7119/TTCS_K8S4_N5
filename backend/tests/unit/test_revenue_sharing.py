@@ -61,6 +61,9 @@ def test_revenue_sharing_page_permissions(db_session):
     assert "Số tiền được chia" in res_acc.text
     assert "Doanh thu làm cơ sở phân chia" in res_acc.text
     assert "Tỉ lệ của đối tác và nền tảng được lấy từ hợp đồng" in res_acc.text
+    assert "Xem chính sách, tỉ lệ áp dụng và số tiền được chia cho từng đối tác" in res_acc.text
+    assert "Tổng số tiền được chia theo bảng kê" in res_acc.text
+    assert "60%" not in res_acc.text
     assert "Báo cáo chưa sẵn sàng. Vui lòng thử lại sau." not in res_acc.text
     assert 'id="rev-share-partner" class="form-select"' in res_acc.text
 

@@ -24,6 +24,8 @@
   let reportLoaded = false;
   const money = value => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
   const energy = value => `${Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kWh`;
+  const percent = value => Number.isFinite(value) && value >= 0 && value <= 100
+    ? `${value.toLocaleString('vi-VN', { maximumFractionDigits: 20 })}%` : '—';
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const localDateTime = value => {
@@ -125,7 +127,7 @@
     document.getElementById('stat-shared-amount').textContent = money(report.totals?.shared_amount_vnd);
 
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có lượt sử dụng gói thuê bao trong kỳ đã chọn.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có dữ liệu chia doanh thu trong kỳ đã chọn.</td></tr>';
       tfoot.hidden = true;
       notReadyBox.hidden = true;
       return;
@@ -134,7 +136,7 @@
     tbody.innerHTML = items.map(item => `<tr>
       <td><strong>${esc(item.partner_name)}</strong><br><small>${esc(item.partner_email)}</small></td>
       <td>${esc(item.policy_label)}</td>
-      <td class="text-right">${Number(item.share_percent)}%</td>
+      <td class="text-right">${percent(item.share_percent)}</td>
       <td class="text-right">${money(item.base_revenue_vnd)}</td>
       <td class="text-right"><strong>${money(item.shared_amount_vnd)}</strong><br><small>${energy(item.energy_kwh)}</small></td>
     </tr>`).join('');
