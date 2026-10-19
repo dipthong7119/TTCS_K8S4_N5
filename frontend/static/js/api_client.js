@@ -96,6 +96,7 @@ const ApiClient = (() => {
 
     // --- Auth ---
     login: (email, password) => _request('POST', '/auth/login', { email, password }),
+    registerDriver: (body) => _request('POST', '/auth/register', body),
     logout: () => _request('POST', '/auth/logout'),
 
     // --- Stations ---
@@ -246,6 +247,8 @@ const ApiClient = (() => {
     },
     approveDataDeletionRequest: (id, body = {}) =>
       _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/approve`, body),
+    hideDataDeletionRequest: (id) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/hide`),
     rejectDataDeletionRequest: (id, body = {}) =>
       _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/reject`, body),
 

@@ -251,7 +251,7 @@
         <div class="stat-card__sub">cần thẩm định</div>
       </div>
       <div class="stat-card stat-card--green">
-        <div class="stat-card__label">Đã ẩn danh hóa</div>
+        <div class="stat-card__label">Đã xử lý</div>
         <div class="stat-card__value" id="adm-stat-approved">—</div>
         <div class="stat-card__sub">hoàn tất theo NĐ 13</div>
       </div>
@@ -273,7 +273,7 @@
         <select class="form-select" id="adm-filter-status">
           <option value="">Tất cả trạng thái</option>
           <option value="pending">Chờ phê duyệt</option>
-          <option value="approved">Đã ẩn danh hóa</option>
+          <option value="approved">Đã xử lý</option>
           <option value="rejected">Đã từ chối</option>
           <option value="cancelled">Tài xế đã hủy</option>
         </select>
@@ -324,12 +324,12 @@
   {% endif %}
 </div>
 
-<!-- Modal Duyệt Ẩn Danh Hóa (Admin) -->
+<!-- Modal Xóa Thông Tin Cá Nhân (Admin) -->
 <div class="privacy-modal is-hidden" id="modal-approve-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-approve-title">
   <div class="privacy-modal__backdrop" id="modal-approve-backdrop"></div>
   <div class="modal__dialog privacy-modal__dialog">
     <div class="modal__header">
-      <h2 class="modal__title" id="modal-approve-title">Phê duyệt ẩn danh hóa dữ liệu</h2>
+      <h2 class="modal__title" id="modal-approve-title">Xóa thông tin cá nhân</h2>
       <button class="modal__close" id="modal-approve-close" type="button" aria-label="Đóng">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -339,12 +339,37 @@
     <div class="modal__body">
       <div class="approve-summary" id="approve-summary-content"><!-- injected --></div>
       <div class="privacy-alert privacy-alert--warning" style="margin-top:var(--space-3);">
-        <strong>Cảnh báo hành động:</strong> Hệ thống sẽ ẩn danh hóa tài khoản và dữ liệu vị trí, đồng thời giữ hóa đơn, giao dịch ví và sổ cái để đối soát.
+        <strong>Cảnh báo hành động không thể hoàn tác:</strong> Hệ thống sẽ xóa định danh cá nhân và ẩn danh lịch sử; hóa đơn, giao dịch ví và sổ cái vẫn được giữ để đối soát.
       </div>
     </div>
     <div class="modal__footer">
       <button class="btn btn--secondary" id="modal-approve-cancel" type="button">Hủy bỏ</button>
-      <button class="btn btn--danger" id="modal-approve-confirm" type="button">Xác nhận Ẩn danh hóa</button>
+      <button class="btn btn--danger" id="modal-approve-confirm" type="button">Xác nhận xóa thông tin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ẩn Tài Khoản (Admin) -->
+<div class="privacy-modal is-hidden" id="modal-hide-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-hide-title">
+  <div class="privacy-modal__backdrop" id="modal-hide-backdrop"></div>
+  <div class="modal__dialog privacy-modal__dialog">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-hide-title">Ẩn tài khoản</h2>
+      <button class="modal__close" id="modal-hide-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="approve-summary" id="hide-summary-content"><!-- injected --></div>
+      <div class="privacy-alert privacy-alert--warning" style="margin-top:var(--space-3);">
+        Tài khoản sẽ bị khóa đăng nhập. Hồ sơ, lịch sử sạc, hóa đơn và sổ cái được giữ nguyên.
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="modal-hide-cancel" type="button">Hủy bỏ</button>
+      <button class="btn btn--primary" id="modal-hide-confirm" type="button">Xác nhận ẩn tài khoản</button>
     </div>
   </div>
 </div>

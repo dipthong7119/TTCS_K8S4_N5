@@ -154,11 +154,14 @@
         if (stepAnon) stepAnon.className = 'timeline-step';
         if (btnCancel) btnCancel.classList.remove('is-hidden');
       } else if (_activeRequest.status === 'approved') {
+        const hiddenAccount = _activeRequest.resolution_action === 'hide_account';
         if (badgeEl) {
           badgeEl.className = 'tag tag--success';
-          badgeEl.textContent = 'Đã hoàn tất';
+          badgeEl.textContent = hiddenAccount ? 'Đã ẩn tài khoản' : 'Đã hoàn tất';
         }
-        if (descEl) descEl.textContent = 'Dữ liệu cá nhân và lịch sử vị trí sạc của bạn đã được ẩn danh hóa thành công.';
+        if (descEl) descEl.textContent = hiddenAccount
+          ? 'Tài khoản đã bị khóa đăng nhập; hồ sơ và lịch sử vẫn được lưu.'
+          : 'Thông tin cá nhân đã được xóa khỏi lịch sử nhận dạng; chứng từ kế toán vẫn được lưu.';
         if (stepReview) stepReview.className = 'timeline-step is-complete';
         if (stepAnon) stepAnon.className = 'timeline-step is-complete';
         if (btnCancel) btnCancel.classList.add('is-hidden');
@@ -254,13 +257,16 @@
       const isPending = item.status === 'pending';
       const isBalanceZero = (item.balance_vnd || 0) === 0;
       const isNoActiveSessions = (item.active_sessions_count || 0) === 0;
-      const canApprove = isPending && isBalanceZero && isNoActiveSessions;
+      const isNoActiveReservations = (item.active_reservations_count || 0) === 0;
+      const canApprove = isPending && isBalanceZero && isNoActiveSessions && isNoActiveReservations;
+      const disabledTitle = 'Ví còn tiền, phiên sạc hoặc đặt chỗ đang hoạt động';
 
       let statusBadge = '';
       if (item.status === 'pending') {
         statusBadge = '<span class="req-badge req-badge--pending">Chờ phê duyệt</span>';
       } else if (item.status === 'approved') {
-        statusBadge = '<span class="req-badge req-badge--approved">Đã ẩn danh hóa</span>';
+        const label = item.resolution_action === 'hide_account' ? 'Đã ẩn tài khoản' : 'Đã xóa thông tin cá nhân';
+        statusBadge = `<span class="req-badge req-badge--approved">${label}</span>`;
       } else if (item.status === 'rejected') {
         statusBadge = '<span class="req-badge req-badge--rejected">Bị từ chối</span>';
       } else {
@@ -293,14 +299,19 @@
           ${item.active_sessions_count > 0 ? `<span class="tag tag--danger">${item.active_sessions_count} phiên</span>` : '<span style="color:var(--color-text-secondary);">0</span>'}
         </td>
         <td>${statusBadge}</td>
-        <td class="text-right" style="white-space:nowrap;">
+        <td class="text-right">
           ${isPending ? `
-            <button class="btn btn--primary btn--sm btn-adm-approve" data-id="${item.id}" type="button" ${!canApprove ? 'disabled title="Ví còn tiền hoặc có phiên đang chạy"' : ''}>
-              Duyệt ẩn danh
-            </button>
-            <button class="btn btn--secondary btn--sm btn-adm-reject" data-id="${item.id}" type="button">
-              Từ chối
-            </button>
+            <div class="privacy-admin-actions">
+              <button class="btn btn--danger btn--sm btn-adm-approve" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
+                Xóa dữ liệu
+              </button>
+              <button class="btn btn--secondary btn--sm btn-adm-hide" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
+                Ẩn tài khoản
+              </button>
+              <button class="btn btn--secondary btn--sm btn-adm-reject" data-id="${item.id}" type="button">
+                Từ chối
+              </button>
+            </div>
           ` : `
             <span style="font-size:11px;color:var(--color-text-secondary);">Đã xử lý</span>
           `}
@@ -311,6 +322,9 @@
     // Attach event listeners for buttons
     tbody.querySelectorAll('.btn-adm-approve').forEach(btn => {
       btn.addEventListener('click', () => openApproveModal(btn.dataset.id));
+    });
+    tbody.querySelectorAll('.btn-adm-hide').forEach(btn => {
+      btn.addEventListener('click', () => openHideModal(btn.dataset.id));
     });
     tbody.querySelectorAll('.btn-adm-reject').forEach(btn => {
       btn.addEventListener('click', () => openRejectModal(btn.dataset.id));
@@ -354,8 +368,29 @@
     document.getElementById('modal-reject-dialog')?.classList.remove('is-hidden');
   }
 
+  function openHideModal(id) {
+    const item = _adminRequests.find(x => String(x.id) === String(id));
+    if (!item) return;
+    _selectedReqId = id;
+    const summaryEl = document.getElementById('hide-summary-content');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="approve-summary__item">
+          <span class="approve-summary__label">Tài xế</span>
+          <span class="approve-summary__value">${esc(item.driver_name)} (${esc(item.driver_email)})</span>
+        </div>
+        <div class="approve-summary__item">
+          <span class="approve-summary__label">Số dư ví</span>
+          <span class="approve-summary__value">${fmtVnd(item.balance_vnd)}</span>
+        </div>
+      `;
+    }
+    document.getElementById('modal-hide-dialog')?.classList.remove('is-hidden');
+  }
+
   function closeModals() {
     document.getElementById('modal-approve-dialog')?.classList.add('is-hidden');
+    document.getElementById('modal-hide-dialog')?.classList.add('is-hidden');
     document.getElementById('modal-reject-dialog')?.classList.add('is-hidden');
     _selectedReqId = null;
   }
@@ -482,6 +517,10 @@
     document.getElementById('modal-approve-cancel')?.addEventListener('click', closeModals);
     document.getElementById('modal-approve-backdrop')?.addEventListener('click', closeModals);
 
+    document.getElementById('modal-hide-close')?.addEventListener('click', closeModals);
+    document.getElementById('modal-hide-cancel')?.addEventListener('click', closeModals);
+    document.getElementById('modal-hide-backdrop')?.addEventListener('click', closeModals);
+
     document.getElementById('modal-reject-close')?.addEventListener('click', closeModals);
     document.getElementById('modal-reject-cancel')?.addEventListener('click', closeModals);
     document.getElementById('modal-reject-backdrop')?.addEventListener('click', closeModals);
@@ -490,11 +529,23 @@
       if (!_selectedReqId) return;
       try {
         await ApiClient.approveDataDeletionRequest(_selectedReqId);
-        showToast('Đã phê duyệt và hoàn tất ẩn danh hóa dữ liệu', 'success');
+        showToast('Đã xóa thông tin định danh; chứng từ kế toán vẫn được giữ', 'success');
         closeModals();
         await loadAdminData();
       } catch (error) {
         showToast(error?.message || 'Không thể phê duyệt yêu cầu.', 'error');
+      }
+    });
+
+    document.getElementById('modal-hide-confirm')?.addEventListener('click', async () => {
+      if (!_selectedReqId) return;
+      try {
+        await ApiClient.hideDataDeletionRequest(_selectedReqId);
+        showToast('Đã khóa đăng nhập và giữ nguyên hồ sơ tài khoản', 'success');
+        closeModals();
+        await loadAdminData();
+      } catch (error) {
+        showToast(error?.message || 'Không thể ẩn tài khoản.', 'error');
       }
     });
 

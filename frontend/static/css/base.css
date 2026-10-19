@@ -73,6 +73,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Keep native and utility hidden states above component display rules. */
+[hidden],
+.is-hidden { display: none !important; }
+
 html { font-size: var(--font-size-base); scroll-behavior: smooth; }
 
 body {

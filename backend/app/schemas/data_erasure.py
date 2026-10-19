@@ -54,6 +54,7 @@ class DataErasureResponse(BaseModel):
     driver_name: str | None = None
     driver_email: str | None = None
     status: str
+    resolution_action: str | None = None
     request_reason: str | None = None
     rejection_reason: str | None = None
     requested_at: datetime

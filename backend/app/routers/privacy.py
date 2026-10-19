@@ -16,6 +16,7 @@ from app.core.security import verify_password
 from app.database import get_db
 from app.models.charging_session import ChargingSession
 from app.models.data_erasure import DataErasureRequest
+from app.models.reservation import Reservation, ReservationStatus
 from app.models.user import User
 from app.schemas.data_erasure import (
     DataErasureCreateRequest,
@@ -30,6 +31,7 @@ from app.services.privacy_service import (
     cancel_erasure_request,
     create_erasure_request,
     get_my_erasure_requests,
+    hide_erasure_request,
     list_erasure_requests,
     reject_erasure_request,
     to_erasure_response,
@@ -46,6 +48,7 @@ def _to_page_request(db: Session, req: DataErasureRequest) -> dict:
     """Expose the field names consumed by the existing privacy page."""
     driver = req.user
     active_sessions = 0
+    active_reservations = 0
     balance_vnd = 0
     if driver:
         balance_vnd = wallet_totals(db, driver.id)["balance_vnd"]
@@ -54,6 +57,15 @@ def _to_page_request(db: Session, req: DataErasureRequest) -> dict:
             .filter(
                 ChargingSession.user_id == driver.id,
                 ChargingSession.status == "active",
+            )
+            .scalar()
+            or 0
+        )
+        active_reservations = (
+            db.query(func.count(Reservation.id))
+            .filter(
+                Reservation.user_id == driver.id,
+                Reservation.status.in_([ReservationStatus.PENDING, ReservationStatus.ACTIVE]),
             )
             .scalar()
             or 0
@@ -72,8 +84,10 @@ def _to_page_request(db: Session, req: DataErasureRequest) -> dict:
         "rejection_reason": req.rejection_reason,
         "reject_reason": req.rejection_reason,
         "status": req.status,
+        "resolution_action": req.resolution_action,
         "balance_vnd": balance_vnd,
         "active_sessions_count": active_sessions,
+        "active_reservations_count": active_reservations,
         "requested_at": req.requested_at,
         "created_at": req.created_at,
         "processed_at": req.processed_at,
@@ -194,6 +208,20 @@ def approve_page_deletion_request(
         db.query(User).filter(User.id == current_user.id).first() or current_user
     )
     req = approve_erasure_request(db, request_id, admin_user)
+    return _to_page_request(db, req)
+
+
+@router.post(
+    "/admin/deletion-requests/{request_id}/hide",
+    dependencies=[Depends(require_role("admin"))],
+)
+def hide_page_deletion_request(
+    request_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    admin_user = db.query(User).filter(User.id == current_user.id).first() or current_user
+    req = hide_erasure_request(db, request_id, admin_user)
     return _to_page_request(db, req)
 
 
