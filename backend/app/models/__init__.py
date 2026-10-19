@@ -16,6 +16,7 @@ from app.models.meter_value import MeterValue  # noqa: F401
 from app.models.ocpp_message import OcppMessage  # noqa: F401
 from app.models.orphan_message import OrphanMessage  # noqa: F401
 from app.models.payment_transaction import PaymentTransaction  # noqa: F401
+from app.models.reconciliation_period_lock import ReconciliationPeriodLock  # noqa: F401
 from app.models.remote_start_request import (  # noqa: F401
     RemoteStartRequest,
     RemoteStartStatus,

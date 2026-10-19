@@ -21,12 +21,43 @@ from app.services.financial_reconciliation_pricing import (
 )
 
 
+def _report_summary(rows: list[dict]) -> dict:
+    return {
+        "total_kwh": round(sum(row["energy_kwh"] for row in rows), 3),
+        "total_expected_vnd": sum(row["expected_vnd"] or 0 for row in rows),
+        "total_invoiced_vnd": sum(row["invoiced_vnd"] or 0 for row in rows),
+        "total_collected_vnd": sum(row["collected_vnd"] for row in rows),
+        "total_difference_vnd": sum(abs(row["difference_vnd"] or 0) for row in rows),
+        "total_invoice_difference_vnd": sum(
+            abs(row["invoice_difference_vnd"] or 0) for row in rows
+        ),
+        "review_count": sum(bool(row["issues"]) for row in rows),
+    }
+
+
+def filter_financial_reconciliation_report(
+    report: dict,
+    status: str,
+    charge_point_code: str | None = None,
+) -> dict:
+    """Filter a live report or a saved snapshot with the same summary rules."""
+    rows = report["rows"]
+    if status == "review":
+        rows = [row for row in rows if row["issues"]]
+    elif status != "all":
+        rows = [row for row in rows if status in row["issues"]]
+    if charge_point_code:
+        rows = [row for row in rows if row["charge_point_code"] == charge_point_code]
+    return {**report, "rows": rows, "summary": _report_summary(rows)}
+
+
 def get_financial_reconciliation_report(
     db: Session,
     *,
     from_date: date,
     to_date: date,
     station_id: int | None = None,
+    station_owner_id: int | None = None,
     charge_point_code: str | None = None,
     status: str = "all",
 ) -> dict:
@@ -49,6 +80,10 @@ def get_financial_reconciliation_report(
             ChargingSession.is_demo.is_(False),
         )
     )
+    if station_owner_id is not None:
+        query = query.join(Station, ChargingSession.station_id == Station.id).filter(
+            Station.owner_id == station_owner_id
+        )
     if station_id is not None:
         query = query.filter(ChargingSession.station_id == station_id)
     if charge_point_code:
@@ -107,7 +142,14 @@ def get_financial_reconciliation_report(
         collected_by_session[entry.reference_id] += -entry.amount_vnd
         ledger_count[entry.reference_id] += 1
 
-    stations = db.query(Station).order_by(Station.name, Station.id).all()
+    stations_query = db.query(Station)
+    charge_points_query = db.query(ChargePoint)
+    if station_owner_id is not None:
+        stations_query = stations_query.filter(Station.owner_id == station_owner_id)
+        charge_points_query = charge_points_query.join(
+            Station, ChargePoint.station_id == Station.id
+        ).filter(Station.owner_id == station_owner_id)
+    stations = stations_query.order_by(Station.name, Station.id).all()
     station_by_id = {item.id: item for item in stations}
     rows = []
     for session, invoice in candidates:
@@ -173,30 +215,22 @@ def get_financial_reconciliation_report(
             "issues": issues,
         })
 
-    if status == "review":
-        rows = [row for row in rows if row["issues"]]
-    elif status != "all":
-        rows = [row for row in rows if status in row["issues"]]
-
-    return {
-        "period": {"from_date": from_date.isoformat(), "to_date": to_date.isoformat()},
+    report = {
+        "period": {
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "station_id": station_id,
+        },
+        "period_state": "open",
+        "locked_at": None,
+        "locked_by": None,
         "filters": {
             "stations": [{"id": item.id, "name": item.name} for item in stations],
             "charge_points": [
                 {"code": item.code, "station_id": item.station_id}
-                for item in db.query(ChargePoint).order_by(ChargePoint.code).all()
+                for item in charge_points_query.order_by(ChargePoint.code).all()
             ],
         },
         "rows": rows,
-        "summary": {
-            "total_kwh": round(sum(row["energy_kwh"] for row in rows), 3),
-            "total_expected_vnd": sum(row["expected_vnd"] or 0 for row in rows),
-            "total_invoiced_vnd": sum(row["invoiced_vnd"] or 0 for row in rows),
-            "total_collected_vnd": sum(row["collected_vnd"] for row in rows),
-            "total_difference_vnd": sum(abs(row["difference_vnd"] or 0) for row in rows),
-            "total_invoice_difference_vnd": sum(
-                abs(row["invoice_difference_vnd"] or 0) for row in rows
-            ),
-            "review_count": sum(bool(row["issues"]) for row in rows),
-        },
     }
+    return filter_financial_reconciliation_report(report, status)

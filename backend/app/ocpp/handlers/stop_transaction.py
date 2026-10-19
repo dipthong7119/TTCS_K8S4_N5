@@ -19,6 +19,10 @@ from app.services.ocpp_handlers import (
     _store_meter_values,
 )
 from app.services.ocpp_parser import pack_call_error, pack_call_result
+from app.services.reconciliation_periods import (
+    FinancialPeriodLocked,
+    ensure_session_period_open,
+)
 from app.services.session_energy import calculate_energy_kwh
 
 logger = logging.getLogger(__name__)
@@ -94,6 +98,15 @@ def handle_stop_transaction(
             session.status,
         )
         return pack_call_result(msg_id, {"idTagInfo": {"status": "Accepted"}})
+
+    try:
+        ensure_session_period_open(db, session, ended_at)
+    except FinancialPeriodLocked as exc:
+        logger.warning(
+            "StopTransaction rejected because reconciliation period is locked: session=%s",
+            session.id,
+        )
+        return pack_call_error(msg_id, "SecurityError", str(exc))
 
     calculated_kwh = calculate_energy_kwh(session.meter_start_wh, meter_stop)
     timestamp_before_start = ended_at < session.started_at

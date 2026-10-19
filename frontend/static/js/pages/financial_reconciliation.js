@@ -9,7 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const station = get('station');
   const chargePoint = get('charge-point');
   const button = get('apply');
+  const lockButton = get('lock');
   const message = get('message');
+  const periodState = get('period-state');
   const tbody = get('table-body');
   const reviewList = get('review-list');
   const money = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'total-invoice-difference': ['total_invoice_difference_vnd', money],
   };
   let revision = 0;
+  let lastReport = null;
   let filterOptions = { stations: [], charge_points: [] };
   const format = (value, formatter) =>
     Number.isFinite(Number(value)) && value !== null ? formatter.format(Number(value)) : '—';
@@ -48,6 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tbody.replaceChildren(row);
   }
   function clear(text) {
+    lastReport = null;
+    lockButton.disabled = true;
+    lockButton.textContent = 'Chốt kỳ';
+    periodState.textContent = 'Trạng thái kỳ chưa được tải.';
     Object.keys(fields).forEach(id => { get(id).textContent = '—'; });
     get('review-count').textContent = '—';
     const item = document.createElement('li');
@@ -92,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function render(report) {
     const { rows, summary } = report;
+    lastReport = report;
     updateFilters(report.filters);
     for (const [id, [field, formatter]] of Object.entries(fields)) {
       get(id).textContent = format(summary[field], formatter);
@@ -132,7 +140,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (!rows.length) tableMessage('Không có phiên trong bộ lọc đã chọn.');
     get('row-count').textContent = `${rows.length} phiên theo bộ lọc hiện tại`;
+    updatePeriodControls(report);
     notice('Số liệu được tổng hợp từ phiên sạc, hóa đơn đã chốt và sổ cái ví.');
+  }
+  function updatePeriodControls(report) {
+    if (report.period_state === 'locked') {
+      const lockedAt = report.locked_at
+        ? new Date(report.locked_at).toLocaleString('vi-VN') : '';
+      periodState.textContent = `Đã khóa${lockedAt ? ` lúc ${lockedAt}` : ''}. Báo cáo đang dùng ảnh chụp đã chốt.`;
+      lockButton.textContent = 'Kỳ đã khóa';
+      lockButton.disabled = true;
+      return;
+    }
+    periodState.textContent = 'Kỳ đang mở.';
+    const endedPeriod = report.period?.to_date < todayInStationZone();
+    const canLock = Boolean(station.value)
+      && status.value === 'all'
+      && endedPeriod
+      && report.summary.review_count === 0;
+    lockButton.disabled = !canLock;
+    lockButton.textContent = 'Chốt kỳ';
+    if (!canLock) {
+      const reason = report.summary.review_count
+        ? ' Hãy xử lý các phiên cần xem xét.'
+        : !station.value ? ' Hãy chọn một trạm.'
+          : status.value !== 'all' ? ' Chọn Tất cả phiên để chốt.'
+            : !endedPeriod ? ' Chỉ chốt kỳ đã kết thúc.' : '';
+      periodState.textContent += reason;
+    }
   }
   async function load() {
     const current = ++revision;
@@ -184,6 +219,28 @@ document.addEventListener('DOMContentLoaded', () => {
   form.addEventListener('submit', event => {
     event.preventDefault();
     load();
+  });
+  lockButton.addEventListener('click', async () => {
+    if (!lastReport || lockButton.disabled || !station.value) return;
+    if (status.value !== 'all') {
+      notice('Chọn Tất cả phiên trước khi chốt kỳ.', 'danger');
+      return;
+    }
+    if (!window.confirm('Chốt kỳ này? Sau khi chốt, báo cáo trở thành ảnh chụp chỉ đọc.')) return;
+    lockButton.disabled = true;
+    lockButton.textContent = 'Đang chốt…';
+    try {
+      const report = await window.ApiClient.lockFinancialReconciliationPeriod({
+        station_id: Number(station.value),
+        from_date: from.value,
+        to_date: to.value,
+      });
+      render(report);
+      notice('Kỳ đối soát đã được chốt.', 'info');
+    } catch (error) {
+      notice(error.message || 'Không chốt được kỳ đối soát.', 'danger');
+      if (lastReport) updatePeriodControls(lastReport);
+    }
   });
   station.addEventListener('change', () => updateFilters(filterOptions));
   form.addEventListener('input', () => {

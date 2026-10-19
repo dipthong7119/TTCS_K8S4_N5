@@ -132,6 +132,8 @@ const ApiClient = (() => {
       ).toString();
       return _request('GET', '/reconciliation/financial' + (query ? '?' + query : ''), null, opts);
     },
+    lockFinancialReconciliationPeriod: (body, opts = {}) =>
+      _request('POST', '/reconciliation/financial/lock', body, opts),
 
     // --- Wallet ---
     getWallet: () => _request('GET', '/wallet'),

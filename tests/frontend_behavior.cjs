@@ -643,9 +643,9 @@ test('SCRUM-86 revenue-share client reads and creates contract versions', async 
 });
 
 test('SCRUM-85 financial reconciliation client calls the real report endpoint with filters', async () => {
-  let requestedUrl;
+  const requestedUrls = [];
   const { api } = authClient(async url => {
-    requestedUrl = url;
+    requestedUrls.push(url);
     return auditResponse({ rows: [], summary: {}, filters: {} });
   });
 
@@ -653,12 +653,14 @@ test('SCRUM-85 financial reconciliation client calls the real report endpoint wi
     from_date: '2026-10-01', to_date: '2026-10-19', station_id: 42,
     charge_point_code: 'CP-42', status: 'review',
   });
+  await api.lockFinancialReconciliationPeriod({ station_id: 42, from_date: '2026-10-01', to_date: '2026-10-05' });
 
-  assert.equal(requestedUrl,
+  assert.equal(requestedUrls[0],
     '/api/reconciliation/financial?from_date=2026-10-01&to_date=2026-10-19&station_id=42&charge_point_code=CP-42&status=review');
+  assert.equal(requestedUrls[1], '/api/reconciliation/financial/lock');
 });
 
-function financialPage(getReport) {
+function financialPage(getReport, options = {}) {
   const ids = new Map();
   const document = {
     handlers: {},
@@ -679,6 +681,8 @@ function financialPage(getReport) {
     document.getElementById(`financial-${name}`);
   }
   document.getElementById('financial-filter-form').reportValidity = () => true;
+  document.getElementById('financial-station').value = options.stationId ? String(options.stationId) : '';
+  document.getElementById('financial-status').value = 'all';
   document.getElementById('financial-from').setCustomValidity = () => { };
   document.getElementById('financial-from').reportValidity = () => true;
   document.getElementById('financial-table-body').replaceChildren = function (...children) {
@@ -695,7 +699,13 @@ function financialPage(getReport) {
   }
   const context = vm.createContext({
     document,
-    window: { ApiClient: { getFinancialReconciliation: getReport } },
+    window: {
+      ApiClient: {
+        getFinancialReconciliation: getReport,
+        lockFinancialReconciliationPeriod: options.lockPeriod || (async () => financialFixture),
+      },
+      confirm: options.confirm || (() => false),
+    },
     Intl,
     Date,
     console,
@@ -706,6 +716,10 @@ function financialPage(getReport) {
 }
 
 const financialFixture = {
+  period: { from_date: '2026-10-01', to_date: '2026-10-19', station_id: 42 },
+  period_state: 'open',
+  locked_at: null,
+  locked_by: null,
   rows: [{
     session_id: 85, date: '2026-10-05', station_name: 'Station A', charge_point_code: 'CP-A',
     energy_kwh: 2, expected_vnd: 8000, invoiced_vnd: 9000, collected_vnd: 8500,
@@ -733,7 +747,8 @@ test('SCRUM-85 financial page renders API totals and session mismatches', async 
 
   assert.ok(params.from_date);
   assert.ok(params.to_date);
-  assert.equal(page.document.getElementById('financial-total-expected').textContent, '8.000');
+  assert.equal(page.document.getElementById('financial-total-expected').textContent, '8.000',
+    page.document.getElementById('financial-message').textContent);
   assert.equal(page.document.getElementById('financial-total-collected').textContent, '8.500');
   assert.equal(page.document.getElementById('financial-review-count').textContent, '1');
   const row = page.document.getElementById('financial-table-body').children[0];
@@ -751,6 +766,46 @@ test('SCRUM-85 financial page reports loading and API failure states', async () 
   await flush();
   assert.equal(page.document.getElementById('financial-message').textContent, 'Máy chủ không phản hồi');
   assert.equal(page.document.getElementById('financial-apply').disabled, false);
+});
+
+test('SCRUM-87 financial page confirms closing and then disables a locked period', async () => {
+  let lockPayload;
+  const cleanReport = structuredClone(financialFixture);
+  cleanReport.rows[0].issues = [];
+  cleanReport.summary.review_count = 0;
+  const page = financialPage(async params => ({
+    ...cleanReport,
+    period: { from_date: params.from_date, to_date: params.to_date, station_id: 42 },
+  }), {
+    stationId: 42,
+    confirm: () => true,
+    lockPeriod: async payload => {
+      lockPayload = payload;
+      return {
+        ...cleanReport,
+        period: { from_date: payload.from_date, to_date: payload.to_date, station_id: 42 },
+        period_state: 'locked',
+        locked_at: '2026-10-20T00:00:00Z',
+        locked_by: 7,
+      };
+    },
+  });
+  await flush();
+  page.document.getElementById('financial-from').value = '2020-10-01';
+  page.document.getElementById('financial-to').value = '2020-10-05';
+  page.document.getElementById('financial-filter-form').handlers.submit({ preventDefault() { } });
+  await flush();
+  assert.equal(page.document.getElementById('financial-lock').disabled, false,
+    page.document.getElementById('financial-period-state').textContent);
+  page.document.getElementById('financial-lock').handlers.click();
+  await flush();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(lockPayload)), {
+    station_id: 42, from_date: '2020-10-01', to_date: '2020-10-05',
+  });
+  assert.equal(page.document.getElementById('financial-lock').disabled, true);
+  assert.equal(page.document.getElementById('financial-lock').textContent, 'Kỳ đã khóa');
+  assert.match(page.document.getElementById('financial-period-state').textContent, /Đã khóa lúc/);
 });
 
 function auditPage(fetchResponse, filters = {}) {
