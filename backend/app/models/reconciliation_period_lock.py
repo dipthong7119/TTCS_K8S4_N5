@@ -21,7 +21,9 @@ class ReconciliationPeriodLock(Base):
     __tablename__ = "reconciliation_period_locks"
     __table_args__ = (
         CheckConstraint("to_date >= from_date", name="ck_recon_lock_date_range"),
-        CheckConstraint("status = 'locked'", name="ck_recon_lock_status_locked"),
+        CheckConstraint(
+            "status IN ('locked', 'reopened')", name="ck_recon_lock_status"
+        ),
         UniqueConstraint(
             "station_id", "from_date", "to_date", name="uq_recon_lock_station_period"
         ),

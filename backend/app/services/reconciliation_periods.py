@@ -3,13 +3,14 @@
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.reconciliation_period_lock import ReconciliationPeriodLock
+from app.models.reconciliation_period_snapshot import ReconciliationPeriodSnapshot
 from app.models.station import Station
 from app.models.station_tariff import StationTariff
 from app.services.audit import append_audit
@@ -34,13 +35,28 @@ def find_period_lock(
     )
 
 
+def get_latest_period_snapshot(
+    db: Session, lock: ReconciliationPeriodLock
+) -> dict:
+    latest = (
+        db.query(ReconciliationPeriodSnapshot)
+        .filter_by(period_lock_id=lock.id)
+        .order_by(ReconciliationPeriodSnapshot.revision.desc())
+        .first()
+    )
+    # Existing rows are backfilled by Alembic; the fallback keeps the report
+    # readable during tests or deployments that construct metadata directly.
+    return latest.snapshot if latest is not None else lock.snapshot
+
+
 def get_locked_period_report(
     lock: ReconciliationPeriodLock,
     status: str = "all",
     charge_point_code: str | None = None,
+    snapshot: dict | None = None,
 ) -> dict:
     report = filter_financial_reconciliation_report(
-        lock.snapshot, status, charge_point_code
+        snapshot if snapshot is not None else lock.snapshot, status, charge_point_code
     )
     return {
         **report,
@@ -79,7 +95,10 @@ def ensure_station_period_open(
     db.query(Station.id).filter(Station.id == station_id).with_for_update().first()
     locks = (
         db.query(ReconciliationPeriodLock)
-        .filter(ReconciliationPeriodLock.station_id == station_id)
+        .filter(
+            ReconciliationPeriodLock.station_id == station_id,
+            ReconciliationPeriodLock.status == "locked",
+        )
         .all()
     )
     if not locks:
@@ -160,8 +179,8 @@ def close_financial_reconciliation_period(
     actor_email: str,
     actor_name: str,
     station_owner_user_id: int | None = None,
-) -> tuple[ReconciliationPeriodLock, bool]:
-    """Save one immutable report snapshot; repeated closes return the same lock."""
+) -> tuple[ReconciliationPeriodLock, bool, dict]:
+    """Close a period and append a new immutable snapshot for each close cycle."""
     station = (
         db.query(Station)
         .filter(Station.id == station_id)
@@ -173,8 +192,10 @@ def close_financial_reconciliation_period(
     if station_owner_user_id is not None and station.owner_id != station_owner_user_id:
         raise PermissionError("Bạn chỉ có thể chốt kỳ của trạm mình sở hữu")
     existing = find_period_lock(db, station_id, from_date, to_date)
-    if existing is not None:
-        return existing, True
+    if existing is not None and existing.status == "locked":
+        return existing, True, get_latest_period_snapshot(db, existing)
+    if existing is not None and existing.status != "reopened":
+        raise ValueError("Kỳ đối soát không ở trạng thái có thể chốt")
 
     now = datetime.now(UTC).replace(tzinfo=None)
     timezone_name = _timezone_for_station(db, station_id, now)
@@ -205,17 +226,52 @@ def close_financial_reconciliation_period(
         "locked_at": now.isoformat() + "Z",
         "locked_by": actor_id,
     })
-    lock = ReconciliationPeriodLock(
-        station_id=station_id,
-        from_date=from_date,
-        to_date=to_date,
-        status="locked",
-        snapshot=snapshot,
-        locked_by_id=actor_id,
-        locked_at=now,
-    )
-    db.add(lock)
     try:
+        if existing is None:
+            lock = ReconciliationPeriodLock(
+                station_id=station_id,
+                from_date=from_date,
+                to_date=to_date,
+                status="locked",
+                snapshot=snapshot,
+                locked_by_id=actor_id,
+                locked_at=now,
+            )
+            db.add(lock)
+            db.flush()
+        else:
+            changed = (
+                db.query(ReconciliationPeriodLock)
+                .filter_by(id=existing.id, status="reopened")
+                .update(
+                    {
+                        ReconciliationPeriodLock.status: "locked",
+                        ReconciliationPeriodLock.locked_by_id: actor_id,
+                        ReconciliationPeriodLock.locked_at: now,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if changed != 1:
+                raise ValueError("Kỳ đối soát vừa được thay đổi; hãy tải lại báo cáo")
+            lock = existing
+            db.refresh(lock)
+
+        revision = (
+            db.query(func.max(ReconciliationPeriodSnapshot.revision))
+            .filter(ReconciliationPeriodSnapshot.period_lock_id == lock.id)
+            .scalar()
+            or 0
+        ) + 1
+        db.add(
+            ReconciliationPeriodSnapshot(
+                period_lock_id=lock.id,
+                revision=revision,
+                snapshot=snapshot,
+                locked_by_id=actor_id,
+                locked_at=now,
+            )
+        )
         db.flush()
         append_audit(
             db,
@@ -237,11 +293,79 @@ def close_financial_reconciliation_period(
     except IntegrityError:
         db.rollback()
         existing = find_period_lock(db, station_id, from_date, to_date)
-        if existing is None:
+        if existing is None or existing.status != "locked":
             raise
-        return existing, True
+        return existing, True, get_latest_period_snapshot(db, existing)
     except Exception:
         db.rollback()
         raise
     db.refresh(lock)
-    return lock, False
+    return lock, False, snapshot
+
+
+def reopen_financial_reconciliation_period(
+    db: Session,
+    *,
+    station_id: int,
+    from_date: date,
+    to_date: date,
+    actor_id: int,
+    actor_email: str,
+    actor_name: str,
+    reason: str | None = None,
+) -> ReconciliationPeriodLock:
+    """Reopen a locked period without changing or deleting its snapshots."""
+    station = (
+        db.query(Station.id)
+        .filter(Station.id == station_id)
+        .with_for_update()
+        .first()
+    )
+    if station is None:
+        raise LookupError("Không tìm thấy trạm của kỳ đối soát")
+
+    lock = (
+        db.query(ReconciliationPeriodLock)
+        .filter_by(station_id=station_id, from_date=from_date, to_date=to_date)
+        .with_for_update()
+        .first()
+    )
+    if lock is None:
+        raise ValueError("Kỳ đối soát chưa được chốt")
+    if lock.status != "locked":
+        raise ValueError("Kỳ đối soát chưa chốt hoặc đã được mở lại")
+
+    try:
+        changed = (
+            db.query(ReconciliationPeriodLock)
+            .filter_by(id=lock.id, status="locked")
+            .update(
+                {ReconciliationPeriodLock.status: "reopened"},
+                synchronize_session=False,
+            )
+        )
+        if changed != 1:
+            raise ValueError("Kỳ đối soát vừa được thay đổi; hãy tải lại báo cáo")
+        details = {
+            "station_id": station_id,
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+        }
+        if reason:
+            details["reason"] = reason
+        append_audit(
+            db,
+            action="reconciliation.period_reopened",
+            object_type="reconciliation_period_lock",
+            object_id=lock.id,
+            actor_id=actor_id,
+            actor_email=actor_email,
+            actor_name=actor_name,
+            details=details,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(lock)
+    return lock

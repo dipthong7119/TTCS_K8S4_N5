@@ -1,7 +1,7 @@
 """SCRUM-85: reconcile tariff amounts, invoices, and actual wallet debits."""
 
 import csv
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import StringIO
 from types import SimpleNamespace
 
@@ -15,6 +15,8 @@ from app.models.audit_log import AuditLog
 from app.models.charge_point import ChargePoint
 from app.models.charging_invoice import ChargingInvoice
 from app.models.charging_session import ChargingSession
+from app.models.reconciliation_period_lock import ReconciliationPeriodLock
+from app.models.reconciliation_period_snapshot import ReconciliationPeriodSnapshot
 from app.models.station import Station
 from app.models.station_tariff import StationTariff, TariffBand
 from app.models.user import Role, User
@@ -22,7 +24,10 @@ from app.models.wallet_ledger import WalletLedgerEntry
 from app.ocpp.handlers.start_transaction import handle_start_transaction
 from app.ocpp.handlers.stop_transaction import handle_stop_transaction
 from app.services.billing import finalize_session_billing
-from app.services.reconciliation_periods import FinancialPeriodLocked
+from app.services.reconciliation_periods import (
+    FinancialPeriodLocked,
+    ensure_station_period_open,
+)
 
 
 @pytest.fixture
@@ -31,9 +36,11 @@ def financial_env(db_session):
     owner = User(id=8501, email="fin-owner@example.test", password_hash="h", full_name="Owner", is_active=True)
     driver = User(id=8502, email="fin-driver@example.test", password_hash="h", full_name="Driver", is_active=True)
     accountant = User(id=8503, email="fin-accountant@example.test", password_hash="h", full_name="Accountant", is_active=True)
+    admin = User(id=8504, email="fin-admin@example.test", password_hash="h", full_name="Admin", is_active=True)
     owner.roles = [Role(id=8501, name="station_owner")]
     driver.roles = [Role(id=8502, name="driver")]
     accountant.roles = [Role(id=8503, name="accountant")]
+    admin.roles = [Role(id=8504, name="admin")]
     station = Station(id=8501, name="Financial station", owner_id=owner.id, status="active")
     point = ChargePoint(id=8501, code="FIN-CP-01", station_id=station.id, status="Available")
     tariff = StationTariff(
@@ -63,7 +70,11 @@ def financial_env(db_session):
         )
         for index, energy_wh in enumerate((2000, 1500, 1000), start=1)
     ]
-    db_session.add_all([owner, driver, accountant, *owner.roles, *driver.roles, *accountant.roles, station, point, tariff, *sessions])
+    db_session.add_all([
+        owner, driver, accountant, admin,
+        *owner.roles, *driver.roles, *accountant.roles, *admin.roles,
+        station, point, tariff, *sessions,
+    ])
     db_session.flush()
     db_session.add_all([
         ChargingInvoice(
@@ -105,6 +116,7 @@ def financial_env(db_session):
         "owner": owner,
         "driver": driver,
         "accountant": accountant,
+        "admin": admin,
         "station": station,
         "sessions": sessions,
         "db": db_session,
@@ -209,6 +221,7 @@ def test_station_owner_report_is_scoped_to_owned_stations(financial_env):
     client = TestClient(app)
     page = client.get("/sessions/financial-reconciliation")
     assert page.status_code == 200
+    assert 'id="financial-reopen"' not in page.text
     report = client.get(
         "/api/reconciliation/financial",
         params={"from_date": "2026-10-05", "to_date": "2026-10-05"},
@@ -225,6 +238,15 @@ def test_station_owner_report_is_scoped_to_owned_stations(financial_env):
         },
     )
     assert forbidden.status_code == 403
+
+
+def test_admin_financial_page_includes_period_reopen_control(financial_env):
+    _use_financial_admin(financial_env)
+
+    response = TestClient(app).get("/sessions/financial-reconciliation")
+
+    assert response.status_code == 200
+    assert 'id="financial-reopen"' in response.text
 
 
 def _add_clean_station_period(financial_env):
@@ -295,6 +317,14 @@ def test_reconciliation_period_lock_saves_snapshot_idempotently_and_audits(finan
     assert locked["already_locked"] is False
     assert locked["summary"]["total_expected_vnd"] == 4000
     assert locked["summary"]["total_collected_vnd"] == 4000
+    saved_lock = financial_env["db"].query(ReconciliationPeriodLock).filter_by(
+        station_id=station.id,
+        from_date=date(2026, 10, 5),
+        to_date=date(2026, 10, 5),
+    ).one()
+    assert financial_env["db"].query(ReconciliationPeriodSnapshot).filter_by(
+        period_lock_id=saved_lock.id, revision=1
+    ).count() == 1
 
     second = client.post("/api/reconciliation/financial/lock", json=payload)
     assert second.status_code == 200
@@ -328,6 +358,166 @@ def test_reconciliation_period_lock_saves_snapshot_idempotently_and_audits(finan
     owner_repeat = client.post("/api/reconciliation/financial/lock", json=payload)
     assert owner_repeat.status_code == 200
     assert owner_repeat.json()["already_locked"] is True
+
+
+def _use_financial_admin(financial_env):
+    admin = financial_env["admin"]
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=admin.id,
+        email=admin.email,
+        full_name=admin.full_name,
+        roles=admin.roles,
+    )
+
+
+def test_reopen_period_is_admin_only_and_reports_unclosed_or_missing_periods(financial_env):
+    station = financial_env["station"]
+    client = TestClient(app)
+    payload = {
+        "station_id": station.id,
+        "from_date": "2026-10-05",
+        "to_date": "2026-10-05",
+    }
+
+    forbidden = client.post("/api/reconciliation/financial/reopen", json=payload)
+    assert forbidden.status_code == 403
+
+    _use_financial_admin(financial_env)
+    unclosed = client.post("/api/reconciliation/financial/reopen", json=payload)
+    assert unclosed.status_code == 400
+    assert "chưa được chốt" in unclosed.json()["detail"]
+
+    missing_station = client.post(
+        "/api/reconciliation/financial/reopen",
+        json={**payload, "station_id": 99999},
+    )
+    assert missing_station.status_code == 404
+
+
+def test_reopen_and_reclose_preserves_history_and_uses_a_new_live_snapshot(financial_env):
+    station, point, _ = _add_clean_station_period(financial_env)
+    client = TestClient(app)
+    period = {
+        "station_id": station.id,
+        "from_date": "2026-10-05",
+        "to_date": "2026-10-05",
+    }
+    first_close = client.post("/api/reconciliation/financial/lock", json=period)
+    assert first_close.status_code == 200
+    assert first_close.json()["already_locked"] is False
+
+    db = financial_env["db"]
+    lock = db.query(ReconciliationPeriodLock).filter_by(station_id=station.id).one()
+    first_snapshot = db.query(ReconciliationPeriodSnapshot).filter_by(
+        period_lock_id=lock.id, revision=1
+    ).one()
+    old_snapshot = first_snapshot.snapshot
+    _use_financial_admin(financial_env)
+    reopened = client.post(
+        "/api/reconciliation/financial/reopen",
+        json={**period, "reason": "Điều chỉnh số liệu phiên"},
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["period_state"] == "open"
+    assert reopened.json()["summary"]["total_kwh"] == 1.0
+    ensure_station_period_open(
+        db,
+        station.id,
+        datetime(2026, 10, 5, 3, tzinfo=UTC).replace(tzinfo=None),
+        datetime(2026, 10, 5, 4, tzinfo=UTC).replace(tzinfo=None),
+    )
+
+    repeated_reopen = client.post("/api/reconciliation/financial/reopen", json=period)
+    assert repeated_reopen.status_code == 400
+
+    extra_session = ChargingSession(
+        id=8513,
+        charge_point_id=point.id,
+        charge_point_code=point.code,
+        station_id=station.id,
+        station_name=station.name,
+        connector_number=2,
+        user_id=financial_env["driver"].id,
+        started_at=datetime(2026, 10, 5, 5, tzinfo=UTC).replace(tzinfo=None),
+        ended_at=datetime(2026, 10, 5, 6, tzinfo=UTC).replace(tzinfo=None),
+        status="completed",
+        meter_start_wh=0,
+        meter_stop_wh=2000,
+        energy_kwh=2,
+        is_demo=False,
+    )
+    db.add(extra_session)
+    db.flush()
+    db.add_all([
+        ChargingInvoice(
+            id=8513,
+            session_id=extra_session.id,
+            tariff_id=8510,
+            total_vnd=8000,
+            segments=[{"kind": "energy", "amount_vnd": 8000}],
+            is_demo=False,
+        ),
+        WalletLedgerEntry(
+            user_id=financial_env["driver"].id,
+            entry_type="session_charge",
+            amount_vnd=-8000,
+            idempotency_key="session_charge:8513",
+            reference_type="session",
+            reference_id=extra_session.id,
+            description="Charging session after reopening",
+        ),
+    ])
+    db.commit()
+
+    live = client.get("/api/reconciliation/financial", params=period)
+    assert live.status_code == 200
+    assert live.json()["period_state"] == "open"
+    assert live.json()["summary"]["total_kwh"] == 3.0
+    assert {row["session_id"] for row in live.json()["rows"]} == {8510, 8513}
+
+    second_close = client.post("/api/reconciliation/financial/lock", json=period)
+    assert second_close.status_code == 200
+    assert second_close.json()["already_locked"] is False
+    assert second_close.json()["summary"]["total_kwh"] == 3.0
+
+    db.expire_all()
+    versions = (
+        db.query(ReconciliationPeriodSnapshot)
+        .filter_by(period_lock_id=lock.id)
+        .order_by(ReconciliationPeriodSnapshot.revision)
+        .all()
+    )
+    assert [snapshot.revision for snapshot in versions] == [1, 2]
+    assert versions[0].snapshot == old_snapshot
+    assert versions[1].snapshot["summary"]["total_kwh"] == 3.0
+    assert lock.snapshot == old_snapshot
+
+    audit = db.query(AuditLog).filter_by(action="reconciliation.period_reopened").one()
+    assert audit.actor_id == financial_env["admin"].id
+    assert audit.details["reason"] == "Điều chỉnh số liệu phiên"
+    report = client.get("/api/reconciliation/financial", params=period)
+    assert report.json()["period_state"] == "locked"
+    assert report.json()["summary"]["total_kwh"] == 3.0
+
+
+def test_reopen_period_does_not_require_a_reason(financial_env):
+    station, _, _ = _add_clean_station_period(financial_env)
+    client = TestClient(app)
+    period = {
+        "station_id": station.id,
+        "from_date": "2026-10-05",
+        "to_date": "2026-10-05",
+    }
+    assert client.post("/api/reconciliation/financial/lock", json=period).status_code == 200
+    _use_financial_admin(financial_env)
+
+    response = client.post("/api/reconciliation/financial/reopen", json=period)
+
+    assert response.status_code == 200
+    audit = financial_env["db"].query(AuditLog).filter_by(
+        action="reconciliation.period_reopened"
+    ).one()
+    assert "reason" not in audit.details
 
 
 def test_reconciliation_period_lock_refuses_unresolved_variances(financial_env):

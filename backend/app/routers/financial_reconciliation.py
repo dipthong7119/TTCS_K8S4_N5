@@ -9,13 +9,18 @@ from sqlalchemy.orm import Session
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.station import Station
-from app.schemas.reconciliation import ReconciliationPeriodLockRequest
+from app.schemas.reconciliation import (
+    ReconciliationPeriodLockRequest,
+    ReconciliationPeriodReopenRequest,
+)
 from app.services.csv_export import csv_response
 from app.services.financial_reconciliation import get_financial_reconciliation_report
 from app.services.reconciliation_periods import (
     close_financial_reconciliation_period,
     find_period_lock,
+    get_latest_period_snapshot,
     get_locked_period_report,
+    reopen_financial_reconciliation_period,
 )
 
 router = APIRouter(
@@ -67,8 +72,13 @@ def get_financial_reconciliation(
             raise HTTPException(status_code=403, detail="Bạn chỉ có thể xem trạm mình sở hữu")
     if station_id is not None:
         lock = find_period_lock(db, station_id, from_date, to_date)
-        if lock is not None:
-            return get_locked_period_report(lock, status, charge_point_code)
+        if lock is not None and lock.status == "locked":
+            return get_locked_period_report(
+                lock,
+                status,
+                charge_point_code,
+                snapshot=get_latest_period_snapshot(db, lock),
+            )
     return get_financial_reconciliation_report(
         db,
         from_date=from_date,
@@ -144,7 +154,7 @@ def lock_financial_reconciliation_period(
         else None
     )
     try:
-        lock, already_locked = close_financial_reconciliation_period(
+        lock, already_locked, snapshot = close_financial_reconciliation_period(
             db,
             station_id=body.station_id,
             from_date=body.from_date,
@@ -160,6 +170,41 @@ def lock_financial_reconciliation_period(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    report = get_locked_period_report(lock)
+    report = get_locked_period_report(lock, snapshot=snapshot)
     report["already_locked"] = already_locked
     return report
+
+
+@router.post(
+    "/financial/reopen",
+    dependencies=[Depends(require_role("admin"))],
+)
+def reopen_financial_period(
+    body: ReconciliationPeriodReopenRequest,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        reopen_financial_reconciliation_period(
+            db,
+            station_id=body.station_id,
+            from_date=body.from_date,
+            to_date=body.to_date,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            actor_name=current_user.full_name,
+            reason=body.reason,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return get_financial_reconciliation_report(
+        db,
+        from_date=body.from_date,
+        to_date=body.to_date,
+        station_id=body.station_id,
+        charge_point_code=body.charge_point_code,
+        status=body.status,
+    )
