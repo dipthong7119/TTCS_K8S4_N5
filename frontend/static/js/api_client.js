@@ -169,7 +169,7 @@ const ApiClient = (() => {
     // --- Wallet Audit Logs (SCRUM-91) ---
     listWalletAuditLogs: (params = {}) => {
       const q = new URLSearchParams(params).toString();
-      return _request('GET', '/wallet/audit' + (q ? '?' + q : ''));
+      return _request('GET', '/audit' + (q ? '?' + q : ''));
     },
 
     // --- Privacy & Data Deletion (SCRUM-92 / S-57 / Nghị định 13/2023/NĐ-CP) ---

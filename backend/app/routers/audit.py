@@ -33,7 +33,7 @@ def _wallet_effect(action: str, details: dict) -> int:
     return 0
 
 
-@router.get("", dependencies=[Depends(require_role("admin", "operator"))])
+@router.get("", dependencies=[Depends(require_role("admin", "operator", "accountant"))])
 async def list_audit_logs(
     current_user: CurrentUser,
     db: Session = Depends(get_db),

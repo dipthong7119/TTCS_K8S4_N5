@@ -398,6 +398,16 @@ def test_filter_audit_logs_by_action():
         assert item["action"] == "wallet.adjust"
 
 
+def test_accountant_can_read_wallet_audit_logs():
+    """The accountant role shown on the wallet-audit page can read its API."""
+    app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["accountant"])
+
+    response = client.get("/api/audit?page=1&page_size=50")
+
+    assert response.status_code == 200
+    assert "items" in response.json()
+
+
 def test_audit_logs_immutable_rejects_mutation():
     """AC5: PUT/PATCH/DELETE nhật ký kiểm toán bị từ chối bằng 405 Method Not Allowed."""
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])

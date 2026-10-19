@@ -593,6 +593,18 @@ function authClient(fetchResponse) {
   return { api: window.ApiClient, redirects };
 }
 
+test('SCRUM-91 wallet audit client calls the backend audit endpoint', async () => {
+  let requestedUrl;
+  const { api } = authClient(async url => {
+    requestedUrl = url;
+    return auditResponse({ items: [], total: 0 });
+  });
+
+  await api.listWalletAuditLogs({ page: 1, page_size: 50 });
+
+  assert.equal(requestedUrl, '/api/audit?page=1&page_size=50');
+});
+
 function auditPage(fetchResponse, filters = {}) {
   const ids = new Map();
   const document = {

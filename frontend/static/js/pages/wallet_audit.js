@@ -85,6 +85,13 @@
   /* ── Load ─────────────────────────────────────────────────────────────── */
   async function load() {
     const params = { ..._filters, page: _page, page_size: PAGE_SIZE };
+    const tbody = document.getElementById('wa-tbody');
+    const filterButton = document.getElementById('btn-wa-filter');
+    filterButton.disabled = true;
+    tbody.setAttribute('aria-busy', 'true');
+    tbody.innerHTML = `<tr><td colspan="8"><div class="loading-state" style="padding:var(--space-8);">
+      <div class="spinner" aria-hidden="true"></div><p>Đang tải nhật ký...</p></div></td></tr>`;
+    document.getElementById('wa-count').textContent = 'Đang tải...';
     let data;
     try {
       data = await ApiClient.listWalletAuditLogs(params);
@@ -97,6 +104,9 @@
       document.getElementById('wa-count').textContent = 'Không tải được dữ liệu';
       showToast(error?.message || 'Không tải được nhật ký ví.', 'error');
       return;
+    } finally {
+      filterButton.disabled = false;
+      tbody.setAttribute('aria-busy', 'false');
     }
     _items = (data.items || []).map(normalizeAuditEntry);
     _total = data.total || _items.length;
@@ -150,7 +160,7 @@
         </td>
         <td><span class="wa-type-badge ${info.cls}">${info.label}</span></td>
         <td class="text-right"><span class="wa-amount ${amtCls}">${amtPrefix}${fmtVnd(item.amount_vnd)}</span></td>
-        <td class="text-right"><span class="wa-balance">${fmtVnd(item.balance_after_vnd)}</span></td>
+        <td><span class="wa-note">${esc(item.object_type || '—')}${item.object_id ? ` #${esc(item.object_id)}` : ''}</span></td>
         <td><span class="wa-note" title="${esc(item.note)}">${esc(item.note || '—')}</span></td>
         <td class="text-right">
           <button class="btn btn--ghost btn--sm btn-wa-detail" data-id="${item.id}" type="button">Chi tiết</button>
@@ -222,8 +232,8 @@
         </span>
       </div>
       <div class="wa-detail-item">
-        <span class="wa-detail-label">Số dư sau giao dịch</span>
-        <span class="wa-detail-value">${fmtVnd(item.balance_after_vnd)}</span>
+        <span class="wa-detail-label">Giao dịch liên quan</span>
+        <span class="wa-detail-value">${esc(item.object_type || '—')}${item.object_id ? ` #${esc(item.object_id)}` : ''}</span>
       </div>
       <div class="wa-detail-item wa-detail-item--full">
         <span class="wa-detail-label">Ghi chú / Lý do</span>
@@ -244,7 +254,7 @@
 
   /* ── CSV Export ───────────────────────────────────────────────────────── */
   function exportCsv() {
-    const headers = ['Thời điểm', 'Tài xế', 'Email tài xế', 'Người thực hiện', 'Vai trò', 'Loại', 'Số tiền (₫)', 'Số dư sau (₫)', 'Ghi chú'];
+    const headers = ['Thời điểm', 'Tài xế', 'Email tài xế', 'Người thực hiện', 'Vai trò', 'Loại', 'Số tiền (₫)', 'Loại giao dịch', 'Mã giao dịch', 'Ghi chú'];
     const rows = _items.map(item => [
       fmtDatetime(item.created_at),
       item.driver_name || '',
@@ -253,10 +263,11 @@
       item.actor_role || '',
       entryTypeInfo(item.entry_type).label.replace(/[^\w\s]/g, ''),
       item.amount_vnd,
-      item.balance_after_vnd ?? '',
-      (item.note || '').replace(/,/g, ';'),
+      item.object_type || '',
+      item.object_id || '',
+      item.note || '',
     ]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
