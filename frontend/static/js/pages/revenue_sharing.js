@@ -10,6 +10,8 @@
   const tbody = document.getElementById('rev-share-tbody');
   const tfoot = document.getElementById('rev-share-tfoot');
   const btnApply = document.getElementById('btn-apply-filter');
+  const exportButton = document.getElementById('btn-export-csv');
+  const exportMessage = document.getElementById('rev-share-export-message');
   const contractForm = document.getElementById('revenue-contract-form');
   const contractPartner = document.getElementById('contract-partner');
   const contractPartnerPercent = document.getElementById('contract-partner-percent');
@@ -19,6 +21,7 @@
   const contractHistory = document.getElementById('contract-history-body');
   const contractSave = document.getElementById('contract-save');
   let requestVersion = 0;
+  let reportLoaded = false;
   const money = value => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
   const energy = value => `${Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kWh`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c =>
@@ -41,6 +44,9 @@
 
   function onDateChange() {
     requestVersion += 1;
+    reportLoaded = false;
+    exportMessage.hidden = true;
+    exportButton.disabled = true;
     errBox.hidden = true;
     setLoading(false);
     notReadyBox.hidden = false;
@@ -52,6 +58,7 @@
 
   function setLoading(loading) {
     loadBox.hidden = !loading;
+    if (loading) exportButton.disabled = true;
     if (loading) {
       errBox.hidden = true;
       notReadyBox.hidden = true;
@@ -139,6 +146,7 @@
 
   async function applyFilter() {
     const version = ++requestVersion;
+    reportLoaded = false;
     const from = fromInput.value;
     const to = toInput.value;
     if (!from || !to) {
@@ -153,6 +161,7 @@
     }
 
     setLoading(true);
+    exportMessage.hidden = true;
     try {
       const report = await ApiClient.getRevenueShareReport({
         date_from: from,
@@ -161,15 +170,43 @@
       });
       if (version !== requestVersion) return;
       renderReport(report);
+      reportLoaded = true;
+      exportButton.disabled = false;
     } catch (error) {
       if (version !== requestVersion) return;
       showError(error?.message || 'Không tải được bảng kê chia doanh thu.');
+      reportLoaded = false;
+      exportButton.disabled = true;
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không tải được dữ liệu.</td></tr>';
       tfoot.hidden = true;
     } finally {
       if (version === requestVersion) setLoading(false);
     }
   }
+
+  exportButton?.addEventListener('click', async () => {
+    const from = fromInput.value, to = toInput.value;
+    if (!from || !to || from > to) return;
+    exportButton.disabled = true;
+    exportButton.textContent = 'Đang xuất…';
+    exportMessage.hidden = false;
+    exportMessage.className = 'alert alert--info';
+    exportMessage.textContent = 'Đang tạo tệp CSV…';
+    try {
+      await ApiClient.exportRevenueShareCsv({
+        date_from: from,
+        date_to: to,
+        station_owner_id: partnerInput.value || undefined,
+      });
+      exportMessage.textContent = 'Đã tải bảng kê CSV.';
+    } catch (error) {
+      exportMessage.className = 'alert alert--danger';
+      exportMessage.textContent = error?.message || 'Không tải được tệp CSV.';
+    } finally {
+      exportButton.disabled = !reportLoaded;
+      exportButton.textContent = 'Tải CSV';
+    }
+  });
 
   contractPartnerPercent.addEventListener('input', setPlatformPercent);
   contractForm.addEventListener('submit', async event => {

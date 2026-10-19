@@ -18,6 +18,7 @@ from app.schemas.subscription import (
     SubscriptionPlanUpdate,
 )
 from app.services.audit import append_audit
+from app.services.csv_export import csv_response
 from app.services.subscriptions import (
     InsufficientSubscriptionBalance,
     SubscriptionConflict,
@@ -169,6 +170,50 @@ async def get_revenue_share_report(
         raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
     return list_revenue_share_report(
         db, date_from, date_to, station_owner_id=station_owner_id
+    )
+
+
+@router.get(
+    "/revenue-share.csv",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def export_revenue_share_csv(
+    date_from: date,
+    date_to: date,
+    station_owner_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Export the contract-version report using the screen's report service."""
+    if date_from > date_to:
+        raise HTTPException(status_code=422, detail="Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
+    report = list_revenue_share_report(
+        db, date_from, date_to, station_owner_id=station_owner_id
+    )
+    headers = [
+        "row_type", "date_from", "date_to", "station_owner_id", "partner_name",
+        "partner_email", "contract_id", "policy_label", "share_percent",
+        "platform_share_percent", "effective_from", "effective_to", "energy_kwh",
+        "base_revenue_vnd", "shared_amount_vnd",
+    ]
+    totals = report["totals"]
+    def rows():
+        yield [
+            "TOTAL", report["date_from"], report["date_to"], "", "", "", "", "", "", "", "", "",
+            "", totals["base_revenue_vnd"], totals["shared_amount_vnd"],
+        ]
+        for item in report["items"]:
+            yield [
+                "PARTNER_CONTRACT", report["date_from"], report["date_to"], item["station_owner_id"],
+                item["partner_name"], item["partner_email"], item["contract_id"], item["policy_label"],
+                f'{item["share_percent"]:.2f}', f'{item["platform_share_percent"]:.2f}',
+                item["effective_from"], item["effective_to"], f'{item["energy_kwh"]:.3f}',
+                item["base_revenue_vnd"], item["shared_amount_vnd"],
+            ]
+    suffix = f'-owner-{station_owner_id}' if station_owner_id is not None else ""
+    return csv_response(
+        f'revenue-share-{date_from.isoformat()}-{date_to.isoformat()}{suffix}.csv',
+        headers,
+        rows(),
     )
 
 

@@ -10,6 +10,7 @@ from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.station import Station
 from app.schemas.reconciliation import ReconciliationPeriodLockRequest
+from app.services.csv_export import csv_response
 from app.services.financial_reconciliation import get_financial_reconciliation_report
 from app.services.reconciliation_periods import (
     close_financial_reconciliation_period,
@@ -76,6 +77,55 @@ def get_financial_reconciliation(
         station_owner_id=owner_scope,
         charge_point_code=charge_point_code,
         status=status,
+    )
+
+
+@router.get(
+    "/financial.csv",
+    dependencies=[Depends(require_role("admin", "accountant", "station_owner"))],
+)
+def export_financial_reconciliation_csv(
+    current_user: CurrentUser,
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    station_id: int | None = Query(None, gt=0),
+    charge_point_code: str | None = Query(None, min_length=1),
+    status: Literal[
+        "all", "review", "missing_invoice", "missing_ledger", "amount_mismatch",
+        "collection_mismatch", "missing_pricing",
+    ] = Query("all"),
+    db: Session = Depends(get_db),
+):
+    """Export the live report or immutable locked snapshot with identical filters."""
+    report = get_financial_reconciliation(
+        current_user, from_date, to_date, station_id, charge_point_code, status, db
+    )
+    headers = [
+        "row_type", "from_date", "to_date", "session_id", "date", "station_id",
+        "station_name", "charge_point_code", "energy_kwh", "expected_vnd", "invoiced_vnd",
+        "collected_vnd", "difference_vnd", "invoice_difference_vnd", "issues",
+    ]
+    summary = report["summary"]
+    def rows():
+        yield [
+            "TOTAL", report["period"]["from_date"], report["period"]["to_date"], "", "", "", "", "",
+            f'{summary["total_kwh"]:.3f}', summary["total_expected_vnd"], summary["total_invoiced_vnd"],
+            summary["total_collected_vnd"], summary["total_difference_vnd"],
+            summary["total_invoice_difference_vnd"], f'review_count={summary["review_count"]}',
+        ]
+        for item in report["rows"]:
+            yield [
+                "SESSION", report["period"]["from_date"], report["period"]["to_date"], item["session_id"],
+                item["date"], item["station_id"], item["station_name"], item["charge_point_code"],
+                f'{item["energy_kwh"]:.3f}', item["expected_vnd"], item["invoiced_vnd"],
+                item["collected_vnd"], item["difference_vnd"], item["invoice_difference_vnd"],
+                ";".join(item["issues"]),
+            ]
+    station_suffix = f'-station-{station_id}' if station_id is not None else ""
+    return csv_response(
+        f'financial-reconciliation-{from_date.isoformat()}-{to_date.isoformat()}{station_suffix}.csv',
+        headers,
+        rows(),
     )
 
 

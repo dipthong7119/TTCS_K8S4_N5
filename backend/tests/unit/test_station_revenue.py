@@ -1,7 +1,9 @@
 """SCRUM-84 / SCRUM-253: Station revenue report API and frontend route tests."""
 
+import csv
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 from types import SimpleNamespace
 
 import pytest
@@ -125,6 +127,27 @@ def test_station_owner_can_get_revenue_for_own_station(revenue_env):
     assert len(data["charge_points"]) == 1
     assert data["charge_points"][0]["charge_point_code"] == "CP-8401"
     assert data["charge_points"][0]["revenue_vnd"] == 62000
+
+
+def test_station_revenue_csv_matches_screen_totals_and_has_utf8_bom(revenue_env):
+    owner = revenue_env["owner1"]
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=owner.id, roles=owner.roles, full_name=owner.full_name
+    )
+    client = TestClient(app)
+    params = {"start_date": "2026-10-01", "end_date": "2026-10-31"}
+    report = client.get("/api/stations/8401/revenue", params=params).json()
+    response = client.get("/api/stations/8401/revenue.csv", params=params)
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    rows = list(csv.DictReader(StringIO(response.content.decode("utf-8-sig"))))
+    total = rows[0]
+    assert total["row_type"] == "TOTAL"
+    assert int(total["session_count"]) == report["session_count"]
+    assert float(total["total_kwh"]) == report["total_kwh"]
+    assert int(total["revenue_vnd"]) == report["revenue_vnd"]
+    assert rows[1]["charge_point_code"] == "CP-8401"
 
 
 def test_station_owner_forbidden_from_other_owner_revenue(revenue_env):

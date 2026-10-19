@@ -8,7 +8,9 @@
     emptyBox = document.getElementById('rev-empty'),
     reportBox = document.getElementById('rev-report'),
     tableBody = document.getElementById('rev-tbody'),
-    tableFoot = document.getElementById('rev-tfoot');
+    tableFoot = document.getElementById('rev-tfoot'),
+    exportButton = document.getElementById('btn-export-csv'),
+    exportMessage = document.getElementById('rev-export-message');
 
   let _reqId = 0, _ac = null;
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -21,6 +23,12 @@
     _reqId++;
     if (_ac) { _ac.abort(); _ac = null; }
     if (reportBox) reportBox.hidden = true;
+    if (exportButton) exportButton.disabled = true;
+    if (exportMessage) {
+      exportMessage.textContent = '';
+      exportMessage.className = 'alert alert--info';
+      exportMessage.hidden = true;
+    }
     if (loadBox) loadBox.hidden = true;
     if (emptyBox) emptyBox.hidden = true;
     if (errBox) { errBox.textContent = ''; errBox.classList.remove('is-visible'); }
@@ -93,7 +101,29 @@
       <th class="text-right">${fmtKwh(d.total_kwh)}</th><th class="text-right">${fmtVnd(d.occupancy_fee_vnd)}</th>
       <th class="text-right">${fmtVnd(d.revenue_vnd)}</th></tr>`;
     reportBox.hidden = false;
+    if (exportButton) exportButton.disabled = false;
   }
+
+  exportButton?.addEventListener('click', async () => {
+    const stationId = stationSel?.value;
+    const start = startInput?.value, end = endInput?.value;
+    if (!stationId || !start || !end || start > end) return;
+    exportButton.disabled = true;
+    exportButton.textContent = 'Đang xuất…';
+    exportMessage.hidden = false;
+    exportMessage.textContent = '';
+    exportMessage.className = 'alert alert--info';
+    try {
+      await ApiClient.exportStationRevenueCsv(stationId, { start_date: start, end_date: end });
+      exportMessage.textContent = 'Đã tải báo cáo CSV.';
+    } catch (error) {
+      exportMessage.textContent = error?.message || 'Không tải được tệp CSV.';
+      exportMessage.className = 'alert alert--danger';
+    } finally {
+      exportButton.disabled = !reportBox || reportBox.hidden;
+      exportButton.textContent = 'Tải CSV';
+    }
+  });
 
   ['btn-quick-today:today', 'btn-quick-week:week', 'btn-quick-month:month'].forEach(item => {
     const [id, type] = item.split(':');

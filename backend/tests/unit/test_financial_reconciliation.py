@@ -1,6 +1,8 @@
 """SCRUM-85: reconcile tariff amounts, invoices, and actual wallet debits."""
 
+import csv
 from datetime import UTC, datetime
+from io import StringIO
 from types import SimpleNamespace
 
 import pytest
@@ -135,6 +137,25 @@ def test_financial_reconciliation_reports_real_tariff_invoice_and_ledger_differe
     assert rows[8503]["expected_vnd"] == 6000
     assert rows[8503]["invoiced_vnd"] is None
     assert rows[8503]["collected_vnd"] == 0
+
+
+def test_financial_reconciliation_csv_uses_same_filters_and_summary(financial_env):
+    client = TestClient(app)
+    params = {
+        "from_date": "2026-10-05", "to_date": "2026-10-05", "station_id": 8501,
+        "status": "missing_invoice",
+    }
+    report = client.get("/api/reconciliation/financial", params=params).json()
+    response = client.get("/api/reconciliation/financial.csv", params=params)
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\xef\xbb\xbf")
+    rows = list(csv.DictReader(StringIO(response.content.decode("utf-8-sig"))))
+    assert rows[0]["row_type"] == "TOTAL"
+    assert rows[0]["expected_vnd"] == str(report["summary"]["total_expected_vnd"])
+    assert rows[0]["collected_vnd"] == str(report["summary"]["total_collected_vnd"])
+    assert [row["session_id"] for row in rows[1:]] == [str(item["session_id"]) for item in report["rows"]]
+    assert rows[1]["issues"] == "missing_invoice"
 
 
 def test_financial_reconciliation_filters_station_point_and_issue(financial_env):
@@ -288,6 +309,14 @@ def test_reconciliation_period_lock_saves_snapshot_idempotently_and_audits(finan
     )
     assert report.json()["period_state"] == "locked"
     assert report.json()["rows"] == locked["rows"]
+    exported = client.get(
+        "/api/reconciliation/financial.csv",
+        params={"from_date": "2026-10-05", "to_date": "2026-10-05", "station_id": station.id},
+    )
+    csv_rows = list(csv.DictReader(StringIO(exported.content.decode("utf-8-sig"))))
+    assert csv_rows[0]["row_type"] == "TOTAL"
+    assert csv_rows[0]["expected_vnd"] == "4000"
+    assert csv_rows[1]["session_id"] == str(locked["rows"][0]["session_id"])
     audit_count = financial_env["db"].query(AuditLog).filter_by(
         action="reconciliation.period_locked"
     ).count()

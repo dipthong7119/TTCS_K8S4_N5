@@ -26,6 +26,7 @@ from app.schemas.station import (
 )
 from app.schemas.station_tariff import StationTariffCreate, StationTariffResponse
 from app.services.connection_manager import manager
+from app.services.csv_export import csv_response
 from app.services.ocpp_status import is_charge_point_stale
 from app.services.ownership import filter_by_owner, get_station_for_user
 from app.services.pricing import normalize_daily_bands
@@ -204,6 +205,42 @@ async def get_station_revenue(
             for row in sorted(stats.values(), key=lambda item: item["charge_point_code"])
         ],
     }
+
+
+@router.get(
+    "/{station_id}/revenue.csv",
+    dependencies=[Depends(require_role("station_owner", "admin"))],
+)
+async def export_station_revenue_csv(
+    station_id: int,
+    current_user: CurrentUser,
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Export the same station-local aggregation shown by the revenue page."""
+    report = await get_station_revenue(station_id, current_user, start_date, end_date, db)
+    headers = [
+        "row_type", "start_date", "end_date", "station_id", "station_name",
+        "charge_point_code", "session_count", "total_kwh", "occupancy_fee_vnd", "revenue_vnd",
+    ]
+    def rows():
+        yield [
+            "TOTAL", report["start_date"], report["end_date"], report["station_id"],
+            report["station_name"], "", report["session_count"],
+            f'{report["total_kwh"]:.3f}', report["occupancy_fee_vnd"], report["revenue_vnd"],
+        ]
+        for item in report["charge_points"]:
+            yield [
+                "CHARGE_POINT", report["start_date"], report["end_date"], report["station_id"],
+                report["station_name"], item["charge_point_code"], item["session_count"],
+                f'{item["total_kwh"]:.3f}', item["occupancy_fee_vnd"], item["revenue_vnd"],
+            ]
+    return csv_response(
+        f'station-{station_id}-revenue-{report["start_date"]}-{report["end_date"]}.csv',
+        headers,
+        rows(),
+    )
 
 
 @router.post(

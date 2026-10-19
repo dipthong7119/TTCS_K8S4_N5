@@ -44,6 +44,49 @@ const ApiClient = (() => {
     }
   }
 
+  async function _downloadCsv(path, params = {}, opts = {}) {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    ).toString();
+    const url = BASE_URL + path + (query ? '?' + query : '');
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'text/csv', ...opts.headers },
+        credentials: 'include',
+        signal: opts.signal,
+      });
+      if (!res.ok) {
+        const ct = res.headers.get('Content-Type') || '';
+        const data = ct.includes('application/json') ? await res.json() : await res.text();
+        let message = data?.detail || data || 'Có lỗi xảy ra';
+        if (Array.isArray(message)) message = message.map(item => item.msg).join(', ');
+        if (message && typeof message === 'object') message = message.message || 'Có lỗi xảy ra';
+        if (typeof message !== 'string') message = 'Có lỗi xảy ra';
+        if (res.status === 401 && window.location.pathname !== '/login') {
+          const next = window.location.pathname + window.location.search;
+          window.location.replace('/login?next=' + encodeURIComponent(next));
+        }
+        throw { status: res.status, message, detail: data?.detail };
+      }
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+      const filename = match ? decodeURIComponent(match[1].trim()) : (opts.filename || 'report.csv');
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+      return filename;
+    } catch (err) {
+      if (err.status || err.name === 'AbortError') throw err;
+      throw { status: 0, message: 'Không thể tải tệp. Vui lòng thử lại.' };
+    }
+  }
+
   return {
     get: (path, opts) => _request('GET', path, null, opts),
     post: (path, body, opts) => _request('POST', path, body, opts),
@@ -66,6 +109,8 @@ const ApiClient = (() => {
       const q = new URLSearchParams(params).toString();
       return _request('GET', `/stations/${encodeURIComponent(stationId)}/revenue` + (q ? '?' + q : ''), null, opts);
     },
+    exportStationRevenueCsv: (stationId, params = {}, opts = {}) =>
+      _downloadCsv(`/stations/${encodeURIComponent(stationId)}/revenue.csv`, params, opts),
 
     // --- Charge Points ---
     listChargePoints: (stationId) => _request('GET', `/charge-points?station_id=${encodeURIComponent(stationId)}`),
@@ -132,6 +177,8 @@ const ApiClient = (() => {
       ).toString();
       return _request('GET', '/reconciliation/financial' + (query ? '?' + query : ''), null, opts);
     },
+    exportFinancialReconciliationCsv: (params = {}, opts = {}) =>
+      _downloadCsv('/reconciliation/financial.csv', params, opts),
     lockFinancialReconciliationPeriod: (body, opts = {}) =>
       _request('POST', '/reconciliation/financial/lock', body, opts),
 
@@ -155,6 +202,8 @@ const ApiClient = (() => {
       ).toString();
       return _request('GET', '/subscriptions/revenue-share' + (query ? '?' + query : ''));
     },
+    exportRevenueShareCsv: (params = {}, opts = {}) =>
+      _downloadCsv('/subscriptions/revenue-share.csv', params, opts),
     listRevenueShareContracts: (params = {}) => {
       const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();
       return _request('GET', '/subscriptions/revenue-share/contracts' + (query ? '?' + query : ''));

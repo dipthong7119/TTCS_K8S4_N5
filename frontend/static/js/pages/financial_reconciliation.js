@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const chargePoint = get('charge-point');
   const button = get('apply');
   const lockButton = get('lock');
+  const exportButton = get('export');
+  const exportMessage = get('export-message');
   const message = get('message');
   const periodState = get('period-state');
   const tbody = get('table-body');
@@ -52,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function clear(text) {
     lastReport = null;
+    exportButton.disabled = true;
+    exportMessage.hidden = true;
     lockButton.disabled = true;
     lockButton.textContent = 'Chốt kỳ';
     periodState.textContent = 'Trạng thái kỳ chưa được tải.';
@@ -100,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function render(report) {
     const { rows, summary } = report;
     lastReport = report;
+    exportButton.disabled = false;
     updateFilters(report.filters);
     for (const [id, [field, formatter]] of Object.entries(fields)) {
       get(id).textContent = format(summary[field], formatter);
@@ -219,6 +224,30 @@ document.addEventListener('DOMContentLoaded', () => {
   form.addEventListener('submit', event => {
     event.preventDefault();
     load();
+  });
+  exportButton.addEventListener('click', async () => {
+    if (!lastReport || exportButton.disabled) return;
+    exportButton.disabled = true;
+    exportButton.textContent = 'Đang xuất…';
+    exportMessage.hidden = false;
+    exportMessage.textContent = 'Đang tạo tệp CSV…';
+    exportMessage.className = 'alert alert--info';
+    try {
+      await window.ApiClient.exportFinancialReconciliationCsv({
+        from_date: from.value,
+        to_date: to.value,
+        station_id: station.value,
+        charge_point_code: chargePoint.value,
+        status: status.value,
+      });
+      exportMessage.textContent = 'Đã tải báo cáo CSV.';
+    } catch (error) {
+      exportMessage.textContent = error.message || 'Không tải được tệp CSV.';
+      exportMessage.className = 'alert alert--danger';
+    } finally {
+      exportButton.disabled = !lastReport;
+      exportButton.textContent = 'Tải CSV';
+    }
   });
   lockButton.addEventListener('click', async () => {
     if (!lastReport || lockButton.disabled || !station.value) return;

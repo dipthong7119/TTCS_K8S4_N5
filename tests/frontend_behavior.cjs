@@ -580,7 +580,7 @@ test('SSE errors keep EventSource alive for native reconnection', () => {
   assert.equal(instances[0].closes, 1);
 });
 
-function authClient(fetchResponse) {
+function authClient(fetchResponse, browser = {}) {
   const redirects = [];
   const window = {
     location: {
@@ -588,7 +588,10 @@ function authClient(fetchResponse) {
       search: '?status=fault', replace: url => redirects.push(url)
     }
   };
-  const context = vm.createContext({ window, fetch: fetchResponse, URL, URLSearchParams });
+  const context = vm.createContext({
+    window, fetch: fetchResponse, URL: browser.URL || URL, URLSearchParams,
+    document: browser.document,
+  });
   vm.runInContext(read('api_client.js'), context);
   return { api: window.ApiClient, redirects };
 }
@@ -640,6 +643,36 @@ test('SCRUM-86 revenue-share client reads and creates contract versions', async 
   assert.equal(requested[1].url, '/api/subscriptions/revenue-share/contracts');
   assert.equal(requested[1].method, 'POST');
   assert.deepEqual(JSON.parse(requested[1].body), { station_owner_id: 7, partner_share_percent: 35 });
+});
+
+test('SCRUM-88 CSV client applies filters and downloads the named file', async () => {
+  const calls = [];
+  const downloads = [];
+  const fakeUrl = {
+    createObjectURL: blob => { downloads.push(blob); return 'blob:report'; },
+    revokeObjectURL: value => downloads.push(`revoked:${value}`),
+  };
+  const document = {
+    body: { appendChild: link => { downloads.push(link); } },
+    createElement: tag => ({ tag, click() { downloads.push('clicked'); }, remove() { downloads.push('removed'); } }),
+  };
+  const { api } = authClient(async (url, config) => {
+    calls.push({ url, config });
+    return {
+      ok: true, status: 200,
+      headers: { get: name => name === 'Content-Disposition' ? 'attachment; filename="financial.csv"' : 'text/csv' },
+      blob: async () => ({ csv: true }),
+    };
+  }, { URL: fakeUrl, document });
+
+  const filename = await api.exportFinancialReconciliationCsv({ from_date: '2026-10-01', station_id: 42, status: 'all' });
+
+  assert.equal(filename, 'financial.csv');
+  assert.equal(calls[0].url, '/api/reconciliation/financial.csv?from_date=2026-10-01&station_id=42&status=all');
+  assert.equal(calls[0].config.headers.Accept, 'text/csv');
+  assert.equal(calls[0].config.credentials, 'include');
+  assert.ok(downloads.includes('clicked'));
+  assert.ok(downloads.includes('revoked:blob:report'));
 });
 
 test('SCRUM-85 financial reconciliation client calls the real report endpoint with filters', async () => {
@@ -703,6 +736,7 @@ function financialPage(getReport, options = {}) {
       ApiClient: {
         getFinancialReconciliation: getReport,
         lockFinancialReconciliationPeriod: options.lockPeriod || (async () => financialFixture),
+        exportFinancialReconciliationCsv: options.exportCsv || (async () => 'financial.csv'),
       },
       confirm: options.confirm || (() => false),
     },
@@ -756,6 +790,22 @@ test('SCRUM-85 financial page renders API totals and session mismatches', async 
   assert.equal(row.children[5].textContent, '8.000');
   assert.match(row.children[10].children[0].textContent, /Tiền thu lệch hóa đơn/);
   assert.match(page.document.getElementById('financial-message').textContent, /Số liệu được tổng hợp từ phiên sạc/);
+});
+
+test('SCRUM-88 financial page exports the currently selected report filters', async () => {
+  let exported;
+  const page = financialPage(async () => financialFixture, {
+    stationId: 42,
+    exportCsv: async params => { exported = params; },
+  });
+  await flush();
+  await page.document.getElementById('financial-export').handlers.click();
+
+  assert.equal(exported.station_id, '42');
+  assert.equal(exported.from_date, page.document.getElementById('financial-from').value);
+  assert.equal(exported.to_date, page.document.getElementById('financial-to').value);
+  assert.equal(exported.status, 'all');
+  assert.equal(page.document.getElementById('financial-export-message').textContent, 'Đã tải báo cáo CSV.');
 });
 
 test('SCRUM-85 financial page reports loading and API failure states', async () => {
@@ -1843,7 +1893,7 @@ function revenueSharingPage(getReport = async () => ({
     base_revenue_vnd: 100000, shared_amount_vnd: 37500, energy_kwh: 20,
   }],
   totals: { base_revenue_vnd: 100000, shared_amount_vnd: 37500 },
-})) {
+}), options = {}) {
   const ids = new Map();
   const document = {
     handlers: {},
@@ -1874,6 +1924,7 @@ function revenueSharingPage(getReport = async () => ({
         partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }], items: []
       }),
       createRevenueShareContract: async () => ({}),
+      exportRevenueShareCsv: options.exportCsv || (async () => 'revenue-share.csv'),
     },
   });
 
@@ -1907,6 +1958,19 @@ test('SCRUM-86: report displays the ratio returned by the effective contract', a
   assert.equal(page.document.getElementById('stat-shared-amount').textContent, '37.500 ₫');
   assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
   assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
+});
+
+test('SCRUM-88 revenue-share page exports the displayed period and partner filters', async () => {
+  let exported;
+  const page = revenueSharingPage(undefined, { exportCsv: async params => { exported = params; } });
+  await flush();
+  page.document.getElementById('rev-share-partner').value = '7';
+  await page.document.getElementById('btn-export-csv').handlers.click();
+
+  assert.equal(exported.date_from, page.document.getElementById('rev-share-from').value);
+  assert.equal(exported.date_to, page.document.getElementById('rev-share-to').value);
+  assert.equal(exported.station_owner_id, '7');
+  assert.equal(page.document.getElementById('rev-share-export-message').textContent, 'Đã tải bảng kê CSV.');
 });
 
 test('SCRUM-254: inverted date range displays validation error without an extra API call', async () => {
@@ -1998,6 +2062,7 @@ function revenuePage(getRevenue, options = {}) {
           { charge_point_code: 'CP-02', session_count: 2, total_kwh: 50.5, occupancy_fee_vnd: 10000, revenue_vnd: 200000 },
         ],
       })),
+      exportStationRevenueCsv: options.exportRevenue || (async () => 'station.csv'),
     },
   });
 
@@ -2037,6 +2102,17 @@ test('SCRUM-84: revenue page loads initial month data and renders KPI stats and 
   assert.ok(page.document.getElementById('stat-kwh').textContent.includes('120,5'));
   assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-01'));
   assert.ok(page.document.getElementById('rev-tbody').innerHTML.includes('CP-02'));
+});
+
+test('SCRUM-88 station revenue page exports the selected station and date range', async () => {
+  let exported;
+  const page = revenuePage(null, { exportRevenue: async (id, params) => { exported = { id, params }; } });
+  await flush();
+  await page.document.getElementById('btn-export-csv').handlers.click();
+
+  assert.equal(exported.id, '101');
+  assert.equal(exported.params.start_date, page.document.getElementById('rev-start').value);
+  assert.equal(exported.params.end_date, page.document.getElementById('rev-end').value);
 });
 
 test('SCRUM-84: inverted date range shows validation error and avoids API call', async () => {

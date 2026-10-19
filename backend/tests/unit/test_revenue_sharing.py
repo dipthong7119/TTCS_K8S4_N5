@@ -1,5 +1,7 @@
 """SCRUM-86 / SCRUM-254: Partner revenue sharing UI permissions and page structure."""
 
+import csv
+from io import StringIO
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -143,6 +145,16 @@ def test_revenue_share_contract_api_versions_percentages_and_historical_dates(db
             },
         )
         assert invalid_split.status_code == 422
+
+        query = {"date_from": "2026-11-01", "date_to": "2026-11-30"}
+        report = client.get("/api/subscriptions/revenue-share", params=query)
+        exported = client.get("/api/subscriptions/revenue-share.csv", params=query)
+        assert report.status_code == exported.status_code == 200
+        assert exported.content.startswith(b"\xef\xbb\xbf")
+        rows = list(csv.DictReader(StringIO(exported.content.decode("utf-8-sig"))))
+        assert rows[0]["row_type"] == "TOTAL"
+        assert int(rows[0]["base_revenue_vnd"]) == report.json()["totals"]["base_revenue_vnd"]
+        assert int(rows[0]["shared_amount_vnd"]) == report.json()["totals"]["shared_amount_vnd"]
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous_overrides)
