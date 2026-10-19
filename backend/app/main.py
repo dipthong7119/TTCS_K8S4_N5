@@ -24,6 +24,9 @@ from app.routers.charge_point_configuration import (
     router as charge_point_configuration_router,
 )
 from app.routers.charge_points import router as charge_points_router
+from app.routers.financial_reconciliation import (
+    router as financial_reconciliation_router,
+)
 from app.routers.monitoring import router as monitoring_router
 from app.routers.nearby import router as nearby_router
 from app.routers.ocpp import router as ocpp_router
@@ -166,6 +169,7 @@ app.include_router(remote_router, prefix="/api")
 app.include_router(remote_starts_router, prefix="/api")
 app.include_router(reservations_router, prefix="/api")
 app.include_router(sessions_router, prefix="/api")
+app.include_router(financial_reconciliation_router, prefix="/api")
 app.include_router(reconciliation_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
 app.include_router(wallet_router, prefix="/api")

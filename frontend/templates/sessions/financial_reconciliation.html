@@ -39,7 +39,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label" for="financial-station">Trạm sạc</label>
-                    <select class="form-select" id="financial-station" name="station_code">
+                    <select class="form-select" id="financial-station" name="station_id">
                         <option value="">Tất cả trạm</option>
                     </select>
                 </div>
@@ -59,6 +59,8 @@
                     <option value="missing_invoice">Có kWh nhưng thiếu hóa đơn</option>
                     <option value="missing_ledger">Có hóa đơn nhưng thiếu dòng sổ cái</option>
                     <option value="amount_mismatch">Hóa đơn lệch với tính lại từ biểu giá</option>
+                    <option value="collection_mismatch">Tiền thu lệch hóa đơn</option>
+                    <option value="missing_pricing">Thiếu dữ liệu biểu giá</option>
                 </select>
             </div>
 
@@ -78,6 +80,11 @@
         <div class="stat-card__sub">kWh</div>
     </div>
     <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Tiền phải thu theo biểu giá</div>
+        <div class="stat-card__value" id="financial-total-expected">—</div>
+        <div class="stat-card__sub">VND</div>
+    </div>
+    <div class="stat-card stat-card--green">
         <div class="stat-card__label">Tổng tiền hóa đơn</div>
         <div class="stat-card__value" id="financial-total-invoiced">—</div>
         <div class="stat-card__sub">VND</div>
@@ -88,9 +95,14 @@
         <div class="stat-card__sub">VND</div>
     </div>
     <div class="stat-card stat-card--orange">
-        <div class="stat-card__label">Tổng lệch hóa đơn / biểu giá</div>
+        <div class="stat-card__label">Tổng lệch phải thu / thực thu</div>
         <div class="stat-card__value" id="financial-total-difference">—</div>
-        <div class="stat-card__sub">VND — theo kết quả đối soát</div>
+        <div class="stat-card__sub">VND — tổng trị tuyệt đối theo phiên</div>
+    </div>
+    <div class="stat-card stat-card--orange">
+        <div class="stat-card__label">Lệch hóa đơn / biểu giá</div>
+        <div class="stat-card__value" id="financial-total-invoice-difference">—</div>
+        <div class="stat-card__sub">VND — tổng trị tuyệt đối theo phiên</div>
     </div>
 </section>
 
@@ -117,18 +129,21 @@
             <thead>
                 <tr>
                     <th scope="col">Mã phiên</th>
+                    <th scope="col">Ngày</th>
+                    <th scope="col">Trạm</th>
                     <th scope="col">Trụ sạc</th>
                     <th scope="col" class="text-right">kWh</th>
                     <th scope="col" class="text-right">Tính lại theo biểu giá (VND)</th>
                     <th scope="col" class="text-right">Hóa đơn (VND)</th>
                     <th scope="col" class="text-right">Đã thu (VND)</th>
+                    <th scope="col" class="text-right">Lệch phải thu / thực thu (VND)</th>
                     <th scope="col" class="text-right">Lệch hóa đơn / biểu giá (VND)</th>
                     <th scope="col">Kết quả kiểm tra</th>
                 </tr>
             </thead>
             <tbody id="financial-table-body">
                 <tr>
-                    <td colspan="8">Chưa tải dữ liệu đối soát.</td>
+                    <td colspan="11">Chưa tải dữ liệu đối soát.</td>
                 </tr>
             </tbody>
         </table>
@@ -137,6 +152,5 @@
 </section>
 {% endblock %}
 {% block extra_js %}
-<script src="{{ asset_url('js/pages/financial_reconciliation_data.js') }}"></script>
 <script src="{{ asset_url('js/pages/financial_reconciliation.js') }}"></script>
 {% endblock %}

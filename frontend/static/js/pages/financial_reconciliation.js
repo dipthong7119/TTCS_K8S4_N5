@@ -1,4 +1,4 @@
-// SCRUM-231 / SCRUM-85 — Hiển thị báo cáo đối soát.
+// SCRUM-85 — Đối soát tài chính từ phiên sạc, hóa đơn và sổ cái.
 document.addEventListener('DOMContentLoaded', () => {
   'use strict';
   const get = name => document.getElementById(`financial-${name}`);
@@ -12,24 +12,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const message = get('message');
   const tbody = get('table-body');
   const reviewList = get('review-list');
-  const source = window.FinancialReconciliationData;
   const money = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
   const energy = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 });
   const labels = {
     missing_invoice: 'Có kWh nhưng thiếu hóa đơn',
     missing_ledger: 'Có hóa đơn nhưng thiếu dòng sổ cái',
-    amount_mismatch: 'Hóa đơn lệch với tính lại từ biểu giá',
+    amount_mismatch: 'Hóa đơn lệch với tính lại theo biểu giá',
+    collection_mismatch: 'Tiền thu lệch hóa đơn',
+    missing_pricing: 'Thiếu dữ liệu biểu giá để tính lại',
   };
   const fields = {
     'total-kwh': ['total_kwh', energy],
+    'total-expected': ['total_expected_vnd', money],
     'total-invoiced': ['total_invoiced_vnd', money],
     'total-collected': ['total_collected_vnd', money],
     'total-difference': ['total_difference_vnd', money],
+    'total-invoice-difference': ['total_invoice_difference_vnd', money],
   };
   let revision = 0;
+  let filterOptions = { stations: [], charge_points: [] };
   const format = (value, formatter) =>
-    Number.isFinite(value) ? formatter.format(value) : '—';
-  const describe = row => row.issues.map(code => labels[code] || 'Cần xem xét').join('; ');
+    Number.isFinite(Number(value)) && value !== null ? formatter.format(Number(value)) : '—';
+  const describe = row => (row.issues || []).map(code => labels[code] || 'Cần xem xét').join('; ');
 
   function notice(text, type = 'info') {
     message.className = `alert alert--${type}`;
@@ -38,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function tableMessage(text) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 11;
     cell.textContent = text;
     row.append(cell);
     tbody.replaceChildren(row);
@@ -57,8 +61,38 @@ document.addEventListener('DOMContentLoaded', () => {
     button.textContent = value ? 'Đang tải…' : 'Xem báo cáo';
     tbody.setAttribute('aria-busy', String(value));
   }
+  function fillOptions(select, values, valueOf, labelOf, placeholder) {
+    const selected = select.value;
+    select.replaceChildren();
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = placeholder;
+    select.append(all);
+    values.forEach(item => {
+      const option = document.createElement('option');
+      option.value = valueOf(item);
+      option.textContent = labelOf(item);
+      select.append(option);
+    });
+    select.value = values.some(item => String(valueOf(item)) === selected) ? selected : '';
+  }
+  function updateFilters(options) {
+    filterOptions = options || filterOptions;
+    fillOptions(
+      station,
+      filterOptions.stations || [],
+      item => item.id,
+      item => item.name,
+      'Tất cả trạm',
+    );
+    const points = (filterOptions.charge_points || []).filter(item =>
+      !station.value || String(item.station_id) === station.value
+    );
+    fillOptions(chargePoint, points, item => item.code, item => item.code, 'Tất cả trụ');
+  }
   function render(report) {
     const { rows, summary } = report;
+    updateFilters(report.filters);
     for (const [id, [field, formatter]] of Object.entries(fields)) {
       get(id).textContent = format(summary[field], formatter);
     }
@@ -66,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reviewList.replaceChildren();
     const reviewRows = rows.filter(row => row.issues.length > 0);
     const items = reviewRows.length ? reviewRows.map(row =>
-      `${row.session_id}: ${describe(row)}`
+      `Phiên ${row.session_id} — ${row.station_name}: ${describe(row)}`
     ) : ['Không có phiên cần xem xét trong bộ lọc hiện tại.'];
     items.forEach(text => {
       const item = document.createElement('li');
@@ -77,15 +111,15 @@ document.addEventListener('DOMContentLoaded', () => {
     rows.forEach(row => {
       const tr = document.createElement('tr');
       const values = [
-        row.session_id, row.charge_point_code,
+        row.session_id, row.date, row.station_name, row.charge_point_code,
         format(row.energy_kwh, energy), format(row.expected_vnd, money),
         format(row.invoiced_vnd, money), format(row.collected_vnd, money),
-        format(row.difference_vnd, money),
+        format(row.difference_vnd, money), format(row.invoice_difference_vnd, money),
       ];
       values.forEach((value, index) => {
         const cell = document.createElement('td');
         cell.textContent = value ?? '—';
-        if (index >= 2) cell.className = 'text-right';
+        if (index >= 4) cell.className = 'text-right';
         tr.append(cell);
       });
       const cell = document.createElement('td');
@@ -98,14 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (!rows.length) tableMessage('Không có phiên trong bộ lọc đã chọn.');
     get('row-count').textContent = `${rows.length} phiên theo bộ lọc hiện tại`;
-    notice('DỮ LIỆU MẪU — 5 phiên minh họa từ 02–06/10/2026. '
-      + 'Các chỉ số theo bộ lọc hiện tại, chỉ cộng khoản đã có dữ liệu. '
-      + 'Dấu — là dữ liệu thiếu; tổng lệch mẫu là tổng trị tuyệt đối. '
-      + 'Chưa dùng để chốt sổ.', 'warning');
+    notice('Số liệu được tổng hợp từ phiên sạc, hóa đơn đã chốt và sổ cái ví.');
   }
   async function load() {
     const current = ++revision;
-    clear('Đang chuẩn bị báo cáo mẫu…');
+    clear('Đang tải dữ liệu đối soát…');
     from.setCustomValidity('');
     if (!form.reportValidity()) return;
     if (from.value > to.value) {
@@ -116,15 +147,18 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     busy(true);
-    notice('Đang tải dữ liệu mẫu…');
+    notice('Đang tải số liệu thật từ máy chủ…');
     try {
-      const report = await source.getReport({
-        fromDate: from.value, toDate: to.value, status: status.value,
-        stationCode: station.value, chargePointCode: chargePoint.value,
+      const report = await window.ApiClient.getFinancialReconciliation({
+        from_date: from.value,
+        to_date: to.value,
+        station_id: station.value,
+        charge_point_code: chargePoint.value,
+        status: status.value,
       });
       if (current !== revision) return;
-      if (!report.is_sample || !Array.isArray(report.rows) || !report.summary) {
-        throw new Error('Dữ liệu mẫu không hợp lệ.');
+      if (!Array.isArray(report.rows) || !report.summary || !report.filters) {
+        throw new Error('Dữ liệu đối soát không đúng định dạng.');
       }
       render(report);
     } catch (error) {
@@ -136,43 +170,28 @@ document.addEventListener('DOMContentLoaded', () => {
       if (current === revision) busy(false);
     }
   }
-  if (!source) {
-    notice('Chưa tải được dữ liệu mẫu. Hãy tải lại trang để thử lại.', 'danger');
-    return;
+  function todayInStationZone() {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const part = type => parts.find(item => item.type === type).value;
+    return `${part('year')}-${part('month')}-${part('day')}`;
   }
-  const options = source.getFilterOptions();
-  function fillOptions(select, values, label) {
-    const selected = select.value;
-    select.replaceChildren();
-    for (const value of ['', ...new Set(values)]) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = value || label;
-      select.append(option);
-    }
-    select.value = values.includes(selected) ? selected : '';
-  }
-  function updateChargePoints() {
-    fillOptions(chargePoint, options
-      .filter(item => !station.value || item.stationCode === station.value)
-      .map(item => item.chargePointCode), 'Tất cả trụ');
-  }
-  fillOptions(station, options.map(item => item.stationCode), 'Tất cả trạm');
-  updateChargePoints();
-  station.addEventListener('change', updateChargePoints);
-  from.value = source.defaultPeriod.fromDate;
-  to.value = source.defaultPeriod.toDate;
-  button.disabled = false;
+
+  const today = todayInStationZone();
+  from.value = `${today.slice(0, 7)}-01`;
+  to.value = today;
   form.addEventListener('submit', event => {
     event.preventDefault();
     load();
   });
+  station.addEventListener('change', () => updateFilters(filterOptions));
   form.addEventListener('input', () => {
     ++revision;
     from.setCustomValidity('');
     busy(false);
     clear('Bộ lọc đã thay đổi. Bấm Xem báo cáo để cập nhật.');
-    notice('Dữ liệu mẫu — chọn Xem báo cáo để áp dụng bộ lọc mới.');
+    notice('Chọn Xem báo cáo để áp dụng bộ lọc mới.');
   });
   load();
 });

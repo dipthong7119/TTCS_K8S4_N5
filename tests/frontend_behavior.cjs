@@ -642,6 +642,117 @@ test('SCRUM-86 revenue-share client reads and creates contract versions', async 
   assert.deepEqual(JSON.parse(requested[1].body), { station_owner_id: 7, partner_share_percent: 35 });
 });
 
+test('SCRUM-85 financial reconciliation client calls the real report endpoint with filters', async () => {
+  let requestedUrl;
+  const { api } = authClient(async url => {
+    requestedUrl = url;
+    return auditResponse({ rows: [], summary: {}, filters: {} });
+  });
+
+  await api.getFinancialReconciliation({
+    from_date: '2026-10-01', to_date: '2026-10-19', station_id: 42,
+    charge_point_code: 'CP-42', status: 'review',
+  });
+
+  assert.equal(requestedUrl,
+    '/api/reconciliation/financial?from_date=2026-10-01&to_date=2026-10-19&station_id=42&charge_point_code=CP-42&status=review');
+});
+
+function financialPage(getReport) {
+  const ids = new Map();
+  const document = {
+    handlers: {},
+    getElementById(id) {
+      if (!ids.has(id)) ids.set(id, element());
+      return ids.get(id);
+    },
+    createElement() {
+      const node = element();
+      node.append = function (...children) { this.children.push(...children); };
+      node.replaceChildren = function (...children) { this.children = children; };
+      node.setAttribute = function () { };
+      return node;
+    },
+    addEventListener(name, fn) { this.handlers[name] = fn; },
+  };
+  for (const name of ['filter-form', 'from', 'to', 'status', 'station', 'charge-point', 'apply']) {
+    document.getElementById(`financial-${name}`);
+  }
+  document.getElementById('financial-filter-form').reportValidity = () => true;
+  document.getElementById('financial-from').setCustomValidity = () => { };
+  document.getElementById('financial-from').reportValidity = () => true;
+  document.getElementById('financial-table-body').replaceChildren = function (...children) {
+    this.children = children;
+  };
+  document.getElementById('financial-table-body').append = function (child) {
+    this.children.push(child);
+  };
+  document.getElementById('financial-table-body').setAttribute = function () { };
+  for (const name of ['financial-review-list', 'financial-station', 'financial-charge-point']) {
+    const node = document.getElementById(name);
+    node.append = function (child) { this.children.push(child); };
+    node.replaceChildren = function (...children) { this.children = children; };
+  }
+  const context = vm.createContext({
+    document,
+    window: { ApiClient: { getFinancialReconciliation: getReport } },
+    Intl,
+    Date,
+    console,
+  });
+  vm.runInContext(read('pages/financial_reconciliation.js'), context);
+  document.handlers.DOMContentLoaded();
+  return { document };
+}
+
+const financialFixture = {
+  rows: [{
+    session_id: 85, date: '2026-10-05', station_name: 'Station A', charge_point_code: 'CP-A',
+    energy_kwh: 2, expected_vnd: 8000, invoiced_vnd: 9000, collected_vnd: 8500,
+    difference_vnd: -500, invoice_difference_vnd: 1000,
+    issues: ['amount_mismatch', 'collection_mismatch'],
+  }],
+  summary: {
+    total_kwh: 2, total_expected_vnd: 8000, total_invoiced_vnd: 9000,
+    total_collected_vnd: 8500, total_difference_vnd: 500,
+    total_invoice_difference_vnd: 1000, review_count: 1,
+  },
+  filters: {
+    stations: [{ id: 42, name: 'Station A' }],
+    charge_points: [{ code: 'CP-A', station_id: 42 }],
+  },
+};
+
+test('SCRUM-85 financial page renders API totals and session mismatches', async () => {
+  let params;
+  const page = financialPage(async value => {
+    params = value;
+    return financialFixture;
+  });
+  await flush();
+
+  assert.ok(params.from_date);
+  assert.ok(params.to_date);
+  assert.equal(page.document.getElementById('financial-total-expected').textContent, '8.000');
+  assert.equal(page.document.getElementById('financial-total-collected').textContent, '8.500');
+  assert.equal(page.document.getElementById('financial-review-count').textContent, '1');
+  const row = page.document.getElementById('financial-table-body').children[0];
+  assert.equal(row.children[0].textContent, 85);
+  assert.equal(row.children[5].textContent, '8.000');
+  assert.match(row.children[10].children[0].textContent, /Tiền thu lệch hóa đơn/);
+  assert.match(page.document.getElementById('financial-message').textContent, /Số liệu được tổng hợp từ phiên sạc/);
+});
+
+test('SCRUM-85 financial page reports loading and API failure states', async () => {
+  let rejectReport;
+  const page = financialPage(() => new Promise((_, reject) => { rejectReport = reject; }));
+  assert.equal(page.document.getElementById('financial-apply').textContent, 'Đang tải…');
+  rejectReport({ message: 'Máy chủ không phản hồi' });
+  await flush();
+  assert.equal(page.document.getElementById('financial-message').textContent, 'Máy chủ không phản hồi');
+  assert.equal(page.document.getElementById('financial-apply').disabled, false);
+});
+
 function auditPage(fetchResponse, filters = {}) {
   const ids = new Map();
   const document = {
