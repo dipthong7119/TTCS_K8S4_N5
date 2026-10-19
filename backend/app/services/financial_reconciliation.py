@@ -155,6 +155,9 @@ def get_financial_reconciliation_report(
     for session, invoice in candidates:
         if session.station_id is None:
             continue
+        station = station_by_id.get(session.station_id)
+        if station is None:
+            continue
         station_tariffs = tariffs_by_station[session.station_id]
         timezone_name = station_timezone(station_tariffs, session.started_at)
         try:
@@ -196,7 +199,7 @@ def get_financial_reconciliation_report(
             issues.append("missing_invoice")
         if invoice is not None and expected is not None and invoice_amount != expected:
             issues.append("amount_mismatch")
-        if invoice is not None and invoice_amount > 0 and ledger_count[session.id] == 0:
+        if invoice_amount is not None and invoice_amount > 0 and ledger_count[session.id] == 0:
             issues.append("missing_ledger")
         if ledger_count[session.id] > 0 and invoice_amount != collected:
             issues.append("collection_mismatch")
@@ -204,7 +207,7 @@ def get_financial_reconciliation_report(
             "session_id": session.id,
             "date": local_end.date().isoformat(),
             "station_id": session.station_id,
-            "station_name": station_by_id.get(session.station_id).name,
+            "station_name": station.name,
             "charge_point_code": session.charge_point_code,
             "energy_kwh": energy_kwh,
             "expected_vnd": expected,

@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from alembic import op
 
-
 revision: str = "privacy_schema_reconcile_v1"
 down_revision: str | None = "h20261021_scrum87_reconciliation_period_locks"
 branch_labels: str | Sequence[str] | None = None
