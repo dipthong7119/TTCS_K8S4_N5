@@ -101,6 +101,7 @@ def _serialize_session(
         "meter_start_wh": item.meter_start_wh,
         "meter_stop_wh": item.meter_stop_wh,
         "kwh": float(item.energy_kwh) if item.energy_kwh is not None else None,
+        "requested_power_limit_w": item.requested_power_limit_w,
         "live_kwh": live_kwh,
         "cost_vnd": invoice.total_vnd if invoice else None,
         "invoice_segments": invoice.segments if invoice else None,

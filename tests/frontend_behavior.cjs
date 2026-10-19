@@ -605,6 +605,26 @@ test('SCRUM-91 wallet audit client calls the backend audit endpoint', async () =
   assert.equal(requestedUrl, '/api/audit?page=1&page_size=50');
 });
 
+test('SCRUM-83 power-band client exposes the backend CRUD routes', async () => {
+  const requested = [];
+  const { api } = authClient(async (url, config) => {
+    requested.push({ url, method: config.method });
+    return auditResponse({});
+  });
+
+  await api.listStationPowerCapacityBands(12);
+  await api.createStationPowerCapacityBand(12, { start_minute: 60 });
+  await api.updateStationPowerCapacityBand(12, 3, { start_minute: 60 });
+  await api.deleteStationPowerCapacityBand(12, 3);
+
+  assert.deepEqual(requested, [
+    { url: '/api/stations/12/power-capacity-bands', method: 'GET' },
+    { url: '/api/stations/12/power-capacity-bands', method: 'POST' },
+    { url: '/api/stations/12/power-capacity-bands/3', method: 'PUT' },
+    { url: '/api/stations/12/power-capacity-bands/3', method: 'DELETE' },
+  ]);
+});
+
 function auditPage(fetchResponse, filters = {}) {
   const ids = new Map();
   const document = {

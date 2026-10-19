@@ -188,6 +188,10 @@ const ApiClient = (() => {
     // --- Power capacity (SCRUM-80) ---
     getStationPowerCapacity: (stationId) => _request('GET', `/stations/${stationId}/power-capacity`),
     updateStationPowerCapacity: (stationId, body) => _request('PUT', `/stations/${stationId}/power-capacity`, body),
+    listStationPowerCapacityBands: (stationId) => _request('GET', `/stations/${stationId}/power-capacity-bands`),
+    createStationPowerCapacityBand: (stationId, body) => _request('POST', `/stations/${stationId}/power-capacity-bands`, body),
+    updateStationPowerCapacityBand: (stationId, bandId, body) => _request('PUT', `/stations/${stationId}/power-capacity-bands/${bandId}`, body),
+    deleteStationPowerCapacityBand: (stationId, bandId) => _request('DELETE', `/stations/${stationId}/power-capacity-bands/${bandId}`),
 
     // --- Nearby stations (SCRUM-96 / S-47) ---
     getNearbyStations: (params = {}) => _request('GET', '/stations/nearby?' + new URLSearchParams(params)),

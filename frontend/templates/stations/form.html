@@ -545,6 +545,45 @@
       </div>
     </div>
   </section>
+
+  <!-- ── SCRUM-83: Hạn mức công suất theo khung giờ ── -->
+  <section class="card" id="station-power-bands-card" data-station-id="{{ station.id }}" aria-labelledby="station-power-bands-title">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="station-power-bands-title">Hạn mức công suất theo khung giờ</h2>
+        <p class="card__subtitle">Đặt giới hạn công suất riêng theo giờ địa phương của trạm. Ngoài các khung đã khai báo, hệ thống dùng hạn mức mặc định.</p>
+      </div>
+      <span class="badge badge--neutral">SCRUM-83</span>
+    </div>
+    <div class="card__body">
+      <p id="power-bands-message" class="alert alert--info" role="status" aria-live="polite">Đang tải khung giờ...</p>
+      <form id="power-band-form" class="form-row" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="power-band-start">Giờ bắt đầu</label>
+          <input class="form-input" id="power-band-start" type="time" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="power-band-end">Giờ kết thúc</label>
+          <input class="form-input" id="power-band-end" type="time" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="power-band-limit">Hạn mức (kW)</label>
+          <input class="form-input" id="power-band-limit" type="number" min="0.001" max="100000" step="0.001" required />
+        </div>
+        <div class="form-group" style="align-self:end;display:flex;gap:var(--space-2);">
+          <button class="btn btn--primary" id="power-band-save" type="submit">Thêm khung giờ</button>
+          <button class="btn btn--secondary is-hidden" id="power-band-cancel" type="button">Huỷ sửa</button>
+        </div>
+      </form>
+      <p id="power-band-overlap-warning" class="form-hint" role="status" aria-live="polite"></p>
+      <div class="table-wrap" style="margin-top:var(--space-4);">
+        <table class="table" aria-label="Danh sách hạn mức công suất theo khung giờ">
+          <thead><tr><th scope="col">Bắt đầu</th><th scope="col">Kết thúc</th><th scope="col" class="text-right">Hạn mức</th><th scope="col">Thao tác</th></tr></thead>
+          <tbody id="power-bands-tbody"><tr><td colspan="4">Đang tải...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
   {% endif %}
 </div>
 

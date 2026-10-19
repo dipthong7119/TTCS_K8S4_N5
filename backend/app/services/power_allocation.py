@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_FLOOR, Decimal
 
 from sqlalchemy import and_
@@ -13,6 +14,8 @@ from app.database import SessionLocal
 from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
 from app.models.station import Station
+from app.models.station_power_band import StationPowerBand
+from app.services.power_capacity_bands import effective_station_power_limit_kw
 from app.services.power_profiles import (
     PowerAllocationTarget,
     dispatch_power_profile,
@@ -78,10 +81,8 @@ async def _run_station_rebalance(station_id: int, state: _RebalanceState) -> Non
         while True:
             await asyncio.sleep(REBALANCE_COALESCE_SECONDS)
             event_version = state.version
-            lock = _rebalance_locks.setdefault(station_id, asyncio.Lock())
-            async with lock:
-                with SessionLocal() as db:
-                    await rebalance_station_once(db, station_id)
+            with SessionLocal() as db:
+                await rebalance_station_once(db, station_id)
             if state.version == event_version:
                 return
     except asyncio.CancelledError:
@@ -97,6 +98,22 @@ async def rebalance_station_once(
     station_id: int,
     *,
     send_call: Callable[..., Awaitable[dict]] | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Serialize rebalance callers in-process before applying the DB row lock."""
+    lock = _rebalance_locks.setdefault(station_id, asyncio.Lock())
+    async with lock:
+        return await _rebalance_station_once_locked(
+            db, station_id, send_call=send_call, now=now
+        )
+
+
+async def _rebalance_station_once_locked(
+    db: Session,
+    station_id: int,
+    *,
+    send_call: Callable[..., Awaitable[dict]] | None,
+    now: datetime | None,
 ) -> int:
     """Persist changed equal-share limits and send/log OCPP profiles for them."""
     station = (
@@ -105,8 +122,19 @@ async def rebalance_station_once(
         .with_for_update()
         .first()
     )
-    if station is None or station.power_limit_kw is None:
+    if station is None:
         return 0
+    station_limit_kw = effective_station_power_limit_kw(
+        db, station.id, Decimal(station.power_limit_kw)
+        if station.power_limit_kw is not None else None,
+        now,
+    )
+    has_power_bands = (
+        db.query(StationPowerBand.id)
+        .filter(StationPowerBand.station_id == station.id)
+        .first()
+        is not None
+    )
 
     rows = (
         db.query(ChargingSession, Connector, ChargePoint)
@@ -136,6 +164,14 @@ async def rebalance_station_once(
         db.commit()
         return 0
 
+    if station_limit_kw is None and not has_power_bands and not any(
+        session.requested_power_limit_w is not None
+        for session, _connector, _point in participants
+    ):
+        # Preserve SCRUM-80 behavior for stations with neither a default nor a schedule.
+        db.commit()
+        return 0
+
     missing_ratings = [
         session.id for session, connector, _point in participants
         if connector.rated_power_kw is None
@@ -149,23 +185,35 @@ async def rebalance_station_once(
         db.rollback()
         return 0
 
-    limits = calculate_equal_share_limits(
-        Decimal(station.power_limit_kw),
-        [(session.id, Decimal(connector.rated_power_kw)) for session, connector, _ in participants],
-    )
+    if station_limit_kw is None:
+        # A schedule may end on a station without a SCRUM-80 default. Restore each
+        # connector's rated ceiling instead of leaving the previous TxProfile active.
+        limits = {
+            session.id: _kw_to_watts(Decimal(connector.rated_power_kw))
+            for session, connector, _ in participants
+        }
+    else:
+        limits = calculate_equal_share_limits(
+            station_limit_kw,
+            [
+                (session.id, Decimal(connector.rated_power_kw))
+                for session, connector, _ in participants
+            ],
+        )
     nominal_kw = sum(
         (Decimal(connector.rated_power_kw) for _, connector, _ in participants),
         Decimal(0),
     )
-    if nominal_kw > Decimal(station.power_limit_kw):
+    if station_limit_kw is not None and nominal_kw > station_limit_kw:
         logger.warning(
             "Active connector ratings exceed station limit: station_id=%s nominal_kw=%s limit_kw=%s",
             station.id,
             nominal_kw,
-            station.power_limit_kw,
+            station_limit_kw,
         )
 
     changed: list[PowerAllocationTarget] = []
+    session_updates = []
     for session, connector, point in participants:
         limit_w = limits[session.id]
         previous_limit_w = session.requested_power_limit_w
@@ -180,9 +228,27 @@ async def rebalance_station_once(
             limit_w=limit_w,
         )
         changed.append(target)
+        session_updates.append(
+            {
+                "user_id": session.user_id,
+                "owner_id": station.owner_id,
+                "session_id": session.id,
+                "requested_power_limit_w": limit_w,
+            }
+        )
         record_profile_request(db, target)
         session.requested_power_limit_w = limit_w
     db.commit()
+    if session_updates:
+        from app.routers.monitoring import notify_session_change
+
+        for update in session_updates:
+            notify_session_change(
+                update["user_id"],
+                update["owner_id"],
+                update["session_id"],
+                requested_power_limit_w=update["requested_power_limit_w"],
+            )
     if not changed:
         return 0
 

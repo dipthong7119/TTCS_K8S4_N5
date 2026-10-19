@@ -29,6 +29,7 @@ from app.routers.nearby import router as nearby_router
 from app.routers.ocpp import router as ocpp_router
 from app.routers.pages import router as pages_router
 from app.routers.power_capacity import router as power_capacity_router
+from app.routers.power_capacity_bands import router as power_capacity_bands_router
 from app.routers.privacy import router as privacy_router
 from app.routers.reconciliation import router as reconciliation_router
 from app.routers.remote import router as remote_router
@@ -89,12 +90,17 @@ async def lifespan(app: FastAPI):
 
     # T-26: Start background job
 
-    from app.services.jobs import check_offline_charge_points, cleanup_old_ocpp_messages
+    from app.services.jobs import (
+        check_offline_charge_points,
+        check_station_power_schedule,
+        cleanup_old_ocpp_messages,
+    )
     from app.services.reservation_job import check_expired_reservations
 
     bg_task = asyncio.create_task(check_offline_charge_points())
     cleanup_task = asyncio.create_task(cleanup_old_ocpp_messages())
     reservation_task = asyncio.create_task(check_expired_reservations())
+    power_schedule_task = asyncio.create_task(check_station_power_schedule())
     local_simulator_task: asyncio.Task[None] | None = None
     if settings.APP_ENV == "development" and settings.CSMS_LOCAL_SIMULATOR_ENABLED:
         local_simulator_task = asyncio.create_task(_run_local_simulator_fleet())
@@ -104,7 +110,8 @@ async def lifespan(app: FastAPI):
     bg_task.cancel()
     cleanup_task.cancel()
     reservation_task.cancel()
-    tasks = [bg_task, cleanup_task, reservation_task]
+    power_schedule_task.cancel()
+    tasks = [bg_task, cleanup_task, reservation_task, power_schedule_task]
     if local_simulator_task is not None:
         local_simulator_task.cancel()
         tasks.append(local_simulator_task)
@@ -150,6 +157,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(nearby_router, prefix="/api")   # S-47: phải đứng trước stations_router
 app.include_router(stations_router, prefix="/api")
 app.include_router(power_capacity_router, prefix="/api")
+app.include_router(power_capacity_bands_router, prefix="/api")
 app.include_router(charge_points_router, prefix="/api")
 app.include_router(charge_point_configuration_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api/monitoring")

@@ -990,4 +990,144 @@
 
     loadPowerCapacity();
   }
+
+  // ── SCRUM-83: CRUD khung giờ hạn mức công suất ──
+  const powerBandsCard = document.getElementById('station-power-bands-card');
+  if (powerBandsCard && isEdit && stationId) {
+    const form = document.getElementById('power-band-form');
+    const startInput = document.getElementById('power-band-start');
+    const endInput = document.getElementById('power-band-end');
+    const limitInput = document.getElementById('power-band-limit');
+    const saveButton = document.getElementById('power-band-save');
+    const cancelButton = document.getElementById('power-band-cancel');
+    const message = document.getElementById('power-bands-message');
+    const warning = document.getElementById('power-band-overlap-warning');
+    const tbody = document.getElementById('power-bands-tbody');
+    let bands = [];
+    let editingId = null;
+
+    const minute = value => {
+      const [hour, min] = value.split(':').map(Number);
+      return hour * 60 + min;
+    };
+    const clock = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+    function setMessage(text, type = 'info') {
+      message.className = `alert alert--${type}`;
+      message.textContent = text;
+      message.hidden = !text;
+    }
+
+    function render() {
+      if (!bands.length) {
+        tbody.innerHTML = '<tr><td colspan="4">Chưa có khung giờ. Hạn mức mặc định của trạm đang được áp dụng.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = bands.map(band => `<tr>
+        <td>${clock(band.start_minute)}</td><td>${clock(band.end_minute)}</td>
+        <td class="text-right">${Number(band.power_limit_kw).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kW</td>
+        <td><button class="btn btn--secondary btn--sm" type="button" data-band-edit="${band.id}">Sửa</button>
+          <button class="btn btn--secondary btn--sm" type="button" data-band-delete="${band.id}">Xoá</button></td>
+      </tr>`).join('');
+    }
+
+    function overlapping(start, end, excludedId = null) {
+      return bands.find(band => band.id !== excludedId
+        && Math.max(start, band.start_minute) < Math.min(end, band.end_minute));
+    }
+
+    function checkBand() {
+      warning.textContent = '';
+      if (!startInput.value || !endInput.value) return false;
+      const start = minute(startInput.value);
+      const end = minute(endInput.value);
+      if (start >= end) {
+        warning.textContent = 'Giờ bắt đầu phải sớm hơn giờ kết thúc.';
+        return false;
+      }
+      const conflict = overlapping(start, end, editingId);
+      if (conflict) {
+        warning.textContent = `Cảnh báo: khung giờ này chồng lấn với ${clock(conflict.start_minute)}–${clock(conflict.end_minute)}.`;
+        return false;
+      }
+      return true;
+    }
+
+    async function loadBands() {
+      tbody.innerHTML = '<tr><td colspan="4">Đang tải khung giờ...</td></tr>';
+      setMessage('Đang tải khung giờ...');
+      try {
+        bands = await ApiClient.listStationPowerCapacityBands(stationId);
+        bands.sort((a, b) => a.start_minute - b.start_minute);
+        render();
+        setMessage(bands.length ? `Đã tải ${bands.length} khung giờ (${bands[0].timezone_name || 'giờ địa phương của trạm'}).` : 'Chưa có khung giờ.');
+      } catch (error) {
+        tbody.innerHTML = '<tr><td colspan="4">Không tải được khung giờ.</td></tr>';
+        setMessage(error.message || 'Không tải được khung giờ công suất.', 'error');
+      }
+    }
+
+    function resetForm() {
+      form.reset();
+      editingId = null;
+      saveButton.textContent = 'Thêm khung giờ';
+      cancelButton.classList.add('is-hidden');
+      warning.textContent = '';
+    }
+
+    [startInput, endInput, limitInput].forEach(input => input.addEventListener('input', checkBand));
+    cancelButton.addEventListener('click', resetForm);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const limit = Number(limitInput.value);
+      if (!startInput.value || !endInput.value || !Number.isFinite(limit) || limit <= 0 || !checkBand()) {
+        if (limitInput.value && limit <= 0) warning.textContent = 'Hạn mức công suất phải lớn hơn 0 kW.';
+        return;
+      }
+      const body = { start_minute: minute(startInput.value), end_minute: minute(endInput.value), power_limit_kw: limit };
+      saveButton.disabled = true;
+      try {
+        if (editingId === null) await ApiClient.createStationPowerCapacityBand(stationId, body);
+        else await ApiClient.updateStationPowerCapacityBand(stationId, editingId, body);
+        setMessage('Đã lưu khung giờ công suất.', 'success');
+        resetForm();
+        await loadBands();
+      } catch (error) {
+        setMessage(error.message || 'Không lưu được khung giờ.', 'error');
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+    tbody.addEventListener('click', async event => {
+      const editButton = event.target.closest('[data-band-edit]');
+      const deleteButton = event.target.closest('[data-band-delete]');
+      if (editButton) {
+        const band = bands.find(item => item.id === Number(editButton.dataset.bandEdit));
+        if (!band) return;
+        editingId = band.id;
+        startInput.value = clock(band.start_minute);
+        endInput.value = clock(band.end_minute);
+        limitInput.value = band.power_limit_kw;
+        saveButton.textContent = 'Cập nhật khung giờ';
+        cancelButton.classList.remove('is-hidden');
+        checkBand();
+      } else if (deleteButton) {
+        const id = Number(deleteButton.dataset.bandDelete);
+        if (!window.confirm('Bạn có chắc muốn xoá khung giờ công suất này?')) return;
+        deleteButton.disabled = true;
+        try {
+          await ApiClient.deleteStationPowerCapacityBand(stationId, id);
+          if (editingId === id) resetForm();
+          setMessage('Đã xoá khung giờ công suất.', 'success');
+          await loadBands();
+        } catch (error) {
+          setMessage(error.message || 'Không xoá được khung giờ.', 'error');
+          deleteButton.disabled = false;
+        }
+      }
+    });
+    loadBands();
+  }
 })();
