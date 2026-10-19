@@ -63,10 +63,31 @@
             </div>
 
             <button class="btn btn--primary" id="financial-apply" type="submit" disabled>Xem báo cáo</button>
+            <button class="btn btn--secondary" id="financial-export-csv" type="button"
+                aria-describedby="financial-export-help" disabled>
+                Tải CSV đối soát
+            </button>
+            <p id="financial-export-help" class="text-muted" role="status">
+                Chức năng tải CSV đối soát chưa sẵn sàng.
+            </p>
         </form>
     </div>
 </section>
-
+<section class="card" aria-labelledby="period-lock-title">
+    <div class="card__header">
+        <h2 class="card__title" id="period-lock-title">Chốt kỳ đối soát</h2>
+    </div>
+    <div class="card__body">
+        <p><strong>Trạng thái kỳ:</strong> Chưa xác định</p>
+        <p class="alert alert--info" id="period-lock-help" role="status">
+            Chức năng chốt kỳ chưa sẵn sàng.
+            Báo cáo hiện sử dụng dữ liệu mẫu, chưa thể dùng để chốt sổ.
+        </p>
+        <button class="btn btn--primary" type="button" aria-describedby="period-lock-help" disabled>
+            Chốt kỳ đối soát
+        </button>
+    </div>
+</section>
 <p class="alert alert--info" id="financial-message" role="status">
     Chưa tải dữ liệu đối soát.
 </p>
