@@ -147,6 +147,11 @@ const ApiClient = (() => {
       ).toString();
       return _request('GET', '/subscriptions/revenue-share' + (query ? '?' + query : ''));
     },
+    listRevenueShareContracts: (params = {}) => {
+      const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();
+      return _request('GET', '/subscriptions/revenue-share/contracts' + (query ? '?' + query : ''));
+    },
+    createRevenueShareContract: (body) => _request('POST', '/subscriptions/revenue-share/contracts', body),
 
     // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
     listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),

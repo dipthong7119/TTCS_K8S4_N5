@@ -2,7 +2,7 @@
 {% set active_page = "revenue-sharing" %}
 
 {% block title %}Chia doanh thu đối tác{% endblock %}
-{% block meta_description %}Bảng kê chia 60% phí gói thuê bao cho chủ trạm theo lượng kWh sử dụng{% endblock %}
+{% block meta_description %}Bảng kê chia doanh thu cho đối tác theo hợp đồng có hiệu lực và lượng kWh sử dụng{% endblock %}
 
 {% block breadcrumb %}
 <a href="/">Trang chủ</a>
@@ -22,7 +22,7 @@
     <div class="page-header__info">
       <h1 class="page-header__title">Chia doanh thu cho đối tác</h1>
       <p class="page-header__subtitle">
-        Chủ trạm nhận 60% phí gói thuê bao, phân bổ theo kWh sử dụng trong kỳ.
+        Tỉ lệ của đối tác và nền tảng được lấy từ hợp đồng có hiệu lực tại thời điểm sử dụng.
       </p>
     </div>
   </div>
@@ -67,6 +67,45 @@
     </div>
   </section>
 
+  <section class="card" aria-labelledby="contract-management-title">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="contract-management-title">Quản lý hợp đồng chia doanh thu</h2>
+        <p class="card__subtitle">Mỗi thay đổi tạo một phiên bản mới có ngày hiệu lực; số liệu các kỳ trước giữ nguyên theo hợp đồng lúc phát sinh.</p>
+      </div>
+    </div>
+    <div class="card__body">
+      <form id="revenue-contract-form" class="form-row" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="contract-partner">Đối tác / Chủ trạm</label>
+          <select class="form-select" id="contract-partner" required><option value="">Chọn đối tác</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contract-partner-percent">Tỉ lệ đối tác (%)</label>
+          <input class="form-input" id="contract-partner-percent" type="number" min="0" max="100" step="0.01" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contract-platform-percent">Tỉ lệ nền tảng (%)</label>
+          <input class="form-input" id="contract-platform-percent" type="number" min="0" max="100" step="0.01" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contract-effective-from">Có hiệu lực từ</label>
+          <input class="form-input" id="contract-effective-from" type="datetime-local" required />
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn btn--primary" id="contract-save" type="submit">Tạo phiên bản hợp đồng</button>
+        </div>
+      </form>
+      <p id="contract-message" class="alert alert--info" role="status" aria-live="polite" hidden></p>
+      <div class="table-wrap" style="margin-top:var(--space-4);">
+        <table class="table" aria-label="Lịch sử hợp đồng chia doanh thu">
+          <thead><tr><th scope="col">Đối tác</th><th scope="col" class="text-right">Đối tác</th><th scope="col" class="text-right">Nền tảng</th><th scope="col">Hiệu lực từ</th><th scope="col">Đến trước</th></tr></thead>
+          <tbody id="contract-history-body"><tr><td colspan="5">Đang tải hợp đồng...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- Not Ready Notice -->
   <div id="rev-share-not-ready" class="alert alert--warning" role="status" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -92,7 +131,7 @@
     <div class="stat-card stat-card--green">
       <div class="stat-card__label">Tổng tiền chia đối tác</div>
       <div class="stat-card__value" id="stat-shared-amount">—</div>
-      <div class="stat-card__sub">60% phí gói thuê bao, chia theo kWh</div>
+      <div class="stat-card__sub">Theo hợp đồng áp dụng tại thời điểm phát sinh</div>
     </div>
   </section>
 

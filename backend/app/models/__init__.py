@@ -25,6 +25,7 @@ from app.models.reservation import (  # noqa: F401
     Reservation,
     ReservationStatus,
 )
+from app.models.revenue_share_contract import RevenueShareContract  # noqa: F401
 from app.models.station import Station  # noqa: F401
 from app.models.station_power_band import StationPowerBand  # noqa: F401
 from app.models.station_tariff import StationTariff, TariffBand  # noqa: F401

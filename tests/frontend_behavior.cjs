@@ -625,6 +625,23 @@ test('SCRUM-83 power-band client exposes the backend CRUD routes', async () => {
   ]);
 });
 
+test('SCRUM-86 revenue-share client reads and creates contract versions', async () => {
+  const requested = [];
+  const { api } = authClient(async (url, config) => {
+    requested.push({ url, method: config.method, body: config.body });
+    return auditResponse({});
+  });
+
+  await api.listRevenueShareContracts();
+  await api.createRevenueShareContract({ station_owner_id: 7, partner_share_percent: 35 });
+
+  assert.equal(requested[0].url, '/api/subscriptions/revenue-share/contracts');
+  assert.equal(requested[0].method, 'GET');
+  assert.equal(requested[1].url, '/api/subscriptions/revenue-share/contracts');
+  assert.equal(requested[1].method, 'POST');
+  assert.deepEqual(JSON.parse(requested[1].body), { station_owner_id: 7, partner_share_percent: 35 });
+});
+
 function auditPage(fetchResponse, filters = {}) {
   const ids = new Map();
   const document = {
@@ -1656,10 +1673,10 @@ function revenueSharingPage(getReport = async () => ({
   partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
   items: [{
     partner_name: 'Trạm An Phú', partner_email: 'owner@example.test',
-    policy_label: 'Quy tắc mặc định 60%', share_percent: 60,
-    base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20,
+    policy_label: 'Hợp đồng #27', share_percent: 37.5,
+    base_revenue_vnd: 100000, shared_amount_vnd: 37500, energy_kwh: 20,
   }],
-  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+  totals: { base_revenue_vnd: 100000, shared_amount_vnd: 37500 },
 })) {
   const ids = new Map();
   const document = {
@@ -1685,7 +1702,13 @@ function revenueSharingPage(getReport = async () => ({
     Intl,
     Math,
     Option: function (text, value) { return { text, value }; },
-    ApiClient: { getRevenueShareReport: getReport },
+    ApiClient: {
+      getRevenueShareReport: getReport,
+      listRevenueShareContracts: async () => ({
+        partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }], items: []
+      }),
+      createRevenueShareContract: async () => ({}),
+    },
   });
 
   const script = read('pages/revenue_sharing.js');
@@ -1693,14 +1716,14 @@ function revenueSharingPage(getReport = async () => ({
   return { document, ids };
 }
 
-test('SCRUM-254: default month loads the 60 percent revenue share report', async () => {
+test('SCRUM-86: report displays the ratio returned by the effective contract', async () => {
   let query;
   const page = revenueSharingPage(async params => {
     query = params;
     return {
       partners: [{ id: 7, name: 'Trạm An Phú', email: 'owner@example.test' }],
-      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Quy tắc mặc định 60%', share_percent: 60, base_revenue_vnd: 100000, shared_amount_vnd: 60000, energy_kwh: 20 }],
-      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 60000 },
+      items: [{ partner_name: 'Trạm An Phú', partner_email: 'owner@example.test', policy_label: 'Hợp đồng #27', share_percent: 37.5, base_revenue_vnd: 100000, shared_amount_vnd: 37500, energy_kwh: 20 }],
+      totals: { base_revenue_vnd: 100000, shared_amount_vnd: 37500 },
     };
   });
   await flush();
@@ -1713,8 +1736,9 @@ test('SCRUM-254: default month loads the 60 percent revenue share report', async
   assert.equal(page.document.getElementById('rev-share-not-ready').hidden, true);
   const tableMessage = page.document.getElementById('rev-share-tbody').innerHTML;
   assert.ok(tableMessage.includes('Trạm An Phú'));
-  assert.ok(tableMessage.includes('Quy tắc mặc định 60%'));
-  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '60.000 ₫');
+  assert.ok(tableMessage.includes('Hợp đồng #27'));
+  assert.ok(tableMessage.includes('37.5%'));
+  assert.equal(page.document.getElementById('stat-shared-amount').textContent, '37.500 ₫');
   assert.equal(page.document.getElementById('rev-share-loading').hidden, true);
   assert.equal(page.document.getElementById('rev-share-tfoot').hidden, false);
 });
