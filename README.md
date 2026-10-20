@@ -137,9 +137,8 @@ alembic upgrade head
 │   └── static/              # CSS, JavaScript và dữ liệu mẫu
 ├── tests/                   # Test tích hợp, frontend và acceptance
 ├── scripts/                 # Công cụ CI/acceptance
-├── huongdan/                # Hướng dẫn vận hành và kiểm thử
-├── ketqua/                  # Kết quả nghiệm thu, dữ liệu kiểm thử
-├── prompts/                 # Đặc tả và bản đồ codebase
+├── huongdan/                # Workbook tham khảo dự án
+├── ketqua/                  # Dữ liệu kiểm thử dạng JSON
 ├── docker-compose.yml
 ├── docker-compose.acceptance.yml
 ├── run.ps1                  # Chạy local trên Windows
