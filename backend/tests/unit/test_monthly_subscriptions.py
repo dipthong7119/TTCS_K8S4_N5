@@ -1,11 +1,13 @@
 """SCRUM-68: monthly subscriptions, package billing, and owner revenue share."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 
 from app.models.charging_session import ChargingSession
 from app.models.driver_subscription import DriverSubscription
+from app.models.revenue_share_contract import RevenueShareContract
 from app.models.station import Station
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.subscription_usage import SubscriptionUsage
@@ -17,7 +19,9 @@ from app.services.subscriptions import (
     SubscriptionConflict,
     add_one_calendar_month,
     allocate_station_owner_pool,
+    create_revenue_share_contract,
     list_owner_revenue_share,
+    list_revenue_share_report,
     purchase_subscription,
 )
 from seed_data import DEMO_SUBSCRIPTION_PLANS, _ensure_demo_subscription_plans
@@ -164,7 +168,20 @@ def test_package_billing_snapshots_plan_usage_and_owner_share(db_session) -> Non
         ended_at=_utc_naive(2026, 10, 9, 11),
         status="completed",
     )
-    db_session.add_all([owner, driver, station, plan, subscription, session])
+    db_session.add_all([
+        owner,
+        driver,
+        station,
+        plan,
+        subscription,
+        session,
+        RevenueShareContract(
+            station_owner_id=owner.id,
+            partner_share_percent=60,
+            platform_share_percent=40,
+            effective_from=_utc_naive(2026, 1, 1),
+        ),
+    ])
     db_session.commit()
 
     invoice = finalize_session_billing(db_session, session, [])
@@ -193,3 +210,76 @@ def test_owner_revenue_pool_uses_largest_remainder_without_losing_dong() -> None
         20: 3_000,
     }
     assert add_one_calendar_month(_utc_naive(2024, 1, 31)) == _utc_naive(2024, 2, 29)
+
+
+def test_contract_versions_apply_by_usage_time_and_reconcile_integer_vnd(db_session):
+    owner = _user(11, "contract-owner@example.test")
+    driver = _user(12, "contract-driver@example.test")
+    station = Station(id=11, name="Contract station", owner_id=owner.id)
+    plan = SubscriptionPlan(
+        id=11, name="Contract plan", monthly_fee_vnd=100_001,
+        price_vnd_per_kwh=2_000, is_active=True,
+    )
+    subscription = DriverSubscription(
+        id=11, user_id=driver.id, plan_id=plan.id, plan_name=plan.name,
+        monthly_fee_vnd=100_001, price_vnd_per_kwh=2_000,
+        starts_at=_utc_naive(2027, 1, 1), expires_at=_utc_naive(2027, 2, 1),
+    )
+    sessions = [
+        ChargingSession(
+            id=session_id, charge_point_code=f"CONTRACT-{session_id}",
+            station_id=station.id, station_name=station.name, connector_number=1,
+            user_id=driver.id, meter_start_wh=0, meter_stop_wh=1_000,
+            started_at=created_at, ended_at=created_at, status="completed",
+        )
+        for session_id, created_at in (
+            (111, _utc_naive(2027, 1, 10)),
+            (112, _utc_naive(2027, 1, 20)),
+        )
+    ]
+    db_session.add_all([owner, driver, station, plan, subscription, *sessions])
+    db_session.flush()
+    db_session.add_all([
+        SubscriptionUsage(
+            subscription_id=subscription.id, charging_session_id=sessions[0].id,
+            station_id=station.id, station_owner_id=owner.id, energy_wh=1_000,
+            created_at=_utc_naive(2027, 1, 10),
+        ),
+        SubscriptionUsage(
+            subscription_id=subscription.id, charging_session_id=sessions[1].id,
+            station_id=station.id, station_owner_id=owner.id, energy_wh=1_000,
+            created_at=_utc_naive(2027, 1, 20),
+        ),
+    ])
+    db_session.flush()
+    first = create_revenue_share_contract(
+        db_session, station_owner_id=owner.id,
+        partner_share_percent=Decimal(60), platform_share_percent=Decimal(40),
+        effective_from=_utc_naive(2027, 1, 5), created_by=driver.id,
+    )
+    second = create_revenue_share_contract(
+        db_session, station_owner_id=owner.id,
+        partner_share_percent=Decimal("25.25"), platform_share_percent=Decimal("74.75"),
+        effective_from=_utc_naive(2027, 1, 15), created_by=driver.id,
+    )
+
+    db_session.flush()
+    report = list_revenue_share_report(
+        db_session, date(2027, 1, 1), date(2027, 1, 31)
+    )
+    rows = {item["contract_id"]: item for item in report["items"]}
+
+    assert first.effective_to == second.effective_from
+    assert rows[first.id]["share_percent"] == 60
+    assert rows[second.id]["share_percent"] == 25.25
+    assert sum(item["base_revenue_vnd"] for item in rows.values()) == 100_001
+    assert sum(item["shared_amount_vnd"] for item in rows.values()) == 42_626
+    assert report["totals"]["base_revenue_vnd"] == 100_001
+    assert report["totals"]["shared_amount_vnd"] == 42_626
+
+    old_period = list_revenue_share_report(
+        db_session, date(2027, 1, 1), date(2027, 1, 14)
+    )
+    assert len(old_period["items"]) == 1
+    assert old_period["items"][0]["contract_id"] == first.id
+    assert old_period["items"][0]["share_percent"] == 60

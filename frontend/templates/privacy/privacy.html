@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% set active_page = "privacy" %}
+
+{% block title %}Quyền riêng tư & Xóa dữ liệu{% endblock %}
+{% block meta_description %}Thực hiện quyền yêu cầu xóa thông tin cá nhân và ẩn danh hóa lịch sử di chuyển theo Nghị định 13/2023/NĐ-CP.{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Quyền riêng tư & Xóa dữ liệu</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/privacy.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="privacy-container" id="privacy-root" data-is-driver="{{ 'true' if 'driver' in current_user.roles else 'false' }}">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="page-header__info">
+      <div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1);">
+        <span class="privacy-badge-law">Nghị định 13/2023/NĐ-CP</span>
+        <span class="privacy-badge-law privacy-badge-law--sub">Điều 14 & 16: Quyền được xóa dữ liệu</span>
+      </div>
+      <h1 class="page-header__title">Bảo vệ dữ liệu cá nhân & Quyền được quên</h1>
+      <p class="page-header__subtitle">
+        Minh bạch dữ liệu cá nhân, tọa độ trạm sạc và quyền yêu cầu ẩn danh hóa lịch sử di chuyển của bạn.
+      </p>
+    </div>
+    {% if ('admin' in current_user.roles or 'operator' in current_user.roles) and 'driver' in current_user.roles %}
+    <div class="privacy-role-switcher" role="tablist" aria-label="Chuyển chế độ xem">
+      <button class="btn btn--sm privacy-tab-btn is-active" id="tab-driver-view" type="button" role="tab" aria-selected="true">
+        Góc nhìn tài xế
+      </button>
+      <button class="btn btn--sm privacy-tab-btn" id="tab-admin-view" type="button" role="tab" aria-selected="false">
+        Quản trị phê duyệt
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Policy info banner -->
+  <div class="privacy-banner">
+    <div class="privacy-banner__icon" aria-hidden="true">🛡️</div>
+    <div class="privacy-banner__content">
+      <h2 class="privacy-banner__title">Chính sách bảo vệ thông tin vị trí & Dữ liệu nhạy cảm</h2>
+      <p class="privacy-banner__text">
+        Lịch sử sạc ghi nhận thời điểm và vị trí các trạm bạn đã ghé — đây là dữ liệu hành trình nhạy cảm. Khi yêu cầu xóa dữ liệu được duyệt, hệ thống sẽ <strong>ẩn danh hóa vĩnh viễn</strong> toàn bộ thông tin cá nhân và định danh phiên sạc. Theo quy định pháp luật kế toán, các chứng từ giao dịch tổng hợp và sổ cái được lưu trữ mà không liên kết tới danh tính của bạn.
+      </p>
+    </div>
+  </div>
+
+  <!-- SECTION 1: DRIVER VIEW -->
+  {% if 'driver' in current_user.roles %}
+  <div class="privacy-section" id="section-driver-view">
+    <div class="privacy-grid">
+      <!-- Left Column: Data Summary & Balance Check -->
+      <div class="privacy-col">
+        <!-- Card: Hồ sơ dữ liệu hiện tại -->
+        <section class="card privacy-card" aria-labelledby="card-profile-heading">
+          <div class="card__header">
+            <h2 class="card__title" id="card-profile-heading">Dữ liệu hiện đang lưu trữ</h2>
+            <span class="tag tag--info" id="driver-data-status">Đang bảo vệ</span>
+          </div>
+          <div class="card__body">
+            <div class="data-item">
+              <div class="data-item__label">Họ và tên</div>
+              <div class="data-item__val" id="profile-name">{{ current_user.display_name or 'Đang tải...' }}</div>
+            </div>
+            <div class="data-item">
+              <div class="data-item__label">Email tài khoản</div>
+              <div class="data-item__val" id="profile-email">{{ current_user.email or '—' }}</div>
+            </div>
+            <div class="data-item">
+              <div class="data-item__label">Số điện thoại liên hệ</div>
+              <div class="data-item__val" id="profile-phone">Không lưu</div>
+            </div>
+            <div class="data-item">
+              <div class="data-item__label">Biển số phương tiện</div>
+              <div class="data-item__val font-mono" id="profile-plate">Không lưu</div>
+            </div>
+            <div class="data-item">
+              <div class="data-item__label">Lịch sử di chuyển / Phiên sạc</div>
+              <div class="data-item__val">
+                <span id="profile-sessions-count">—</span> phiên sạc có dữ liệu vị trí
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Card: Kiểm tra số dư ví (Balance Pre-check - AC S-57) -->
+        <section class="card privacy-card" id="card-wallet-check" aria-labelledby="card-wallet-heading">
+          <div class="card__header">
+            <h2 class="card__title" id="card-wallet-heading">Điều kiện xử lý số dư ví</h2>
+            <span class="tag" id="tag-wallet-status">Kiểm tra</span>
+          </div>
+          <div class="card__body">
+            <div class="wallet-check-box" id="wallet-check-box">
+              <div class="wallet-check-box__icon" id="wallet-check-icon">💳</div>
+              <div class="wallet-check-box__info">
+                <div class="wallet-check-box__title">Số dư ví hiện tại</div>
+                <div class="wallet-check-box__amount" id="wallet-check-amount">Đang kiểm tra...</div>
+              </div>
+            </div>
+
+            <!-- Warning when wallet balance is not exactly zero -->
+            <div class="privacy-alert privacy-alert--warning is-hidden" id="alert-positive-balance">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <div>
+                <strong>Số dư ví phải đúng bằng 0 ₫:</strong> Hãy xử lý số dư hiện tại trước khi gửi yêu cầu xóa dữ liệu.
+                <div style="margin-top:var(--space-2);">
+                  <a href="/wallet" class="btn btn--sm btn--secondary">Đến trang Ví xử lý</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Success if balance == 0 -->
+            <div class="privacy-alert privacy-alert--success is-hidden" id="alert-zero-balance">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <div>
+                <strong>Số dư đã ở mức 0 ₫:</strong> Tài khoản đủ điều kiện để nộp yêu cầu ẩn danh hóa dữ liệu cá nhân ngay bây giờ.
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Request Form & Existing Request Status -->
+      <div class="privacy-col">
+        <!-- Form: Gửi yêu cầu xóa dữ liệu -->
+        <section class="card privacy-card" id="card-request-form" aria-labelledby="card-form-heading">
+          <div class="card__header">
+            <h2 class="card__title" id="card-form-heading">Gửi yêu cầu xóa & Ẩn danh hóa</h2>
+          </div>
+          <div class="card__body">
+            <form id="form-privacy-deletion" autocomplete="off">
+              <div class="form-group">
+                <label class="form-label" for="req-reason-select">Lý do yêu cầu <span class="text-danger">*</span></label>
+                <select class="form-select" id="req-reason-select" required>
+                  <option value="">-- Chọn lý do --</option>
+                  <option value="right_to_be_forgotten">Thực hiện quyền theo Nghị định 13/2023/NĐ-CP</option>
+                  <option value="privacy_location_concern">Lo ngại rò rỉ dữ liệu vị trí và lịch sử di chuyển</option>
+                  <option value="no_longer_using_ev">Không còn sử dụng xe điện hoặc phương tiện sạc</option>
+                  <option value="switch_provider">Chuyển sang nền tảng cung cấp dịch vụ khác</option>
+                  <option value="other">Lý do khác</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="req-reason-detail">Chi tiết yêu cầu hoặc ghi chú bổ sung</label>
+                <textarea class="form-textarea" id="req-reason-detail" rows="3" maxlength="2000" placeholder="Nhập thêm thông tin nếu cần (tối đa 2.000 ký tự)..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="req-password-confirm">Xác nhận mật khẩu tài khoản <span class="text-danger">*</span></label>
+                <input class="form-input" id="req-password-confirm" type="password" required placeholder="Nhập mật khẩu của bạn để xác thực" />
+                <span class="form-hint">Nhằm ngăn chặn hành vi yêu cầu trái phép hoặc nhầm lẫn</span>
+              </div>
+
+              <div class="form-group form-check" style="margin-top:var(--space-3);">
+                <input class="form-checkbox" id="req-agree-terms" type="checkbox" required />
+                <label for="req-agree-terms" class="form-check-label" style="font-size:var(--font-size-xs);line-height:1.4;">
+                  Tôi xác nhận yêu cầu ẩn danh hóa vĩnh viễn thông tin cá nhân và lịch sử sạc. Tôi hiểu rằng hành động này <strong>không thể hoàn tác</strong> và tôi sẽ mất quyền truy cập tài khoản này sau khi phê duyệt.
+                </label>
+              </div>
+
+              <div class="form-actions" style="margin-top:var(--space-4);">
+                <button class="btn btn--danger btn--full" id="btn-submit-deletion" type="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                  Nộp yêu cầu xóa dữ liệu cá nhân
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Status Card if Request is active / pending -->
+        <section class="card privacy-card is-hidden" id="card-active-request" aria-labelledby="card-active-heading">
+          <div class="card__header">
+            <h2 class="card__title" id="card-active-heading">Tiến độ yêu cầu hiện tại</h2>
+            <span class="tag tag--warning" id="active-req-badge">Đang xử lý</span>
+          </div>
+          <div class="card__body">
+            <div class="req-status-banner" id="req-status-banner">
+              <div class="req-status-banner__title" id="active-req-code">Mã yêu cầu: #REQ-20261017-001</div>
+              <div class="req-status-banner__desc" id="active-req-desc">
+                Yêu cầu của bạn đang được Chuyên viên Quản vệ Dữ liệu (DPO) tiếp nhận và thẩm định điều kiện.
+              </div>
+            </div>
+
+            <!-- Process Timeline -->
+            <div class="timeline" id="privacy-timeline">
+              <div class="timeline-step is-complete">
+                <div class="timeline-step__marker">✓</div>
+                <div class="timeline-step__content">
+                  <div class="timeline-step__title">Đã tiếp nhận yêu cầu</div>
+                  <div class="timeline-step__time" id="tl-time-submit">—</div>
+                </div>
+              </div>
+              <div class="timeline-step is-current" id="tl-step-review">
+                <div class="timeline-step__marker">2</div>
+                <div class="timeline-step__content">
+                  <div class="timeline-step__title">Thẩm định điều kiện ví & phiên</div>
+                  <div class="timeline-step__desc">Kiểm tra số dư ví 0 ₫, không có phiên sạc dở dang</div>
+                </div>
+              </div>
+              <div class="timeline-step" id="tl-step-anonymize">
+                <div class="timeline-step__marker">3</div>
+                <div class="timeline-step__content">
+                  <div class="timeline-step__title">Thực hiện ẩn danh hóa</div>
+                  <div class="timeline-step__desc">Xóa định danh GPS vị trí, ẩn thông tin cá nhân</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:var(--space-4);display:flex;justify-content:flex-end;">
+              <button class="btn btn--secondary btn--sm" id="btn-cancel-request" type="button">
+                Hủy yêu cầu xóa dữ liệu
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- SECTION 2: ADMIN / OPERATOR VIEW -->
+  {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+  <div class="privacy-section{% if 'driver' in current_user.roles %} is-hidden{% endif %}" id="section-admin-view">
+    <!-- Admin Stats Grid -->
+    <div class="stats-grid" style="margin-bottom:var(--space-5);">
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Tổng yêu cầu</div>
+        <div class="stat-card__value" id="adm-stat-total">—</div>
+        <div class="stat-card__sub">toàn hệ thống</div>
+      </div>
+      <div class="stat-card stat-card--orange">
+        <div class="stat-card__label">Chờ duyệt</div>
+        <div class="stat-card__value" id="adm-stat-pending">—</div>
+        <div class="stat-card__sub">cần thẩm định</div>
+      </div>
+      <div class="stat-card stat-card--green">
+        <div class="stat-card__label">Đã xử lý</div>
+        <div class="stat-card__value" id="adm-stat-approved">—</div>
+        <div class="stat-card__sub">hoàn tất theo NĐ 13</div>
+      </div>
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__label">Từ chối / Vi phạm</div>
+        <div class="stat-card__value" id="adm-stat-rejected">—</div>
+        <div class="stat-card__sub">chưa xử lý số dư</div>
+      </div>
+    </div>
+
+    <!-- Admin Filter Bar -->
+    <form class="wa-filters-bar privacy-admin-filters" id="adm-filters" autocomplete="off" style="margin-bottom:var(--space-4);">
+      <div class="wa-filter">
+        <label for="adm-filter-search">Tài xế (tên / email / SĐT)</label>
+        <input class="form-input" id="adm-filter-search" placeholder="Tìm tài xế..." />
+      </div>
+      <div class="wa-filter">
+        <label for="adm-filter-status">Trạng thái</label>
+        <select class="form-select" id="adm-filter-status">
+          <option value="">Tất cả trạng thái</option>
+          <option value="pending">Chờ phê duyệt</option>
+          <option value="approved">Đã xử lý</option>
+          <option value="rejected">Đã từ chối</option>
+          <option value="cancelled">Tài xế đã hủy</option>
+        </select>
+      </div>
+      <div class="wa-filter-actions">
+        <button class="btn btn--primary" id="btn-adm-filter" type="submit">Lọc</button>
+        <button class="btn btn--secondary" id="btn-adm-reset" type="button">Đặt lại</button>
+      </div>
+    </form>
+
+    <!-- Admin Requests Table -->
+    <section class="card" aria-labelledby="adm-table-heading">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title" id="adm-table-heading">Danh sách yêu cầu xóa dữ liệu cá nhân</h2>
+          <p style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin:2px 0 0;">
+            Thẩm định tính toàn vẹn: số dư ví = 0 ₫, không có phiên đang sạc, bảo toàn sổ cái kế toán
+          </p>
+        </div>
+        <span class="tag" id="adm-req-count">Đang tải...</span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table privacy-admin-table" aria-label="Bảng quản lý yêu cầu xóa dữ liệu">
+          <thead>
+            <tr>
+              <th scope="col">Thời điểm</th>
+              <th scope="col">Tài xế</th>
+              <th scope="col">Lý do</th>
+              <th scope="col" class="text-right">Số dư ví</th>
+              <th scope="col" class="text-center">Phiên chạy</th>
+              <th scope="col">Trạng thái</th>
+              <th scope="col" class="text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="adm-tbody">
+            <tr><td colspan="7">
+              <div class="loading-state" style="padding:var(--space-8);">
+                <div class="spinner" aria-hidden="true"></div>
+                <p style="margin-top:var(--space-3);color:var(--color-text-secondary);">Đang tải danh sách...</p>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal Xóa Thông Tin Cá Nhân (Admin) -->
+<div class="privacy-modal is-hidden" id="modal-approve-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-approve-title">
+  <div class="privacy-modal__backdrop" id="modal-approve-backdrop"></div>
+  <div class="modal__dialog privacy-modal__dialog">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-approve-title">Xóa thông tin cá nhân</h2>
+      <button class="modal__close" id="modal-approve-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="approve-summary" id="approve-summary-content"><!-- injected --></div>
+      <div class="privacy-alert privacy-alert--warning" style="margin-top:var(--space-3);">
+        <strong>Cảnh báo hành động không thể hoàn tác:</strong> Hệ thống sẽ xóa định danh cá nhân và ẩn danh lịch sử; hóa đơn, giao dịch ví và sổ cái vẫn được giữ để đối soát.
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="modal-approve-cancel" type="button">Hủy bỏ</button>
+      <button class="btn btn--danger" id="modal-approve-confirm" type="button">Xác nhận xóa thông tin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ẩn Tài Khoản (Admin) -->
+<div class="privacy-modal is-hidden" id="modal-hide-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-hide-title">
+  <div class="privacy-modal__backdrop" id="modal-hide-backdrop"></div>
+  <div class="modal__dialog privacy-modal__dialog">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-hide-title">Ẩn tài khoản</h2>
+      <button class="modal__close" id="modal-hide-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="approve-summary" id="hide-summary-content"><!-- injected --></div>
+      <div class="privacy-alert privacy-alert--warning" style="margin-top:var(--space-3);">
+        Tài khoản sẽ bị khóa đăng nhập. Hồ sơ, lịch sử sạc, hóa đơn và sổ cái được giữ nguyên.
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="modal-hide-cancel" type="button">Hủy bỏ</button>
+      <button class="btn btn--primary" id="modal-hide-confirm" type="button">Xác nhận ẩn tài khoản</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Từ Chối Yêu Cầu (Admin) -->
+<div class="privacy-modal privacy-modal--reject is-hidden" id="modal-reject-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-reject-title">
+  <div class="privacy-modal__backdrop" id="modal-reject-backdrop"></div>
+  <div class="modal__dialog privacy-modal__dialog">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-reject-title">Từ chối yêu cầu xóa dữ liệu</h2>
+      <button class="modal__close" id="modal-reject-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="form-group">
+        <label class="form-label" for="reject-reason-input">Lý do từ chối <span class="text-danger">*</span></label>
+        <textarea class="form-textarea" id="reject-reason-input" rows="3" required placeholder="Ví dụ: Ví của tài xế còn số dư 150.000 ₫, vui lòng rút tiền trước khi yêu cầu..."></textarea>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="modal-reject-cancel" type="button">Đóng</button>
+      <button class="btn btn--danger" id="modal-reject-confirm" type="button">Xác nhận Từ chối</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/privacy.js') }}"></script>
+{% endblock %}

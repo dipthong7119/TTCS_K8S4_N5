@@ -239,20 +239,26 @@
         (connector.ocpp_status
           ? connector.ocpp_status === 'Available'
           : connector.status === 'rảnh');
+      const ownReservation = driver && connector.reserved_by_current_driver === true &&
+        (connector.ocpp_status === 'Reserved' ||
+          connector.status === 'reserved' || connector.status === 'đặt chỗ');
+      const canStart = point.status === 'online' && (available || ownReservation);
+      const label = ownReservation ? 'Đã đặt chỗ của bạn' :
+        (available ? 'Sẵn sàng' : 'Không khả dụng');
 
       return `
         <option value="${escapeHtml(connector.connector_id)}"
                         data-connector-db-id="${escapeHtml(connector.id)}"
-                ${available ? '' : 'disabled'}>
+                ${canStart ? '' : 'disabled'}>
           Đầu nối ${escapeHtml(connector.connector_id)}
-          — ${available ? 'Sẵn sàng' : 'Không khả dụng'}
+          — ${label}
         </option>`;
     }).join('');
 
     return `
       <div class="start-charging-controls">
             <p class="muted-text">${driver
-        ? 'Cắm súng sạc vào xe và chọn đúng đầu nối. Hệ thống dùng thẻ sạc gắn với tài khoản của bạn.'
+        ? 'Cắm súng sạc vào xe và chọn đầu nối sẵn sàng hoặc đã đặt chỗ cho bạn. Hệ thống dùng thẻ của lượt đặt chỗ nếu có.'
         : 'Cắm súng sạc vào xe, chọn đúng đầu nối và nhập mã RFID được cấp để bắt đầu sạc từ ứng dụng.'}</p>
         <label>
           Chọn đầu nối
@@ -263,13 +269,24 @@
         </label>
 
               ${driver ? '' : '<label>Mã thẻ RFID <input class="form-input" data-start-tag maxlength="20" autocomplete="off" placeholder="Nhập mã thẻ được cấp" /></label>'}
-        <button class="btn btn--primary"
-                type="button"
-                data-start-charging
-                data-cp-code="${escapeHtml(point.code)}"
-                disabled>
-          Bắt đầu sạc
-        </button>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);">
+          <button class="btn btn--primary"
+                  type="button"
+                  data-start-charging
+                  data-cp-code="${escapeHtml(point.code)}"
+                  disabled>
+            Bắt đầu sạc
+          </button>
+          ${driver ? `
+            <a class="btn btn--secondary"
+               data-reserve-link
+               data-cp-code="${escapeHtml(point.code)}"
+               href="/reservations?action=reserve&cp_code=${encodeURIComponent(point.code)}"
+               title="Đặt trước trụ này (SCRUM-76)">
+              Đặt trước trụ này
+            </a>
+          ` : ''}
+        </div>
 
         <p data-start-message role="status" aria-live="polite"></p>
       </div>`;
@@ -338,8 +355,14 @@
     const usable = () => {
       const point = stations.flatMap(station => station.charge_points || []).find(point => point.code === button.dataset.cpCode);
       const connector = point?.connectors?.find(item => String(item.connector_id) === select.value);
-      return point?.status === 'online' && connector &&
-        (connector.ocpp_status ? connector.ocpp_status === 'Available' : connector.status === 'rảnh');
+      if (point?.status !== 'online' || !connector) return false;
+      const available = connector.ocpp_status
+        ? connector.ocpp_status === 'Available'
+        : connector.status === 'rảnh';
+      const ownReservation = driver && connector.reserved_by_current_driver === true &&
+        (connector.ocpp_status === 'Reserved' ||
+          connector.status === 'reserved' || connector.status === 'đặt chỗ');
+      return available || ownReservation;
     };
     const update = () => {
       select.disabled = state.pending;

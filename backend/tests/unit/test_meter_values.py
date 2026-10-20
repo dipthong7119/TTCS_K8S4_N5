@@ -173,8 +173,8 @@ def test_performance_light_load(db: Session):
     assert duration_ms < 50, f"Truy vấn quá chậm: {duration_ms}ms"
 
 
-def test_migration_upgrade_downgrade(tmp_path, monkeypatch):
-    """An existing sample survives upgrade, downgrade and another upgrade."""
+def test_migration_upgrade_and_irreversible_downgrade_is_rejected(tmp_path, monkeypatch):
+    """Existing samples survive upgrade; the integrated schema blocks unsafe rollback."""
     from pathlib import Path
 
     from alembic.config import Config
@@ -200,23 +200,25 @@ def test_migration_upgrade_downgrade(tmp_path, monkeypatch):
                 "INSERT INTO meter_values (session_id, measured_at, measurand, value, unit) "
                 "VALUES (99999, '2026-10-06 00:01:00', 'Energy.Active.Import.Register', 123.456, 'kWh')"
             ))
-        for revision, expected_index, ondelete in [
-            ("head", "ix_meter_values_session_id_measured_at", "RESTRICT"),
-            ("h20261004_defaults", "ix_meter_values_session_measured", "CASCADE"),
-            ("head", "ix_meter_values_session_id_measured_at", "RESTRICT"),
-        ]:
-            engine.dispose()
-            if revision == "h20261004_defaults":
-                command.downgrade(config, revision)
-            else:
-                command.upgrade(config, revision)
-            inspector = sa.inspect(engine)
-            assert "meter_values" in inspector.get_table_names()
-            assert expected_index in {index["name"] for index in inspector.get_indexes("meter_values")}
-            assert inspector.get_foreign_keys("meter_values")[0]["options"]["ondelete"] == ondelete
-            with engine.connect() as connection:
-                assert connection.execute(sa.text(
-                    "SELECT value, unit FROM meter_values WHERE session_id = 99999"
-                )).one() == (123.456, "kWh")
+        old_inspector = sa.inspect(engine)
+        assert "ix_meter_values_session_measured" in {
+            index["name"] for index in old_inspector.get_indexes("meter_values")
+        }
+        assert old_inspector.get_foreign_keys("meter_values")[0]["options"]["ondelete"] == "CASCADE"
+
+        command.upgrade(config, "head")
+        inspector = sa.inspect(engine)
+        assert "meter_values" in inspector.get_table_names()
+        assert "ix_meter_values_session_id_measured_at" in {
+            index["name"] for index in inspector.get_indexes("meter_values")
+        }
+        assert inspector.get_foreign_keys("meter_values")[0]["options"]["ondelete"] == "RESTRICT"
+        with engine.connect() as connection:
+            assert connection.execute(sa.text(
+                "SELECT value, unit FROM meter_values WHERE session_id = 99999"
+            )).one() == (123.456, "kWh")
+
+        with pytest.raises(RuntimeError, match="không hỗ trợ downgrade tự động"):
+            command.downgrade(config, "h20261004_defaults")
     finally:
         engine.dispose()

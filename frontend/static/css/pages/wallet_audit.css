@@ -1,0 +1,221 @@
+/* pages/wallet_audit.css — SCRUM-91: Nhật ký thao tác ví */
+
+/* ── Filter bar ──────────────────────────────────────────────────────────── */
+.wa-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+.wa-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 160px;
+  min-width: 130px;
+}
+.wa-filter label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary);
+}
+.wa-filter-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.wa-card { overflow: hidden; }
+.wa-table {
+  min-width: 1450px;
+  table-layout: fixed;
+}
+.wa-table th,
+.wa-table td { vertical-align: middle; }
+.wa-table th:nth-child(1) { width: 165px; }
+.wa-table th:nth-child(2) { width: 160px; }
+.wa-table th:nth-child(3) { width: 220px; }
+.wa-table th:nth-child(4) { width: 200px; }
+.wa-table th:nth-child(5) { width: 175px; }
+.wa-table th:nth-child(6) { width: 155px; }
+.wa-table th:nth-child(7) { width: 260px; }
+.wa-table th:nth-child(8) { width: 115px; }
+.wa-table th,
+.wa-table td { white-space: nowrap; }
+
+/* Amount column */
+.wa-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.wa-amount--credit { color: hsl(130, 55%, 38%); }
+.wa-amount--debit  { color: hsl(0, 65%, 45%); }
+
+/* Balance after */
+.wa-balance {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Entry type badge */
+.wa-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.wa-type--topup        { background: hsl(130,55%,92%); color: hsl(130,55%,32%); }
+.wa-type--charge       { background: hsl(210,70%,92%); color: hsl(210,70%,32%); }
+.wa-type--reservation  { background: hsl(260,55%,92%); color: hsl(260,55%,35%); }
+.wa-type--no-show      { background: hsl(0,65%,92%);   color: hsl(0,65%,38%);   }
+.wa-type--refund       { background: hsl(180,55%,90%); color: hsl(180,55%,30%); }
+.wa-type--adjustment   { background: hsl(38,65%,90%);  color: hsl(38,55%,32%);  }
+.wa-type--other        { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+
+/* Actor cell */
+.wa-actor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.wa-actor-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wa-actor-avatar--system {
+  background: var(--color-text-muted);
+}
+.wa-actor-name {
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-actor-role {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+/* Note cell */
+.wa-note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Detail modal ────────────────────────────────────────────────────────── */
+.wa-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.wa-detail-modal.is-hidden { display: none; }
+.wa-detail-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: hsla(220, 20%, 10%, .58);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.wa-detail-dialog {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-width: 1040px;
+  max-height: calc(100vh - 2 * var(--space-4));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: scaleIn .22s ease;
+}
+.wa-detail-dialog .modal__header,
+.wa-detail-dialog .modal__footer { flex: 0 0 auto; }
+.wa-detail-dialog .modal__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.wa-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+.wa-detail-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wa-detail-item--full { grid-column: 1 / -1; }
+.wa-detail-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.wa-detail-value {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.wa-json-box {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre;
+  color: var(--color-text);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wa-filters-bar { padding: var(--space-3) var(--space-4); }
+}
+@media (max-width: 900px) {
+  .wa-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .wa-detail-modal { padding: var(--space-3); }
+  .wa-detail-dialog .modal__header,
+  .wa-detail-dialog .modal__body { padding: var(--space-4); }
+  .wa-detail-dialog .modal__footer { padding: var(--space-3) var(--space-4); }
+  .wa-detail-grid { grid-template-columns: 1fr; }
+}

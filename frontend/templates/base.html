@@ -72,6 +72,18 @@
       </a>
       {% endif %}
 
+      {% if 'admin' in current_user.roles or 'station_owner' in current_user.roles %}
+      <a href="/stations/revenue" id="nav-station-revenue"
+         class="sidebar__link {% if active_page == 'station-revenue' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'station-revenue' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="1" x2="12" y2="23"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        Báo cáo doanh thu
+      </a>
+      {% endif %}
+
       {% if 'admin' in current_user.roles or 'operator' in current_user.roles or 'accountant' in current_user.roles or 'station_owner' in current_user.roles %}
       <a href="/sessions" id="nav-sessions"
          class="sidebar__link {% if active_page == 'sessions' %}is-active{% endif %}"
@@ -96,6 +108,18 @@
       {% endif %}
 
       {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+      <a href="/monitoring/alerts" id="nav-alerts"
+         class="sidebar__link {% if active_page == 'alerts' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'alerts' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        Cảnh báo vận hành
+      </a>
+      {% endif %}
+
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
       <a href="/sessions/kwh-reconciliation" id="nav-kwh-reconciliation"
          class="sidebar__link {% if active_page == 'kwh-reconciliation' %}is-active{% endif %}"
          aria-current="{% if active_page == 'kwh-reconciliation' %}page{% endif %}">
@@ -105,6 +129,32 @@
           <polyline points="2 20 22 20"/>
         </svg>
         Đối chiếu kWh
+      </a>
+      {% endif %}
+
+      {% if 'admin' in current_user.roles or 'accountant' in current_user.roles %}
+      <a href="/sessions/financial-reconciliation" id="nav-financial-reconciliation"
+         class="sidebar__link {% if active_page == 'financial-reconciliation' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'financial-reconciliation' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 9v12M9 15h12" />
+        </svg>
+        Đối soát điện và tiền
+      </a>
+      {% endif %}
+
+      {% if 'admin' in current_user.roles or 'accountant' in current_user.roles %}
+      <a href="/sessions/revenue-sharing" id="nav-revenue-sharing"
+         class="sidebar__link {% if active_page == 'revenue-sharing' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'revenue-sharing' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+        Chia doanh thu đối tác
       </a>
       {% endif %}
 
@@ -123,6 +173,22 @@
       {% endif %}
 
       {% if 'driver' in current_user.roles %}
+      <a href="/driver/stations" id="nav-driver-stations"
+         class="sidebar__link {% if active_page == 'station-finder' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'station-finder' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+        Tìm trạm sạc
+      </a>
+      <a href="/driver/session" id="nav-driver-session"
+         class="sidebar__link {% if active_page == 'driver-session' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'driver-session' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        Phiên sạc của tôi
+      </a>
       <a href="/sessions/mine" id="nav-my-sessions"
          class="sidebar__link {% if active_page == 'my-sessions' %}is-active{% endif %}"
          aria-current="{% if active_page == 'my-sessions' %}page{% endif %}">
@@ -142,6 +208,25 @@
         </svg>
         Gói thuê bao tháng
       </a>
+      <a href="/reservations" id="nav-reservations"
+         class="sidebar__link {% if active_page == 'reservations' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'reservations' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Đặt chỗ của tôi
+      </a>
+      <a href="/privacy" id="nav-privacy-driver"
+         class="sidebar__link {% if active_page == 'privacy' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'privacy' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        Quyền riêng tư & Xóa DL
+      </a>
       {% endif %}
 
       <div class="sidebar__section-label">Hệ thống</div>
@@ -157,6 +242,32 @@
           <polyline points="10 9 9 9 8 9"/>
         </svg>
         Nhật ký kiểm tra
+      </a>
+      {% endif %}
+
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+      <a href="/wallet/audit" id="nav-wallet-audit"
+         class="sidebar__link {% if active_page == 'wallet-audit' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'wallet-audit' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          <line x1="9" y1="12" x2="15" y2="12"/>
+          <line x1="9" y1="16" x2="13" y2="16"/>
+        </svg>
+        Nhật ký ví
+      </a>
+      {% endif %}
+
+      {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+      <a href="/privacy" id="nav-privacy-admin"
+         class="sidebar__link {% if active_page == 'privacy' %}is-active{% endif %}"
+         aria-current="{% if active_page == 'privacy' %}page{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+        Xóa dữ liệu (NĐ 13)
       </a>
       {% endif %}
     </nav>

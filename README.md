@@ -260,10 +260,11 @@ Pop-Location
 | Vận hành viên | `operator@csms.local` | `Operator@2024!` | Giám sát, dừng phiên từ xa |
 | Kế toán | `accountant@csms.local` | `Accountant@2024!` | Xem báo cáo, lịch sử phiên |
 | Tài xế | `driver@csms.local` | `Driver@2024!` | Xem lịch sử sạc của cá nhân |
+| Tài xế demo 2 | `driver2@csms.local` | `Driver2@2024!` | Tài khoản riêng để thử đặt chỗ và sạc |
 
-> **Seed tài khoản**: Migration `0004_seed_demo_users` tạo sẵn năm tài khoản demo
-> gắn với năm vai trò cho môi trường phát triển/demo. Không dùng tài khoản demo
-> trên production.
+> **Seed tài khoản**: Migration `0004_seed_demo_users` tạo năm tài khoản mẫu; migration
+> `h20261018_demo_driver_2` bổ sung tài xế thứ hai. Chỉ dùng tài khoản demo trong
+> môi trường phát triển/demo, không dùng trên production.
 
 ### Thẻ RFID demo
 
@@ -271,11 +272,17 @@ Thẻ RFID demo là **mã giả lập**, không phải thẻ vật lý. Với d�
 định, tài khoản `driver@csms.local` dùng mã **`DEMO-DRIVER-0005`**. Nhập nguyên
 mã này vào ô **Mã thẻ RFID** trên form Bắt đầu sạc.
 
+Tài khoản `driver2@csms.local` có thẻ riêng theo cùng quy tắc:
+`DEMO-DRIVER-` + ID tài khoản đệm 4 chữ số. Hệ thống tự chọn thẻ khi đặt chỗ;
+trong development, seed cấp số dư demo 600.000 VND để thử luồng đặt chỗ/sạc.
+
 Mã được tạo theo ID tài xế trong database (`DEMO-DRIVER-` + ID có đệm số 0
 đến 4 chữ số), nên có thể khác `0005` nếu database đã có dữ liệu riêng. Tra
 mã đang hoạt động trong bảng `id_tags` nếu mã mặc định không được chấp nhận.
-Simulator OCPP demo hiện chưa xử lý lệnh RemoteStartTransaction; mã thẻ chỉ
-xác định tài xế để phân quyền/ủy quyền, không làm trụ giả lập bắt đầu sạc.
+Simulator OCPP demo xử lý lệnh `RemoteStartTransaction` và phát `StartTransaction`
+bằng mã thẻ đã gắn với tài khoản. Nếu tài xế đang có lượt đặt chỗ còn hiệu lực,
+nút bắt đầu sạc trên đúng đầu nối đó dùng lại thẻ của lượt đặt chỗ và hoàn tất chỗ khi
+trụ bắt đầu phiên; không cần hủy chỗ trước.
 
 Khi `APP_ENV=development`, lần khởi động đầu sẽ tự thêm các trạm/trụ/đầu nối còn
 thiếu, phiên sạc, biểu giá, hóa đơn và giao dịch ví mẫu cho tài xế. Biểu giá demo

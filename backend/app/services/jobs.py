@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, text, update
@@ -17,6 +18,7 @@ from app.services.charge_point_configuration import get_effective_heartbeat_inte
 from app.services.ocpp_status import station_status_payload
 
 logger = logging.getLogger(__name__)
+POWER_SCHEDULE_REBALANCE_INTERVAL_SECONDS = 30
 
 
 def expire_stale_charge_points_once(db) -> int:
@@ -117,17 +119,74 @@ def review_stale_sessions_once(db) -> int:
     return len(changed)
 
 
+def scan_alerts_once(db) -> int:
+    """Chạy quét cảnh báo một lần và trả về số lượng cảnh báo mới được kích hoạt (SCRUM-90)."""
+    from app.services.alert_service import (
+        auto_resolve_recovered_offline_alerts,
+        scan_all_alerts,
+    )
+
+    auto_resolve_recovered_offline_alerts(db)
+    new_alerts = scan_all_alerts(db)
+    return len(new_alerts)
+
+
 async def check_offline_charge_points():
     while True:
         try:
             with SessionLocal() as db:
                 expire_stale_charge_points_once(db)
                 review_stale_sessions_once(db)
+                scan_alerts_once(db)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Offline charge point check failed")
         await asyncio.sleep(settings.OCPP_JOB_POLL_SECONDS)
+
+
+async def rebalance_scheduled_power_once(
+    db,
+    now: datetime | None = None,
+    *,
+    send_call: Callable[..., Awaitable[dict]] | None = None,
+) -> int:
+    """Apply current schedule limits to stations with active sessions."""
+    from app.services.power_allocation import rebalance_station_once
+
+    station_ids = (
+        db.query(ChargingSession.station_id)
+        .filter(
+            ChargingSession.status == "active",
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.station_id.is_not(None),
+        )
+        .distinct()
+        .order_by(ChargingSession.station_id)
+        .all()
+    )
+    changed = 0
+    for (station_id,) in station_ids:
+        changed += await rebalance_station_once(
+            db, station_id, now=now, send_call=send_call
+        )
+    return changed
+
+
+async def check_station_power_schedule() -> None:
+    """Catch schedule transitions and recover the current allocation after restart."""
+    while True:
+        try:
+            with SessionLocal() as db:
+                changed = await rebalance_scheduled_power_once(db)
+                if changed:
+                    logger.info("Scheduled station power limits applied: sessions=%s", changed)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled station power rebalance failed")
+        await asyncio.sleep(POWER_SCHEDULE_REBALANCE_INTERVAL_SECONDS)
+
 
 
 def cleanup_old_ocpp_messages_once(db) -> int:

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from typing import TypedDict
 
 from fastapi import APIRouter, Depends, Request
@@ -11,6 +12,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.core.deps import deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
+from app.models.reservation import Reservation
 from app.models.station import Station
 from app.models.user import User
 from app.services.ocpp_status import station_status_payload
@@ -47,8 +49,17 @@ def notify_status_change(station_id: int, charge_points_data: list, owner_id: in
                 continue
 
 
-def notify_session_change(user_id: int | None, owner_id: int | None, session_id: int) -> None:
-    event = {"event": "session_update", "data": json.dumps({"session_id": session_id})}
+def notify_session_change(
+    user_id: int | None,
+    owner_id: int | None,
+    session_id: int,
+    *,
+    requested_power_limit_w: int | None = None,
+) -> None:
+    payload = {"session_id": session_id}
+    if requested_power_limit_w is not None:
+        payload["requested_power_limit_w"] = requested_power_limit_w
+    event = {"event": "session_update", "data": json.dumps(payload)}
     for subscriber in tuple(sse_clients):
         if (
             subscriber["global_access"]
@@ -115,7 +126,37 @@ async def get_monitoring_tree(
         stations = query.filter(Station.status == "active").all()
     else:
         stations = filter_by_owner(query, current_user.id, roles).all()
-    return [
+    tree = [
         station_status_payload(station)
         for station in sorted(stations, key=lambda item: item.id)
     ]
+    if "driver" in roles:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        reservations = (
+            db.query(Reservation)
+            .filter(
+                Reservation.user_id == current_user.id,
+                Reservation.status == "accepted",
+                Reservation.expiry_date > now,
+            )
+            .all()
+        )
+        reserved_connector_ids = {
+            item.connector_db_id
+            for item in reservations
+            if item.connector_db_id is not None
+        }
+        legacy_reserved_connectors = {
+            (item.charge_point_id, item.connector_id)
+            for item in reservations
+            if item.connector_db_id is None
+        }
+        for station in tree:
+            for point in station["charge_points"]:
+                for connector in point["connectors"]:
+                    connector["reserved_by_current_driver"] = (
+                        connector["id"] in reserved_connector_ids
+                        or (point["id"], connector["connector_id"])
+                        in legacy_reserved_connectors
+                    )
+    return tree

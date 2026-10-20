@@ -171,6 +171,12 @@ def test_simulator_acknowledges_remote_stop_transaction() -> None:
 
     async def scenario():
         simulator = SimpleSimulator()
+        simulator._active_transactions[1] = {
+            "transaction_id": 100,
+            "meter_wh": 2500,
+            "last_sample": 0.0,
+            "stop_requested": False,
+        }
         simulator.ws = FakeWebSocket()
         try:
             await asyncio.wait_for(simulator._receive_loop(), timeout=0.1)

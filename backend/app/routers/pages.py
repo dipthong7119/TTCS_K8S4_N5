@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.deps import CurrentUser, public_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
-from app.services.ownership import get_station_for_user
+from app.models.station import Station
+from app.services.ownership import filter_by_owner, get_station_for_user
 
 router = APIRouter()
 
@@ -142,6 +143,28 @@ async def new_station_page(request: Request, current_user: CurrentUser):
     )
 
 
+@router.get("/stations/revenue", dependencies=[Depends(require_role("admin", "station_owner"))])
+async def station_revenue_page(
+    request: Request,
+    current_user: CurrentUser,
+    station_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    roles = _require_any_role(current_user, "admin", "station_owner")
+    q = filter_by_owner(db.query(Station), current_user.id, roles)
+    stations = q.order_by(Station.name.asc()).all()
+    return templates.TemplateResponse(
+        request,
+        "stations/revenue.html",
+        _page_context(
+            request,
+            current_user,
+            stations=stations,
+            selected_station_id=station_id,
+        ),
+    )
+
+
 @router.get("/stations/{station_id}/edit", dependencies=[Depends(require_role("admin", "station_owner"))])
 async def edit_station_page(
     request: Request,
@@ -257,6 +280,44 @@ async def sandbox_checkout_page(request: Request, current_user: CurrentUser, ord
     )
 
 
+# SCRUM-231 / SCRUM-85 — Giao diện đối soát cho kế toán
+@router.get(
+    "/sessions/financial-reconciliation",
+    dependencies=[Depends(require_role("admin", "accountant", "station_owner"))],
+)
+async def financial_reconciliation_page(
+    request: Request,
+    current_user: CurrentUser,
+):
+    roles = _require_any_role(current_user, "admin", "accountant", "station_owner")
+    return templates.TemplateResponse(
+        request,
+        "sessions/financial_reconciliation.html",
+        _page_context(
+            request,
+            current_user,
+            can_reopen_period="admin" in roles,
+        ),
+    )
+
+
+# SCRUM-254 / SCRUM-86 — Giao diện chia doanh thu cho đối tác (kế toán)
+@router.get(
+    "/sessions/revenue-sharing",
+    dependencies=[Depends(require_role("admin", "accountant"))],
+)
+async def revenue_sharing_page(
+    request: Request,
+    current_user: CurrentUser,
+):
+    _require_any_role(current_user, "admin", "accountant")
+    return templates.TemplateResponse(
+        request,
+        "sessions/revenue_sharing.html",
+        _page_context(request, current_user),
+    )
+
+
 # SCRUM-68 — Giao diện đăng ký gói thuê bao hàng tháng (Phạm Văn Tuấn)
 @router.get("/subscriptions", dependencies=[Depends(require_role("driver", "admin"))])
 async def subscriptions_page(request: Request, current_user: CurrentUser):
@@ -264,3 +325,66 @@ async def subscriptions_page(request: Request, current_user: CurrentUser):
     return templates.TemplateResponse(
         request, "subscriptions/subscriptions.html", _page_context(request, current_user)
     )
+
+
+# SCRUM-76 — Màn hình đặt chỗ trụ sạc cho tài xế (Phạm Văn Tuấn)
+@router.get("/reservations", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+async def reservations_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin", "operator")
+    return templates.TemplateResponse(
+        request, "reservations/list.html", _page_context(request, current_user)
+    )
+
+
+
+# SCRUM-90 — Cảnh báo vận hành (Phạm Văn Tuấn)
+@router.get("/monitoring/alerts", dependencies=[Depends(require_role("admin", "operator"))])
+async def monitoring_alerts_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator")
+    return templates.TemplateResponse(
+        request, "monitoring/alerts.html", _page_context(request, current_user)
+    )
+
+
+# SCRUM-91 — Nhật ký thao tác ví (Phạm Văn Tuấn)
+@router.get("/wallet/audit", dependencies=[Depends(require_role("admin", "operator", "accountant"))])
+async def wallet_audit_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "admin", "operator", "accountant")
+    return templates.TemplateResponse(
+        request, "wallet/wallet_audit.html", _page_context(request, current_user)
+    )
+
+
+# SCRUM-92 — Quyền riêng tư & Yêu cầu xóa dữ liệu cá nhân (Phạm Văn Tuấn)
+@router.get("/privacy", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+async def privacy_page(request: Request, current_user: CurrentUser):
+    _require_any_role(current_user, "driver", "admin", "operator")
+    return templates.TemplateResponse(
+        request, "privacy/privacy.html", _page_context(request, current_user)
+    )
+
+
+
+# SCRUM-96 (FE) — Tài xế tìm trạm gần & xem đầu nối rảnh (Vy Hoàng Tú)
+@router.get("/driver/stations", dependencies=[Depends(require_role("driver"))])
+async def driver_station_finder_page(request: Request, current_user: CurrentUser):
+    """Trang tìm trạm sạc gần đây cho tài xế — hiện trạng thái đầu nối realtime (SCRUM-96, SCRUM-241, SCRUM-242)."""
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "driver/station_finder.html",
+        _page_context(request, current_user),
+    )
+
+
+# SCRUM-98 (FE) — Theo dõi phiên sạc đang chạy & nhận thông báo khi kết thúc (Vy Hoàng Tú)
+@router.get("/driver/session", dependencies=[Depends(require_role("driver"))])
+async def driver_session_page(request: Request, current_user: CurrentUser):
+    """Trang theo dõi phiên sạc đang chạy của tài xế với SSE realtime (SCRUM-98)."""
+    _require_any_role(current_user, "driver")
+    return templates.TemplateResponse(
+        request,
+        "driver/driver_session.html",
+        _page_context(request, current_user),
+    )
+

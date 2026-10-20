@@ -58,7 +58,7 @@ def migrated_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request):
                 admin_engine.dispose()
 
 
-def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
+def test_migrations_upgrade_and_refuse_irreversible_downgrade(migrated_database) -> None:
     config, engine = migrated_database
     expected_tables = {
         "users",
@@ -70,13 +70,9 @@ def test_migrations_upgrade_and_downgrade(migrated_database) -> None:
     }
     assert expected_tables.issubset(set(inspect(engine).get_table_names()))
 
-    engine.dispose()
-    command.downgrade(config, "base")
-    downgraded_engine = create_engine(settings.DATABASE_URL)
-    try:
-        assert not expected_tables.intersection(inspect(downgraded_engine).get_table_names())
-    finally:
-        downgraded_engine.dispose()
+    with pytest.raises(RuntimeError, match="không hỗ trợ downgrade tự động"):
+        command.downgrade(config, "base")
+    assert expected_tables.issubset(set(inspect(engine).get_table_names()))
 
 
 def test_configuration_and_payment_migrations_share_one_head(migrated_database) -> None:
@@ -112,36 +108,45 @@ def test_seed_contains_exactly_five_required_roles(migrated_database) -> None:
     assert roles == ["accountant", "admin", "driver", "operator", "station_owner"]
 
 
-def test_meter_review_migration_preserves_existing_sessions(migrated_database):
-    config, engine = migrated_database
+def test_meter_review_migration_preserves_existing_sessions(tmp_path: Path, monkeypatch) -> None:
     previous_revision = "h20261006_meter_values"
-    command.downgrade(config, previous_revision)
-    with engine.begin() as db:
-        db.execute(text(
-            "INSERT INTO charging_sessions "
-            "(charge_point_code, station_name, connector_number, meter_start_wh, started_at) "
-            "VALUES ('MIGRATION-TEST', 'Migration station', 1, 12500, CURRENT_TIMESTAMP)"
-        ))
-    command.upgrade(config, "head")
-    with engine.begin() as db:
-        row = db.execute(text(
-            "SELECT meter_start_wh, needs_review, review_reason FROM charging_sessions "
-            "WHERE charge_point_code = 'MIGRATION-TEST'"
-        )).one()
-        assert row[0] == 12500 and not row[1] and row[2] is None
-        db.execute(text(
-            "UPDATE charging_sessions SET needs_review = true, review_reason = 'meter_value_decreased' "
-            "WHERE charge_point_code = 'MIGRATION-TEST'"
-        ))
-    command.downgrade(config, previous_revision)
-    assert not {"needs_review", "review_reason"}.intersection(
-        column["name"] for column in inspect(engine).get_columns("charging_sessions")
-    )
-    with engine.connect() as db:
-        assert db.execute(text(
-            "SELECT meter_start_wh FROM charging_sessions WHERE charge_point_code = 'MIGRATION-TEST'"
-        )).scalar_one() == 12500
-    command.upgrade(config, "head")
+    database_url = f"sqlite:///{(tmp_path / 'meter_review_migration.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", database_url)
+    backend_dir = Path(__file__).resolve().parents[1] / "backend"
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    command.upgrade(config, previous_revision)
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as db:
+            db.execute(text(
+                "INSERT INTO charging_sessions "
+                "(charge_point_code, station_name, connector_number, meter_start_wh, started_at) "
+                "VALUES ('MIGRATION-TEST', 'Migration station', 1, 12500, CURRENT_TIMESTAMP)"
+            ))
+        command.upgrade(config, "head")
+        with engine.begin() as db:
+            row = db.execute(text(
+                "SELECT meter_start_wh, needs_review, review_reason FROM charging_sessions "
+                "WHERE charge_point_code = 'MIGRATION-TEST'"
+            )).one()
+            assert row[0] == 12500 and not row[1] and row[2] is None
+            db.execute(text(
+                "UPDATE charging_sessions SET needs_review = true, review_reason = 'meter_value_decreased' "
+                "WHERE charge_point_code = 'MIGRATION-TEST'"
+            ))
+        with pytest.raises(RuntimeError, match="không hỗ trợ downgrade tự động"):
+            command.downgrade(config, previous_revision)
+        with engine.connect() as db:
+            row = db.execute(text(
+                "SELECT meter_start_wh, needs_review, review_reason FROM charging_sessions "
+                "WHERE charge_point_code = 'MIGRATION-TEST'"
+            )).one()
+            assert row == (12500, 1, "meter_value_decreased")
+    finally:
+        engine.dispose()
 
 
 def test_migrated_wallet_accepts_sandbox_topup_once_and_refund(migrated_database):
@@ -265,6 +270,7 @@ def test_seeded_demo_users_have_working_documented_passwords(migrated_database) 
         "operator@csms.local": "Operator@2024!",
         "accountant@csms.local": "Accountant@2024!",
         "driver@csms.local": "Driver@2024!",
+        "driver2@csms.local": "Driver2@2024!",
     }
 
     with engine.connect() as connection:
@@ -277,34 +283,42 @@ def test_seeded_demo_users_have_working_documented_passwords(migrated_database) 
         assert verify_password(documented_passwords[email], password_hash), email
 
 
-def test_connector_error_history_survives_schema_upgrade_and_downgrade(migrated_database):
-    config, engine = migrated_database
-    with engine.begin() as connection:
-        owner_id = connection.execute(text("SELECT id FROM users LIMIT 1")).scalar_one()
-        station_id = connection.execute(
-            text("INSERT INTO stations(name,owner_id) VALUES('History test',:owner) RETURNING id"),
-            {"owner": owner_id},
-        ).scalar_one()
-        point_id = connection.execute(
-            text("INSERT INTO charge_points(code,station_id) VALUES('HISTORY-POINT',:station) RETURNING id"),
-            {"station": station_id},
-        ).scalar_one()
-        connector_id = connection.execute(
-            text("INSERT INTO connectors(charge_point_id,connector_id) VALUES(:point,1) RETURNING id"),
-            {"point": point_id},
-        ).scalar_one()
-        connection.execute(
-            text("INSERT INTO connector_errors(connector_id,error_code,occurred_at) VALUES(:connector,'GroundFailure','2020-01-02 03:04:05')"),
-            {"connector": connector_id},
-        )
-    command.downgrade(config, "h20261002_t19_status")
-    with engine.connect() as connection:
-        value = connection.execute(text("SELECT timestamp FROM connector_errors")).scalar_one()
-        assert str(value) == "2020-01-02 03:04:05"
-    command.upgrade(config, "head")
-    with engine.connect() as connection:
-        value = connection.execute(text("SELECT occurred_at FROM connector_errors")).scalar_one()
-        assert str(value) == "2020-01-02 03:04:05"
+def test_connector_error_history_survives_schema_upgrade(tmp_path: Path, monkeypatch) -> None:
+    previous_revision = "h20261002_t19_status"
+    database_url = f"sqlite:///{(tmp_path / 'connector_error_migration.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", database_url)
+    backend_dir = Path(__file__).resolve().parents[1] / "backend"
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    command.upgrade(config, previous_revision)
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            owner_id = connection.execute(text("SELECT id FROM users LIMIT 1")).scalar_one()
+            station_id = connection.execute(
+                text("INSERT INTO stations(name,owner_id) VALUES('History test',:owner) RETURNING id"),
+                {"owner": owner_id},
+            ).scalar_one()
+            point_id = connection.execute(
+                text("INSERT INTO charge_points(code,station_id) VALUES('HISTORY-POINT',:station) RETURNING id"),
+                {"station": station_id},
+            ).scalar_one()
+            connector_id = connection.execute(
+                text("INSERT INTO connectors(charge_point_id,connector_id) VALUES(:point,1) RETURNING id"),
+                {"point": point_id},
+            ).scalar_one()
+            connection.execute(
+                text("INSERT INTO connector_errors(connector_id,error_code,timestamp) VALUES(:connector,'GroundFailure','2020-01-02 03:04:05')"),
+                {"connector": connector_id},
+            )
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            value = connection.execute(text("SELECT occurred_at FROM connector_errors")).scalar_one()
+            assert str(value) == "2020-01-02 03:04:05"
+    finally:
+        engine.dispose()
 
 
 def test_station_owner_cannot_be_deleted_with_an_existing_station(migrated_database):

@@ -11,6 +11,7 @@ from app.models.station import Station
 from app.models.station_tariff import StationTariff
 from app.models.subscription_usage import SubscriptionUsage
 from app.services.pricing import CALCULATION_VERSION, calculate_session_price
+from app.services.reconciliation_periods import ensure_session_period_open
 from app.services.wallet import deduct_session_charge
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def finalize_session_billing(
         or session.station_id is None
     ):
         return None
+    ensure_session_period_open(db, session)
 
     tariff = (
         db.query(StationTariff)

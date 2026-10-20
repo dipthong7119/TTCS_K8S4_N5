@@ -6,6 +6,8 @@ Tham chieu: SPRINT_1.md T-05, SSD-1 trong 03_SSD_SPEC.md
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -15,11 +17,17 @@ from app.core.deps import (
     public_route,
     require_role,
 )
-from app.core.security import verify_password
+from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models.login_ip_attempt import LoginIPAttempt
-from app.models.user import User
-from app.schemas.user import LoginRequest, LoginResponse, MeResponse
+from app.models.user import Role, User
+from app.schemas.user import (
+    DriverRegisterRequest,
+    DriverRegisterResponse,
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(deny_unannotated_route)])
 
@@ -42,6 +50,48 @@ def role_home_page(role_names: list[str]) -> str:
         if role in role_names:
             return ROLE_HOME_PAGES[role]
     raise HTTPException(status_code=403, detail="Tài khoản chưa được phân quyền")
+
+
+@router.post(
+    "/register",
+    response_model=DriverRegisterResponse,
+    status_code=201,
+    responses={409: {"description": "Email đã được sử dụng"}},
+)
+@public_route
+def register_driver(body: DriverRegisterRequest, db: Session = Depends(get_db)):
+    """Tạo tài khoản tài xế; vai trò luôn do máy chủ gán, không nhận từ client."""
+    email = str(body.email).strip().lower()
+    if db.query(User.id).filter(func.lower(User.email) == email).first():
+        raise HTTPException(
+            status_code=409,
+            detail="Email này đã được sử dụng. Vui lòng đăng nhập hoặc dùng email khác.",
+        )
+
+    driver_role = db.query(Role).filter(Role.name == "driver").first()
+    if driver_role is None:
+        raise HTTPException(status_code=503, detail="Hệ thống chưa cấu hình vai trò tài xế.")
+
+    user = User(
+        email=email,
+        full_name=body.full_name,
+        password_hash=hash_password(body.password),
+        roles=[driver_role],
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Email này đã được sử dụng. Vui lòng đăng nhập hoặc dùng email khác.",
+        ) from exc
+
+    return DriverRegisterResponse(
+        message="Tạo tài khoản tài xế thành công. Vui lòng đăng nhập.",
+        email=email,
+    )
 
 
 @router.post(

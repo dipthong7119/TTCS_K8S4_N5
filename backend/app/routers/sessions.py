@@ -101,6 +101,7 @@ def _serialize_session(
         "meter_start_wh": item.meter_start_wh,
         "meter_stop_wh": item.meter_stop_wh,
         "kwh": float(item.energy_kwh) if item.energy_kwh is not None else None,
+        "requested_power_limit_w": item.requested_power_limit_w,
         "live_kwh": live_kwh,
         "cost_vnd": invoice.total_vnd if invoice else None,
         "invoice_segments": invoice.segments if invoice else None,
@@ -371,7 +372,7 @@ async def get_session_invoice(
 
 @router.post(
     "/{session_id}/remote-stop",
-    dependencies=[Depends(require_role("admin", "operator"))],
+    dependencies=[Depends(require_role("admin", "operator", "driver"))],
 )
 async def remote_stop_session(
     session_id: int,
@@ -381,6 +382,10 @@ async def remote_stop_session(
     item = _session_query(db).filter(ChargingSession.id == session_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên sạc")
+    roles = _role_names(current_user)
+    is_driver_only = "driver" in roles and not roles.intersection({"admin", "operator"})
+    if is_driver_only and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bạn chỉ có thể dừng phiên sạc của chính mình")
     if item.ended_at is not None:
         raise HTTPException(status_code=409, detail="Phiên sạc đã kết thúc, không thể dừng từ xa")
 

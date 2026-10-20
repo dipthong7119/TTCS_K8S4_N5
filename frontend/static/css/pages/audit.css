@@ -42,7 +42,29 @@
 }
 
 .audit-table {
-  min-width: 880px;
+  min-width: 1180px;
+  table-layout: auto;
+}
+
+.audit-table th,
+.audit-table td {
+  vertical-align: middle;
+}
+
+.audit-table th:nth-child(1) { min-width: 155px; }
+.audit-table th:nth-child(2) { min-width: 210px; }
+.audit-table th:nth-child(3) { min-width: 180px; }
+.audit-table th:nth-child(4) { min-width: 135px; }
+.audit-table th:nth-child(5) { min-width: 200px; }
+.audit-table th:nth-child(6) { min-width: 125px; }
+.audit-table th:nth-child(7) { min-width: 100px; }
+
+.audit-table td:nth-child(1),
+.audit-table td:nth-child(3),
+.audit-table td:nth-child(4),
+.audit-table td:nth-child(6),
+.audit-table td:nth-child(7) {
+  white-space: nowrap;
 }
 
 .audit-cell-time {

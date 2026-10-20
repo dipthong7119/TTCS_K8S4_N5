@@ -112,6 +112,15 @@
           </div>
         </div>
 
+        <!-- Phí không đến sau thời hạn giữ chỗ (SCRUM-78) -->
+        <div class="form-group">
+          <label class="form-label" for="station-no-show-fee">Phí không đến (đồng)</label>
+          <input id="station-no-show-fee" name="no_show_fee_vnd" type="number" class="form-input"
+                 min="0" max="1000000000" step="1"
+                 value="{{ station.no_show_fee_vnd | default(0) if is_edit else 0 }}" />
+          <p class="form-hint">Phí này được chốt khi tài xế đặt chỗ và chỉ thu nếu đặt chỗ hết hạn mà tài xế không bắt đầu sạc. Nhập 0 để miễn phí.</p>
+        </div>
+
         <!-- Trạng thái (chỉ hiện khi edit) -->
         {% if is_edit %}
         <div class="form-group">
@@ -422,6 +431,157 @@
 
       <!-- Lịch sử các phiên bản biểu giá của trạm -->
       <div id="station-tariff-history" class="station-tariff-history" style="margin-top:var(--space-6);"></div>
+    </div>
+  </section>
+
+  <!-- ── SCRUM-80: Phân bổ công suất trạm & Hạn mức đầu nối ── -->
+  <section class="card station-power-card" id="station-power-card" data-station-id="{{ station.id }}" aria-labelledby="station-power-title">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="station-power-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--color-primary);vertical-align:-3px;margin-right:6px;">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          Hạn mức công suất trạm &amp; Phân bổ công suất
+        </h2>
+        <p class="card__subtitle">Khai báo giới hạn tổng công suất trạm và công suất định danh của từng cổng sạc để tự động điều tiết tải</p>
+      </div>
+      <div class="power-header-badges">
+        <span class="badge badge--neutral">SCRUM-80</span>
+      </div>
+    </div>
+    <div class="card__body">
+      <!-- Loading state -->
+      <div id="power-capacity-loading" class="loading-state" style="padding:var(--space-6) 0;">
+        <div class="spinner spinner--md" aria-hidden="true"></div>
+        <p style="margin-top:var(--space-2);color:var(--color-text-secondary);font-size:var(--font-size-sm);">Đang tải dữ liệu công suất trạm...</p>
+      </div>
+
+      <!-- Content (hidden until loaded) -->
+      <div id="power-capacity-content" class="is-hidden">
+        <!-- Overview summary cards -->
+        <div class="power-summary-grid">
+          <div class="power-metric-card">
+            <div class="power-metric-card__label">Hạn mức công suất trạm</div>
+            <div class="power-metric-card__value" id="power-metric-limit">—</div>
+            <div class="power-metric-card__hint">Công suất nguồn cấp tối đa</div>
+          </div>
+          <div class="power-metric-card">
+            <div class="power-metric-card__label">Tổng công suất định danh</div>
+            <div class="power-metric-card__value" id="power-metric-nominal">—</div>
+            <div class="power-metric-card__hint">Tổng công suất tất cả đầu nối</div>
+          </div>
+          <div class="power-metric-card">
+            <div class="power-metric-card__label">Trạng thái phụ tải</div>
+            <div id="power-metric-status" style="margin-top:4px;">
+              <span class="badge badge--neutral"><span class="badge-text">Chưa xác định</span></span>
+            </div>
+            <div class="power-metric-card__hint" id="power-metric-status-hint">Cần lưu hạn mức</div>
+          </div>
+        </div>
+
+        <!-- Over-subscribed explanation banner -->
+        <div id="power-oversubscribed-banner" class="alert alert--warning is-hidden" style="margin-top:var(--space-4);" role="alert">
+          <div class="alert__icon" aria-hidden="true">⚠️</div>
+          <div class="alert__content">
+            <div class="alert__title">Trạm ở trạng thái vượt công suất định danh (Over-subscribed)</div>
+            <div class="alert__desc">
+              Tổng công suất của các đầu nối lớn hơn hạn mức nguồn điện trạm. Khi nhiều xe cùng sạc đồng thời vượt quá hạn mức, hệ thống CSMS sẽ tự động phân bổ và hạ công suất từng trụ để bảo vệ lưới điện (SCRUM-81 &amp; SCRUM-82).
+            </div>
+          </div>
+        </div>
+
+        <form id="station-power-form" novalidate style="margin-top:var(--space-5);">
+          <!-- Hạn mức trạm input -->
+          <div class="form-group">
+            <label class="form-label" for="station-power-limit">
+              Hạn mức công suất toàn trạm (kW) <span class="required" aria-hidden="true">*</span>
+            </label>
+            <div class="input-with-suffix" style="max-width:320px;">
+              <input class="form-input" id="station-power-limit" name="power_limit_kw" type="number" step="0.1" min="1" max="100000" placeholder="VD: 150" required />
+              <span class="input-suffix">kW</span>
+            </div>
+            <p class="form-hint">Hạn mức tối đa mà trạm sạc được phép tiêu thụ đồng thời từ lưới điện.</p>
+          </div>
+
+          <!-- Bảng danh sách đầu nối -->
+          <div class="form-group" style="margin-top:var(--space-5);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-2);">
+              <label class="form-label" style="margin:0;">
+                Công suất định danh từng đầu nối <span class="required" aria-hidden="true">*</span>
+              </label>
+              <span class="form-hint" id="power-connectors-count">0 đầu nối</span>
+            </div>
+            <div class="table-wrap">
+              <table class="table" id="power-connectors-table" aria-label="Bảng khai báo công suất định danh từng đầu nối">
+                <thead>
+                  <tr>
+                    <th scope="col">Mã trụ sạc</th>
+                    <th scope="col">Cổng</th>
+                    <th scope="col" style="min-width:180px;">Công suất định danh (kW)</th>
+                    <th scope="col">Chọn nhanh</th>
+                  </tr>
+                </thead>
+                <tbody id="power-connectors-tbody">
+                  <!-- Render dynamically by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Message display -->
+          <div id="station-power-message" role="status" aria-live="polite" style="margin-top:var(--space-4);"></div>
+
+          <!-- Submit button -->
+          <div class="form-actions" style="margin-top:var(--space-4);">
+            <button type="submit" class="btn btn--primary" id="btn-save-power-capacity">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Lưu cấu hình công suất
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SCRUM-83: Hạn mức công suất theo khung giờ ── -->
+  <section class="card" id="station-power-bands-card" data-station-id="{{ station.id }}" aria-labelledby="station-power-bands-title">
+    <div class="card__header">
+      <div>
+        <h2 class="card__title" id="station-power-bands-title">Hạn mức công suất theo khung giờ</h2>
+        <p class="card__subtitle">Đặt giới hạn công suất riêng theo giờ địa phương của trạm. Ngoài các khung đã khai báo, hệ thống dùng hạn mức mặc định.</p>
+      </div>
+      <span class="badge badge--neutral">SCRUM-83</span>
+    </div>
+    <div class="card__body">
+      <p id="power-bands-message" class="alert alert--info" role="status" aria-live="polite">Đang tải khung giờ...</p>
+      <form id="power-band-form" class="form-row" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="power-band-start">Giờ bắt đầu</label>
+          <input class="form-input" id="power-band-start" type="time" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="power-band-end">Giờ kết thúc</label>
+          <input class="form-input" id="power-band-end" type="time" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="power-band-limit">Hạn mức (kW)</label>
+          <input class="form-input" id="power-band-limit" type="number" min="0.001" max="100000" step="0.001" required />
+        </div>
+        <div class="form-group" style="align-self:end;display:flex;gap:var(--space-2);">
+          <button class="btn btn--primary" id="power-band-save" type="submit">Thêm khung giờ</button>
+          <button class="btn btn--secondary is-hidden" id="power-band-cancel" type="button">Huỷ sửa</button>
+        </div>
+      </form>
+      <p id="power-band-overlap-warning" class="form-hint" role="status" aria-live="polite"></p>
+      <div class="table-wrap" style="margin-top:var(--space-4);">
+        <table class="table" aria-label="Danh sách hạn mức công suất theo khung giờ">
+          <thead><tr><th scope="col">Bắt đầu</th><th scope="col">Kết thúc</th><th scope="col" class="text-right">Hạn mức</th><th scope="col">Thao tác</th></tr></thead>
+          <tbody id="power-bands-tbody"><tr><td colspan="4">Đang tải...</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </section>
   {% endif %}

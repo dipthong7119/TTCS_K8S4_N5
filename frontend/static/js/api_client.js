@@ -44,6 +44,49 @@ const ApiClient = (() => {
     }
   }
 
+  async function _downloadCsv(path, params = {}, opts = {}) {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    ).toString();
+    const url = BASE_URL + path + (query ? '?' + query : '');
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'text/csv', ...opts.headers },
+        credentials: 'include',
+        signal: opts.signal,
+      });
+      if (!res.ok) {
+        const ct = res.headers.get('Content-Type') || '';
+        const data = ct.includes('application/json') ? await res.json() : await res.text();
+        let message = data?.detail || data || 'Có lỗi xảy ra';
+        if (Array.isArray(message)) message = message.map(item => item.msg).join(', ');
+        if (message && typeof message === 'object') message = message.message || 'Có lỗi xảy ra';
+        if (typeof message !== 'string') message = 'Có lỗi xảy ra';
+        if (res.status === 401 && window.location.pathname !== '/login') {
+          const next = window.location.pathname + window.location.search;
+          window.location.replace('/login?next=' + encodeURIComponent(next));
+        }
+        throw { status: res.status, message, detail: data?.detail };
+      }
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+      const filename = match ? decodeURIComponent(match[1].trim()) : (opts.filename || 'report.csv');
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+      return filename;
+    } catch (err) {
+      if (err.status || err.name === 'AbortError') throw err;
+      throw { status: 0, message: 'Không thể tải tệp. Vui lòng thử lại.' };
+    }
+  }
+
   return {
     get: (path, opts) => _request('GET', path, null, opts),
     post: (path, body, opts) => _request('POST', path, body, opts),
@@ -53,14 +96,22 @@ const ApiClient = (() => {
 
     // --- Auth ---
     login: (email, password) => _request('POST', '/auth/login', { email, password }),
+    registerDriver: (body) => _request('POST', '/auth/register', body),
     logout: () => _request('POST', '/auth/logout'),
 
     // --- Stations ---
     listStations: (params = {}) => _request('GET', '/stations?' + new URLSearchParams(params)),
     getStation: (id) => _request('GET', `/stations/${id}`),
+    getBookingOptions: (stationId) => _request('GET', `/stations/${stationId}/booking-options`),
     createStation: (body) => _request('POST', '/stations', body),
     updateStation: (id, body) => _request('PUT', `/stations/${id}`, body),
     deleteStation: (id) => _request('DELETE', `/stations/${id}`),
+    getStationRevenue: (stationId, params = {}, opts = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', `/stations/${encodeURIComponent(stationId)}/revenue` + (q ? '?' + q : ''), null, opts);
+    },
+    exportStationRevenueCsv: (stationId, params = {}, opts = {}) =>
+      _downloadCsv(`/stations/${encodeURIComponent(stationId)}/revenue.csv`, params, opts),
 
     // --- Charge Points ---
     listChargePoints: (stationId) => _request('GET', `/charge-points?station_id=${encodeURIComponent(stationId)}`),
@@ -95,11 +146,23 @@ const ApiClient = (() => {
     // --- Sessions ---
     listMySessions: (params = {}) => _request('GET', '/sessions/mine?' + new URLSearchParams(params)),
     getCurrentSession: (opts) => _request('GET', '/sessions/current', null, opts),
+    // SCRUM-96: Tài xế tìm trạm gần (dùng monitoring/tree với role driver)
+    findDriverStations: (params = {}) => _request('GET', '/stations?' + new URLSearchParams(params)),
     listAllSessions: (params = {}, opts) => _request('GET', '/sessions?' + new URLSearchParams(params), null, opts),
     getSession: (id) => _request('GET', `/sessions/${id}`),
     getSessionInvoice: (id) => _request('GET', `/sessions/${id}/invoice`),
     remoteStop: (id) => _request('POST', `/sessions/${id}/remote-stop`),
     listAnomalies: (params = {}) => _request('GET', '/sessions/anomalies?' + new URLSearchParams(params)),
+
+
+    // --- Operational Alerts (SCRUM-90) ---
+    listOperationalAlerts: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/alerts' + (q ? '?' + q : ''));
+    },
+    acknowledgeAlert: (id, note = 'Đã xác nhận xử lý') =>
+      _request('POST', `/alerts/${encodeURIComponent(id)}/resolve`, { note }),
+
 
     // --- Audit trail ---
     listAuditLogs: (params = {}) => _request('GET', '/audit?' + new URLSearchParams(params)),
@@ -109,6 +172,18 @@ const ApiClient = (() => {
       const q = new URLSearchParams(params).toString();
       return _request('GET', '/reconciliation/kwh' + (q ? '?' + q : ''), null, opts);
     },
+    getFinancialReconciliation: (params = {}, opts = {}) => {
+      const query = new URLSearchParams(
+        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      ).toString();
+      return _request('GET', '/reconciliation/financial' + (query ? '?' + query : ''), null, opts);
+    },
+    exportFinancialReconciliationCsv: (params = {}, opts = {}) =>
+      _downloadCsv('/reconciliation/financial.csv', params, opts),
+    lockFinancialReconciliationPeriod: (body, opts = {}) =>
+      _request('POST', '/reconciliation/financial/lock', body, opts),
+    reopenFinancialReconciliationPeriod: (body, opts = {}) =>
+      _request('POST', '/reconciliation/financial/reopen', body, opts),
 
     // --- Wallet ---
     getWallet: () => _request('GET', '/wallet'),
@@ -124,6 +199,69 @@ const ApiClient = (() => {
     listSubscriptionPlans: () => _request('GET', '/subscriptions/plans'),
     getMySubscriptions: () => _request('GET', '/subscriptions/mine'),
     subscribePlan: (planId) => _request('POST', '/subscriptions', { plan_id: planId }),
+    getRevenueShareReport: (params = {}) => {
+      const query = new URLSearchParams(
+        Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      ).toString();
+      return _request('GET', '/subscriptions/revenue-share' + (query ? '?' + query : ''));
+    },
+    exportRevenueShareCsv: (params = {}, opts = {}) =>
+      _downloadCsv('/subscriptions/revenue-share.csv', params, opts),
+    listRevenueShareContracts: (params = {}) => {
+      const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();
+      return _request('GET', '/subscriptions/revenue-share/contracts' + (query ? '?' + query : ''));
+    },
+    createRevenueShareContract: (body) => _request('POST', '/subscriptions/revenue-share/contracts', body),
+
+    // --- Tariffs (SCRUM-61, SCRUM-62 FE) ---
+    listStationTariffs: (stationId) => _request('GET', `/stations/${stationId}/tariffs`),
+    createStationTariff: (stationId, body) => _request('POST', `/stations/${stationId}/tariffs`, body),
+
+    // --- Reservations (SCRUM-76 / S-48) ---
+    listReservations: (params = {}, opts = {}) => {
+      const query = new URLSearchParams({
+        active_only: String(params.active_only === true),
+      }).toString();
+      return _request('GET', `/reservations/me?${query}`, null, opts);
+    },
+    createReservation: (body, opts = {}) =>
+      _request('POST', '/reservations', body, opts),
+    cancelReservation: (id, body = null, opts = {}) =>
+      _request('POST', `/reservations/${encodeURIComponent(id)}/cancel`, body, opts),
+    getReservation: (id, opts = {}) =>
+      _request('GET', `/reservations/${encodeURIComponent(id)}`, null, opts),
+
+    // --- Wallet Audit Logs (SCRUM-91) ---
+    listWalletAuditLogs: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/audit' + (q ? '?' + q : ''));
+    },
+
+    // --- Privacy & Data Deletion (SCRUM-92 / S-57 / Nghị định 13/2023/NĐ-CP) ---
+    getPrivacyProfile: () => _request('GET', '/privacy/profile'),
+    requestDataDeletion: (body) => _request('POST', '/privacy/deletion-requests', body),
+    cancelDataDeletionRequest: (id) => _request('POST', `/privacy/deletion-requests/${encodeURIComponent(id)}/cancel`),
+    listDataDeletionRequests: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return _request('GET', '/privacy/admin/deletion-requests' + (q ? '?' + q : ''));
+    },
+    approveDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/approve`, body),
+    hideDataDeletionRequest: (id) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/hide`),
+    rejectDataDeletionRequest: (id, body = {}) =>
+      _request('POST', `/privacy/admin/deletion-requests/${encodeURIComponent(id)}/reject`, body),
+
+    // --- Power capacity (SCRUM-80) ---
+    getStationPowerCapacity: (stationId) => _request('GET', `/stations/${stationId}/power-capacity`),
+    updateStationPowerCapacity: (stationId, body) => _request('PUT', `/stations/${stationId}/power-capacity`, body),
+    listStationPowerCapacityBands: (stationId) => _request('GET', `/stations/${stationId}/power-capacity-bands`),
+    createStationPowerCapacityBand: (stationId, body) => _request('POST', `/stations/${stationId}/power-capacity-bands`, body),
+    updateStationPowerCapacityBand: (stationId, bandId, body) => _request('PUT', `/stations/${stationId}/power-capacity-bands/${bandId}`, body),
+    deleteStationPowerCapacityBand: (stationId, bandId) => _request('DELETE', `/stations/${stationId}/power-capacity-bands/${bandId}`),
+
+    // --- Nearby stations (SCRUM-96 / S-47) ---
+    getNearbyStations: (params = {}) => _request('GET', '/stations/nearby?' + new URLSearchParams(params)),
   };
 })();
 

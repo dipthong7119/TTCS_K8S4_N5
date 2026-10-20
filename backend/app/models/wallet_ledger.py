@@ -29,16 +29,21 @@ class WalletLedgerEntry(Base):
     reference_id = Column(Integer, nullable=True)
     receipt_code = Column(String(80), nullable=True, unique=True)
     description = Column(String(255), nullable=False)
-    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
         CheckConstraint(
             "(entry_type IN ('manual_topup', 'demo_topup', 'sandbox_topup', 'refund') AND amount_vnd > 0) OR "
-            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund') AND amount_vnd < 0)",
+            "(entry_type IN ('session_charge', 'subscription_charge', 'payment_refund', 'no_show_fee') AND amount_vnd < 0) OR "
+            "(entry_type = 'adjustment' AND amount_vnd != 0)",
             name="ck_wallet_ledger_amount_sign",
         ),
-        UniqueConstraint("user_id", "idempotency_key", name="uq_wallet_user_idempotency"),
+        UniqueConstraint(
+            "user_id", "idempotency_key", name="uq_wallet_user_idempotency"
+        ),
         Index("ix_wallet_ledger_user_created", "user_id", "created_at", "id"),
         Index("ix_wallet_ledger_reference", "reference_type", "reference_id"),
     )

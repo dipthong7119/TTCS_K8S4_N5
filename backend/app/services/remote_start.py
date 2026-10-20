@@ -8,7 +8,7 @@ from enum import Enum
 from math import ceil
 from typing import Any, cast
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.models.charge_point import ChargePoint, Connector
 from app.models.charging_session import ChargingSession
 from app.models.id_tag import IdTag
 from app.models.remote_start_request import RemoteStartRequest, RemoteStartStatus
+from app.models.reservation import Reservation
 from app.models.station import Station
 from app.models.user import User
 from app.ocpp.session_statuses import OPEN_SESSION_STATUSES
@@ -224,9 +225,36 @@ def _joined_connector(
     return row
 
 
+def _owned_active_reservation(
+    db: Session,
+    connector: Connector,
+    driver_user_id: int,
+    now: datetime,
+) -> Reservation | None:
+    connector_filter = or_(
+        Reservation.connector_db_id == connector.id,
+        and_(
+            Reservation.connector_db_id.is_(None),
+            Reservation.charge_point_id == connector.charge_point_id,
+            Reservation.connector_id == connector.connector_id,
+        ),
+    )
+    return (
+        db.query(Reservation)
+        .filter(
+            connector_filter,
+            Reservation.user_id == driver_user_id,
+            Reservation.status == "accepted",
+            Reservation.expiry_date > now,
+        )
+        .order_by(Reservation.created_at.desc(), Reservation.id.desc())
+        .first()
+    )
+
+
 def _preflight(
     db: Session, connector_id: int, driver_user_id: int, now: datetime
-) -> tuple[Connector, ChargePoint, Station]:
+) -> tuple[Connector, ChargePoint, Station, Reservation | None]:
     joined = _joined_connector(db, connector_id)
     if joined is None:
         db.rollback()
@@ -247,7 +275,15 @@ def _preflight(
         logger.info("Remote start blocked: connector_id=%s reason=charge_point_offline", connector_pk)
         raise RemoteStartFailure(409, "charge_point_offline", "Trụ sạc đang ngoại tuyến.")
 
-    decision = decide_connector_start(connector.ocpp_status, open_session is not None)
+    owned_reservation = _owned_active_reservation(
+        db, connector, driver_user_id, now
+    )
+    raw_status = connector.ocpp_status
+    if not raw_status and connector.status.lower() in {"reserved", "đặt chỗ"}:
+        raw_status = "Reserved"
+    decision = decide_connector_start(raw_status, open_session is not None)
+    if decision == ConnectorDecision.RESERVED and owned_reservation is not None:
+        decision = ConnectorDecision.ALLOW
     if decision != ConnectorDecision.ALLOW:
         db.rollback()
         logger.info("Remote start blocked: connector_id=%s reason=%s", connector_pk, decision.value)
@@ -260,7 +296,7 @@ def _preflight(
         raise RemoteStartFailure(409, "connector_not_available", messages[decision])
 
     check_start_policy(db, driver_user_id, connector.id)
-    return connector, point, station
+    return connector, point, station, owned_reservation
 
 
 def _message_for(status: RemoteStartStatus) -> str:
@@ -345,7 +381,9 @@ async def submit_remote_start(
     """Tạo yêu cầu, commit trước khi chờ CALLRESULT và trả cờ đã gửi lệnh."""
     lock_remote_start_writes(db, connector_id)
     now = utc_now_naive()
-    connector, point, _station = _preflight(db, connector_id, driver_user_id, now)
+    connector, point, _station, reservation = _preflight(
+        db, connector_id, driver_user_id, now
+    )
     connector_pk = connector.id
     ocpp_connector_number = connector.connector_id
     charge_point_code = point.code
@@ -366,7 +404,22 @@ async def submit_remote_start(
             "Đầu nối đang có yêu cầu bắt đầu khác.",
         )
 
-    tag = ensure_virtual_id_tag(db, driver_user_id)
+    if reservation is None:
+        tag = ensure_virtual_id_tag(db, driver_user_id)
+    else:
+        tag = db.get(IdTag, reservation.id_tag_id)
+        if (
+            tag is None
+            or tag.user_id != driver_user_id
+            or tag.is_blocked
+            or (tag.expiry_date is not None and tag.expiry_date <= now)
+        ):
+            db.rollback()
+            raise RemoteStartFailure(
+                409,
+                "reservation_tag_unavailable",
+                "Thẻ của lượt đặt chỗ không còn hiệu lực.",
+            )
     request_row = RemoteStartRequest(
         driver_user_id=driver_user_id,
         connector_id=connector_pk,

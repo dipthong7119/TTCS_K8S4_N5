@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% set active_page = "alerts" %}
+
+{% block title %}Cảnh báo vận hành{% endblock %}
+{% block meta_description %}Theo dõi và quản lý cảnh báo trụ sạc ngoại tuyến quá lâu hoặc báo lỗi liên tục trong hệ thống CSMS{% endblock %}
+
+{% block breadcrumb %}
+<a href="/">Trang chủ</a>
+<span class="sep" aria-hidden="true">/</span>
+<a href="/monitoring">Giám sát</a>
+<span class="sep" aria-hidden="true">/</span>
+<span aria-current="page">Cảnh báo vận hành</span>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset_url('css/pages/alerts.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header" id="alerts-page">
+  <div class="page-header__info">
+    <h1 class="page-header__title">Cảnh báo vận hành</h1>
+    <p class="page-header__subtitle">Trụ sạc ngoại tuyến quá lâu hoặc báo lỗi liên tục — cần kiểm tra và xử lý</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:var(--space-3);">
+    <div class="sse-indicator" id="alerts-sse-indicator" aria-live="polite">
+      <span class="sse-dot" aria-hidden="true"></span>
+      <span id="alerts-sse-label">Đang kết nối...</span>
+    </div>
+    <button class="btn btn--secondary btn--sm" id="btn-refresh-alerts" type="button">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+      </svg>
+      Làm mới
+    </button>
+  </div>
+</div>
+
+<!-- Summary stats -->
+<div class="stats-grid" style="margin-bottom:var(--space-5);" id="alerts-stats-row">
+  <div class="stat-card stat-card--red">
+    <div class="stat-card__label">Tổng cảnh báo</div>
+    <div class="stat-card__value" id="stat-total">—</div>
+    <div class="stat-card__sub">đang hoạt động</div>
+  </div>
+  <div class="stat-card stat-card--orange">
+    <div class="stat-card__label">Ngoại tuyến</div>
+    <div class="stat-card__value" id="stat-offline">—</div>
+    <div class="stat-card__sub">trụ mất kết nối</div>
+  </div>
+  <div class="stat-card stat-card--red">
+    <div class="stat-card__label">Báo lỗi liên tục</div>
+    <div class="stat-card__value" id="stat-faulted">—</div>
+    <div class="stat-card__sub">trụ Faulted</div>
+  </div>
+  <div class="stat-card stat-card--blue">
+    <div class="stat-card__label">Đã xử lý hôm nay</div>
+    <div class="stat-card__value" id="stat-resolved">—</div>
+    <div class="stat-card__sub">cảnh báo đã ổn định</div>
+  </div>
+</div>
+
+<!-- Filters bar -->
+<div class="alerts-filter-bar" style="margin-bottom:var(--space-4);">
+  <div class="search-input-wrap" style="max-width:280px;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+    <input type="search" class="search-input" id="alert-search"
+      placeholder="Tìm trạm, mã trụ..." aria-label="Tìm kiếm cảnh báo" />
+  </div>
+
+  <select class="form-select" id="alert-type-filter" style="width:auto;min-width:170px;"
+    aria-label="Lọc loại cảnh báo">
+    <option value="">Tất cả loại</option>
+    <option value="offline">Ngoại tuyến</option>
+    <option value="faulted">Báo lỗi</option>
+  </select>
+
+  <select class="form-select" id="alert-severity-filter" style="width:auto;min-width:150px;"
+    aria-label="Lọc mức độ nghiêm trọng">
+    <option value="">Tất cả mức độ</option>
+    <option value="critical">Nghiêm trọng (&gt;2h)</option>
+    <option value="warning">Cảnh báo (30-120p)</option>
+    <option value="info">Thông tin (&lt;30p)</option>
+  </select>
+
+  <select class="form-select" id="alert-sort-filter" style="width:auto;min-width:160px;"
+    aria-label="Sắp xếp">
+    <option value="duration_desc">Lâu nhất trước</option>
+    <option value="duration_asc">Mới nhất trước</option>
+    <option value="station">Theo trạm A-Z</option>
+  </select>
+
+  <span class="alerts-count-tag" id="alerts-result-count" aria-live="polite">Đang tải...</span>
+</div>
+
+<!-- Alert banner: real-time new alerts -->
+<div class="alert-new-banner is-hidden" id="alert-new-banner" role="alert" aria-live="assertive">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </svg>
+  <span id="alert-new-text">Có cảnh báo mới!</span>
+  <button class="btn btn--sm btn--primary" id="btn-reload-banner" type="button">Xem ngay</button>
+  <button class="alert-new-banner__close" id="btn-close-banner" type="button" aria-label="Bỏ qua">&#x2715;</button>
+</div>
+
+<!-- Alert list -->
+<section class="card" aria-labelledby="alerts-table-heading">
+  <div class="card__header">
+    <div>
+      <h2 class="card__title" id="alerts-table-heading">Danh sách cảnh báo hiện tại</h2>
+      <p style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin:2px 0 0;">
+        Tự động làm mới mỗi 30 giây &middot; Cảnh báo biến mất khi trụ khôi phục trạng thái bình thường
+      </p>
+    </div>
+    <div style="display:flex;align-items:center;gap:var(--space-2);">
+      <span class="alerts-live-dot" id="alerts-live-dot" aria-hidden="true"></span>
+      <span style="font-size:var(--font-size-xs);color:var(--color-text-secondary);" id="alerts-last-refresh">—</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table alerts-table" aria-label="Bảng cảnh báo vận hành trụ sạc">
+      <thead>
+        <tr>
+          <th scope="col">Mức độ</th>
+          <th scope="col">Loại cảnh báo</th>
+          <th scope="col">Trạm / Mã trụ</th>
+          <th scope="col">Thời điểm xảy ra</th>
+          <th scope="col">Thời gian kéo dài</th>
+          <th scope="col">Mã lỗi OCPP</th>
+          <th scope="col" class="text-right">Hành động</th>
+        </tr>
+      </thead>
+      <tbody id="alerts-tbody">
+        <tr>
+          <td colspan="7">
+            <div class="loading-state" style="padding:var(--space-8);">
+              <div class="spinner" aria-hidden="true"></div>
+              <p style="margin-top:var(--space-3);color:var(--color-text-secondary);">Đang tải cảnh báo...</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card__footer" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);">
+    <span id="alerts-page-label" aria-live="polite" style="font-size:var(--font-size-xs);color:var(--color-text-secondary);">Trang 1</span>
+    <div class="pagination" role="navigation" aria-label="Phân trang cảnh báo">
+      <button class="pagination__btn" id="alerts-prev" type="button" aria-label="Trang trước" disabled>&#x2039;</button>
+      <span id="alerts-pages" style="display:flex;gap:4px;"></span>
+      <button class="pagination__btn" id="alerts-next" type="button" aria-label="Trang sau" disabled>&#x203A;</button>
+    </div>
+  </div>
+</section>
+
+<!-- Alert detail modal -->
+<div class="alerts-modal alerts-modal--detail is-hidden" id="alert-detail-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="alert-detail-title">
+  <div class="alerts-modal__backdrop" id="alert-detail-backdrop"></div>
+  <div class="modal__dialog modal__dialog--md">
+    <div class="modal__header">
+      <h2 class="modal__title" id="alert-detail-title">Chi tiết cảnh báo</h2>
+      <button class="modal__close" id="alert-detail-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <div class="alert-detail-grid" id="alert-detail-body">
+        <!-- injected by JS -->
+      </div>
+    </div>
+    <div class="modal__footer">
+      <a class="btn btn--secondary" id="alert-detail-view-monitoring" href="/monitoring" target="_blank">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        Xem lưới giám sát
+      </a>
+      <button class="btn btn--primary" id="alert-detail-ok" type="button">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Acknowledge / confirm modal -->
+<div class="alerts-modal alerts-modal--ack is-hidden" id="modal-ack-dialog" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-ack-title">
+  <div class="alerts-modal__backdrop" id="modal-ack-backdrop"></div>
+  <div class="modal__dialog">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modal-ack-title">Xác nhận đã biết</h2>
+      <button class="modal__close" id="modal-ack-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body" style="text-align:center;">
+      <div class="alert-ack-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+        </svg>
+      </div>
+      <p class="alert-ack-message">Bạn xác nhận đã biết cảnh báo của trụ <strong id="ack-cp-code">—</strong>?</p>
+      <p class="alert-ack-sub">Thao tác này đóng cảnh báo và ghi người xử lý vào nhật ký kiểm tra.</p>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" id="modal-ack-cancel" type="button">Huỷ bỏ</button>
+      <button class="btn btn--primary" id="modal-ack-confirm" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Đóng cảnh báo
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ asset_url('js/pages/alerts.js') }}"></script>
+{% endblock %}
