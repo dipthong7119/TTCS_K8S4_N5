@@ -1,6 +1,6 @@
 """
 config.py — nơi DUY NHẤT đọc biến môi trường.
-Tham chiếu: prompts/00_QUY_TAC_AGENT.md và bảng cấu hình trong README.md.
+Xem README.md để biết cách cấu hình.
 """
 
 import os
