@@ -64,9 +64,6 @@ RANDOM_SEED = int(os.getenv("SCRUM182_RANDOM_SEED", "42"))
 DISCONNECT_MIN = int(os.getenv("SCRUM182_DISCONNECT_MIN", "1"))
 DISCONNECT_MAX = int(os.getenv("SCRUM182_DISCONNECT_MAX", "1"))
 
-# File JSON kết quả — SCRUM-183 (Đức) sẽ đọc file này để đối chiếu
-RESULT_JSON_PATH = Path(os.getenv("SCRUM182_RESULT_PATH", str(ROOT / "ketqua" / "scrum182_kwh_result.json")))
-
 logger = logging.getLogger(__name__)
 
 
@@ -463,8 +460,7 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
     SCRUM-182: 20 trụ ảo chạy song song, một số ngắt-nối ngẫu nhiên.
     Kiểm tra tính toàn vẹn kWh cuối phiên.
 
-    Kết quả xuất ra ketqua/scrum182_kwh_result.json
-    để SCRUM-183 (Đức) dùng làm nguồn đối chiếu.
+    Kết quả được kiểm tra ngay trong test; API đối chiếu đọc các phiên từ DB.
     """
     assert 1 <= DISCONNECT_MIN <= DISCONNECT_MAX < METER_READINGS_PER_SESSION
     rng = random.Random(RANDOM_SEED)
@@ -567,8 +563,7 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
               f"actual={db_kwh:.3f} kWh delta={delta:.6f} reconnects={rec['disconnect_count']} "
               f"{'PASS' if ok else 'FAIL'} {'; '.join(faults)}")
 
-    # 6. Xuất JSON để SCRUM-183 đối chiếu
-    RESULT_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # 6. Tổng hợp kết quả trong bộ nhớ để kiểm tra kWh
     result_payload = {
         "scrum_task":                 "SCRUM-182",
         "random_seed":                RANDOM_SEED,
@@ -586,11 +581,15 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
             "all_passed":   len(mismatches) == 0,
         },
     }
-    RESULT_JSON_PATH.write_text(
-        json.dumps(result_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"\n[SCRUM-182] Ket qua JSON xuat tai: {RESULT_JSON_PATH}")
+    result_path = os.getenv("SCRUM182_RESULT_PATH")
+    if result_path:
+        result_file = Path(result_path)
+        result_file.parent.mkdir(parents=True, exist_ok=True)
+        result_file.write_text(
+            json.dumps(result_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"\n[SCRUM-182] Ket qua JSON xuat tai: {result_file}")
     print(f"[SCRUM-182] Tong: {len(result_items)} phien | "
           f"OK: {result_payload['summary']['kwh_ok']} | "
           f"Loi: {len(mismatches)}")
@@ -599,7 +598,11 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
     assert not mismatches, (
         f"kWh khong khop giua tru gui va DB ({len(mismatches)} tru):\n"
         + "\n".join(mismatches)
-        + f"\n\nXem chi tiet: {RESULT_JSON_PATH}"
+        + (
+            f"\n\nXem chi tiet: {result_path}"
+            if result_path
+            else ""
+        )
     )
 
     still_active = [it for it in result_items if it["db_status"] == "active"]
