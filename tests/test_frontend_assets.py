@@ -102,13 +102,11 @@ def test_reconciliation_samples_use_registered_station_codes():
     from seed_data import STATIONS
 
     root = Path(__file__).resolve().parents[1]
-    reports = [json.loads((root / path).read_text(encoding="utf-8")) for path in (
-        "ketqua/kwh_reconciliation_sample.json", "frontend/static/data/kwh_reconciliation_sample.json",
-    )]
-    assert reports[0] == reports[1]
+    report = json.loads(
+        (root / "frontend/static/data/kwh_reconciliation_sample.json").read_text(encoding="utf-8")
+    )
     inventory = {point["code"]: (station["name"], point["connectors"])
                  for station in STATIONS for point in station["charge_points"]}
-    report = reports[0]
     assert report["metadata"]["is_sample"] is True
     assert len({session["charge_point_code"] for session in report["sessions"]}) == 20
     assert report["summary"]["total_system_kwh"] == pytest.approx(

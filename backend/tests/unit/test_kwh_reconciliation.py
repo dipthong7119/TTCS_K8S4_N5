@@ -86,8 +86,14 @@ def test_reconcile_single_session_missing():
 
 
 def test_reconcile_datasets_20_sessions_sample():
-    """Kiểm tra đối chiếu tập dữ liệu 20 phiên mẫu từ ketqua/kwh_reconciliation_sample.json."""
-    sample_file = Path(__file__).resolve().parents[3] / "ketqua" / "kwh_reconciliation_sample.json"
+    """Kiểm tra đối chiếu tập dữ liệu 20 phiên mẫu được frontend và backend dùng chung."""
+    sample_file = (
+        Path(__file__).resolve().parents[3]
+        / "frontend"
+        / "static"
+        / "data"
+        / "kwh_reconciliation_sample.json"
+    )
     assert sample_file.exists(), f"Không tìm thấy file {sample_file}"
 
     with open(sample_file, encoding="utf-8") as f:
