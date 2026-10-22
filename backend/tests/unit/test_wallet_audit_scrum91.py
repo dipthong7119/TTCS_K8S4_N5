@@ -350,8 +350,8 @@ def test_filter_audit_logs_by_driver_id():
         assert item["target_user_id"] == 10
 
 
-def test_filter_audit_logs_by_driver_query():
-    """AC4: Lọc theo chuỗi tìm kiếm tài xế (email hoặc tên)."""
+def test_operator_cannot_read_wallet_audit_entries():
+    """Operator vẫn xem nhật ký chung nhưng không nhận được sự kiện ví."""
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["operator"])
 
     db = SessionLocalTest()
@@ -362,14 +362,11 @@ def test_filter_audit_logs_by_driver_query():
     db.commit()
     db.close()
 
-    # Lọc theo email tài xế
-    response = client.get("/api/audit?driver=driver1@gmail.com")
+    response = client.get("/api/audit?action=wallet.adjust&driver=driver1@gmail.com")
     assert response.status_code == 200
-    items = response.json()["items"]
-    assert len(items) >= 1
-    assert items[0]["target_user_id"] == 10
+    assert response.json()["items"] == []
 
-    # Lọc tên không tồn tại -> trả về rỗng
+    # Sự kiện vận hành không thuộc ví vẫn khả dụng cho operator.
     resp_none = client.get("/api/audit?driver=khong_ton_tai")
     assert resp_none.status_code == 200
     assert len(resp_none.json()["items"]) == 0

@@ -7,7 +7,7 @@
  *  AC3 — Sau khi duyệt, ẩn danh hóa thông tin cá nhân và định danh phiên sạc; giữ nguyên số liệu doanh thu và sổ cái theo luật kế toán.
  *  AC4 — Tiến độ yêu cầu (Timeline): Gửi yêu cầu -> Thẩm định số dư -> Phê duyệt -> Ẩn danh hóa.
  *  AC5 — Cho phép tài xế hủy yêu cầu khi đang ở trạng thái Chờ duyệt (Pending).
- *  AC6 — Giao diện quản trị viên (Admin/Operator/DPO) thẩm định, duyệt ẩn danh hóa hoặc từ chối kèm lý do.
+ *  AC6 — Admin xử lý yêu cầu; tài xế gửi và theo dõi yêu cầu của mình.
  */
 
 (function () {
@@ -19,6 +19,7 @@
   let _adminRequests = [];
   let _adminLoadError = null;
   let _selectedReqId = null;
+  let _canManageRequests = false;
 
   /* ── Helpers ──────────────────────────────────────────────────────────── */
   function esc(s) {
@@ -282,6 +283,22 @@
           <div style="font-size:10px;color:hsl(140,65%,38%);">Đủ điều kiện</div>`;
       }
 
+      const actionContent = !isPending
+        ? '<span style="font-size:11px;color:var(--color-text-secondary);">Đã xử lý</span>'
+        : _canManageRequests
+          ? `<div class="privacy-admin-actions">
+              <button class="btn btn--danger btn--sm btn-adm-approve" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
+                Xóa dữ liệu
+              </button>
+              <button class="btn btn--secondary btn--sm btn-adm-hide" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
+                Ẩn tài khoản
+              </button>
+              <button class="btn btn--secondary btn--sm btn-adm-reject" data-id="${item.id}" type="button">
+                Từ chối
+              </button>
+            </div>`
+          : '<span style="font-size:11px;color:var(--color-text-secondary);">Chỉ quản trị viên được xử lý</span>';
+
       return `<tr data-id="${item.id}">
         <td style="white-space:nowrap;font-size:var(--font-size-xs);">${fmtDatetime(item.created_at)}</td>
         <td>
@@ -299,23 +316,7 @@
           ${item.active_sessions_count > 0 ? `<span class="tag tag--danger">${item.active_sessions_count} phiên</span>` : '<span style="color:var(--color-text-secondary);">0</span>'}
         </td>
         <td>${statusBadge}</td>
-        <td class="text-right">
-          ${isPending ? `
-            <div class="privacy-admin-actions">
-              <button class="btn btn--danger btn--sm btn-adm-approve" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
-                Xóa dữ liệu
-              </button>
-              <button class="btn btn--secondary btn--sm btn-adm-hide" data-id="${item.id}" type="button" ${!canApprove ? `disabled title="${disabledTitle}"` : ''}>
-                Ẩn tài khoản
-              </button>
-              <button class="btn btn--secondary btn--sm btn-adm-reject" data-id="${item.id}" type="button">
-                Từ chối
-              </button>
-            </div>
-          ` : `
-            <span style="font-size:11px;color:var(--color-text-secondary);">Đã xử lý</span>
-          `}
-        </td>
+        <td class="text-right">${actionContent}</td>
       </tr>`;
     }).join('');
 
@@ -332,6 +333,7 @@
   }
 
   function openApproveModal(id) {
+    if (!_canManageRequests) return;
     const item = _adminRequests.find(x => String(x.id) === String(id));
     if (!item) return;
     _selectedReqId = id;
@@ -362,6 +364,7 @@
   }
 
   function openRejectModal(id) {
+    if (!_canManageRequests) return;
     _selectedReqId = id;
     const input = document.getElementById('reject-reason-input');
     if (input) input.value = '';
@@ -369,6 +372,7 @@
   }
 
   function openHideModal(id) {
+    if (!_canManageRequests) return;
     const item = _adminRequests.find(x => String(x.id) === String(id));
     if (!item) return;
     _selectedReqId = id;
@@ -399,6 +403,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('privacy-root');
     const isDriver = root?.dataset.isDriver === 'true';
+    _canManageRequests = root?.dataset.canManageRequests === 'true';
     const tabDriver = document.getElementById('tab-driver-view');
     const tabAdmin = document.getElementById('tab-admin-view');
     const secDriver = document.getElementById('section-driver-view');
@@ -526,7 +531,7 @@
     document.getElementById('modal-reject-backdrop')?.addEventListener('click', closeModals);
 
     document.getElementById('modal-approve-confirm')?.addEventListener('click', async () => {
-      if (!_selectedReqId) return;
+      if (!_canManageRequests || !_selectedReqId) return;
       try {
         await ApiClient.approveDataDeletionRequest(_selectedReqId);
         showToast('Đã xóa thông tin định danh; chứng từ kế toán vẫn được giữ', 'success');
@@ -538,7 +543,7 @@
     });
 
     document.getElementById('modal-hide-confirm')?.addEventListener('click', async () => {
-      if (!_selectedReqId) return;
+      if (!_canManageRequests || !_selectedReqId) return;
       try {
         await ApiClient.hideDataDeletionRequest(_selectedReqId);
         showToast('Đã khóa đăng nhập và giữ nguyên hồ sơ tài khoản', 'success');
@@ -550,7 +555,7 @@
     });
 
     document.getElementById('modal-reject-confirm')?.addEventListener('click', async () => {
-      if (!_selectedReqId) return;
+      if (!_canManageRequests || !_selectedReqId) return;
       const reason = document.getElementById('reject-reason-input')?.value.trim();
       if (!reason) {
         showToast('Vui lòng nhập lý do từ chối', 'error');

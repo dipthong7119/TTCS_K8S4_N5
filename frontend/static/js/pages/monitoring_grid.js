@@ -282,7 +282,7 @@
                data-reserve-link
                data-cp-code="${escapeHtml(point.code)}"
                href="/reservations?action=reserve&cp_code=${encodeURIComponent(point.code)}"
-               title="Đặt trước trụ này (SCRUM-76)">
+               title="Đặt trước trụ này">
               Đặt trước trụ này
             </a>
           ` : ''}
@@ -458,7 +458,7 @@
 
             if (request?.status === 'started' && request.session_id) {
               finish('Phiên sạc đã bắt đầu.');
-              window.location.assign('/sessions/mine');
+              window.location.assign('/driver/session');
               return;
             }
 
@@ -482,7 +482,7 @@
             Date.parse(item.started_at) >= started - 1000);
           if (session) {
             finish('Phiên sạc đã bắt đầu.');
-            if (driver) window.location.assign('/sessions/mine');
+            if (driver) window.location.assign('/driver/session');
             else if (user.roles?.some(role => ['admin', 'operator'].includes(role))) window.location.assign('/audit');
             return;
           }

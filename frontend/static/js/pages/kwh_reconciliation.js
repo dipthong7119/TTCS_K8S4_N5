@@ -413,7 +413,7 @@ function exportMarkdown() {
   );
 
   const md = [
-    `# Bảng đối chiếu kWh — SCRUM-184`,
+    `# Bảng đối chiếu kWh`,
     `_Xuất lúc: ${new Date().toLocaleString('vi-VN')}_`,
     reportIsSample ? '_Dữ liệu kWh mẫu; mã trụ và tên trạm theo danh sách hiện tại._' : '_Báo cáo đối chiếu._',
     '',

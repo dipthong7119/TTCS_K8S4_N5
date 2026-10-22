@@ -24,7 +24,7 @@
       </svg>
       Tìm trạm sạc gần đây
     </h1>
-    <p class="page-header__subtitle">Xem trạng thái đầu nối rảnh theo thời gian thực — SCRUM-96</p>
+    <p class="page-header__subtitle">Xem trạng thái đầu nối rảnh theo thời gian thực</p>
   </div>
   <div style="display:flex;align-items:center;gap:var(--space-3);">
     <div class="sse-indicator" id="finder-sse-indicator" aria-live="polite">
@@ -110,33 +110,6 @@
     <option value="name_asc">Tên A→Z</option>
     <option value="distance_asc" id="sort-distance-opt" disabled>Gần nhất (cần bật GPS)</option>
   </select>
-  <!-- View toggle -->
-  <div class="view-toggle" role="group" aria-label="Chế độ xem">
-    <button class="view-toggle__btn is-active" id="view-cards" type="button" aria-pressed="true" title="Xem dạng thẻ">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-      </svg>
-    </button>
-    <button class="view-toggle__btn" id="view-map-btn" type="button" aria-pressed="false" title="Xem bản đồ">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-        <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
-      </svg>
-    </button>
-  </div>
-</div>
-
-<!-- Map view (SCRUM-242 subtask) -->
-<div id="finder-map-view" class="finder-map-container is-hidden" aria-label="Bản đồ trạm sạc" role="img">
-  <div id="finder-map" class="finder-map"></div>
-  <div class="finder-map-legend">
-    <span class="map-legend-dot map-legend-dot--available"></span><span>Có đầu nối rảnh</span>
-    <span class="map-legend-dot map-legend-dot--busy"></span><span>Đang bận</span>
-    <span class="map-legend-dot map-legend-dot--offline"></span><span>Ngoại tuyến</span>
-  </div>
 </div>
 
 <!-- Cards view -->

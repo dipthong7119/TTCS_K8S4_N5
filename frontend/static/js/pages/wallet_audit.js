@@ -7,7 +7,7 @@
  *  AC3 — Click "Chi tiết" → modal hiển thị đầy đủ payload JSON kèm sao chép
  *  AC4 — Thống kê tổng nạp / tổng trừ / số người thực hiện trong khoảng lọc
  *  AC5 — Xuất CSV tất cả giao dịch trong khoảng lọc hiện tại
- *  AC6 — Phân quyền: admin/operator/accountant mới xem được
+ *  AC6 — Phân quyền: admin/accountant mới xem được
  */
 (function () {
   'use strict';

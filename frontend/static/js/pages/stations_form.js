@@ -458,7 +458,7 @@
                 ${tariff.is_demo ? '<span class="badge badge--neutral" style="font-size:11px;">Demo</span>' : ''}
               </span>
               <span class="badge ${hasBands && tariff.price_vnd_per_kwh == null ? 'badge--charging' : 'badge--neutral'}">
-                ${hasBands && tariff.price_vnd_per_kwh == null ? 'Nhiều khung giờ (SCRUM-62)' : 'Cố định cả ngày'}
+                ${hasBands && tariff.price_vnd_per_kwh == null ? 'Nhiều khung giờ' : 'Cố định cả ngày'}
               </span>
             </div>
             <div class="tariff-history-item__meta">

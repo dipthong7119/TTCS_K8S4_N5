@@ -1,7 +1,7 @@
 {
   "metadata": {
     "title": "Dữ liệu mẫu đối chiếu kWh theo các trạm sạc hiện có (20 trụ)",
-    "task": "SCRUM-183 (Đức) & SCRUM-184 (Tuấn) & SCRUM-182 (Tú)",
+    "task": "Báo cáo đối chiếu kWh",
     "epic": "E-04 / S-21 / T-46",
     "generated_at": "2026-10-06T11:00:00Z",
     "total_charge_points": 20,

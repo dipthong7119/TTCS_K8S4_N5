@@ -102,7 +102,7 @@
             </svg>
           </div>
           <div>
-            <h3 class="expired-alert-banner__title">ĐẶT CHỖ QUÁ HẠN — ĐÃ MỞ LẠI TRỤ CHO TÀI XẾ KHÁC (SCRUM-78)</h3>
+            <h3 class="expired-alert-banner__title">ĐẶT CHỖ QUÁ HẠN — ĐÃ MỞ LẠI TRỤ CHO TÀI XẾ KHÁC</h3>
             <p class="expired-alert-banner__desc">
               Lượt đặt chỗ <strong>${escapeHtml(res.reservation_code)}</strong> tại <strong>${escapeHtml(res.station_name)}</strong> đã quá thời gian giữ chỗ lúc <strong>${formatTimeOnly(res.expiry_at)}</strong>.
               Trạng thái và phí không đến thực tế: <strong>${feeLabel}</strong>${fee > 0 ? ' đã được ghi nhận vào ví.' : ' (được miễn hoặc không phát sinh).'}
@@ -544,7 +544,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/>
             </svg>
-            Gợi ý các vị trí sạc khả dụng thay thế (SCRUM-77)
+            Gợi ý các vị trí sạc khả dụng thay thế
           </div>
           <div class="suggestion-list">
             ${alternatives.map(alt => `
@@ -656,7 +656,7 @@
         throw {
           status: 409,
           code: 'reservation_conflict',
-          message: 'Vị trí này vừa được một tài xế khác hoàn tất đặt trước bạn 0.2 giây (Giả lập tranh chấp đồng thời theo tiêu chí SCRUM-77 / S-49).'
+          message: 'Vị trí này vừa được một tài xế khác hoàn tất đặt trước bạn 0.2 giây (Giả lập tranh chấp đồng thời).'
         };
       }
 
@@ -792,7 +792,7 @@
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <div>
-            <strong>Đặt chỗ đã quá hạn (SCRUM-78):</strong> Lượt đặt chỗ hết hạn lúc ${formatDate(res.expiry_at)}. Phí không đến ghi nhận thực tế: <strong>${feeLabel}</strong>${fee > 0 ? ' (đã trừ vào ví).' : ' (được miễn hoặc không phát sinh).'}
+            <strong>Đặt chỗ đã quá hạn:</strong> Lượt đặt chỗ hết hạn lúc ${formatDate(res.expiry_at)}. Phí không đến ghi nhận thực tế: <strong>${feeLabel}</strong>${fee > 0 ? ' (đã trừ vào ví).' : ' (được miễn hoặc không phát sinh).'}
           </div>
         </div>
         ${fee > 0 ? `<div style="margin-top:var(--space-2);text-align:right;">
@@ -815,7 +815,7 @@
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
           <div>
-            <strong>Đã hủy chủ động trước hạn (SCRUM-79):</strong> Lượt đặt chỗ đã hủy lúc ${formatDate(res.cancelled_at || res.expiry_at)}. ${escapeHtml(cancelStatusLabel)}. Phí hủy: <strong>0 ₫</strong>.
+            <strong>Đã hủy chủ động trước hạn:</strong> Lượt đặt chỗ đã hủy lúc ${formatDate(res.cancelled_at || res.expiry_at)}. ${escapeHtml(cancelStatusLabel)}. Phí hủy: <strong>0 ₫</strong>.
           </div>
         </div>
       `;

@@ -15,7 +15,9 @@
 {% endblock %}
 
 {% block content %}
-<div class="privacy-container" id="privacy-root" data-is-driver="{{ 'true' if 'driver' in current_user.roles else 'false' }}">
+<div class="privacy-container" id="privacy-root"
+     data-is-driver="{{ 'true' if 'driver' in current_user.roles else 'false' }}"
+     data-can-manage-requests="{{ 'true' if 'admin' in current_user.roles else 'false' }}">
   <!-- Page Header -->
   <div class="page-header">
     <div class="page-header__info">
@@ -28,7 +30,7 @@
         Minh bạch dữ liệu cá nhân, tọa độ trạm sạc và quyền yêu cầu ẩn danh hóa lịch sử di chuyển của bạn.
       </p>
     </div>
-    {% if ('admin' in current_user.roles or 'operator' in current_user.roles) and 'driver' in current_user.roles %}
+    {% if 'admin' in current_user.roles and 'driver' in current_user.roles %}
     <div class="privacy-role-switcher" role="tablist" aria-label="Chuyển chế độ xem">
       <button class="btn btn--sm privacy-tab-btn is-active" id="tab-driver-view" type="button" role="tab" aria-selected="true">
         Góc nhìn tài xế
@@ -235,8 +237,8 @@
   </div>
   {% endif %}
 
-  <!-- SECTION 2: ADMIN / OPERATOR VIEW -->
-  {% if 'admin' in current_user.roles or 'operator' in current_user.roles %}
+  <!-- SECTION 2: ADMIN VIEW -->
+  {% if 'admin' in current_user.roles %}
   <div class="privacy-section{% if 'driver' in current_user.roles %} is-hidden{% endif %}" id="section-admin-view">
     <!-- Admin Stats Grid -->
     <div class="stats-grid" style="margin-bottom:var(--space-5);">

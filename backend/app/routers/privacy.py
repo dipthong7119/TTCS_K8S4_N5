@@ -3,8 +3,7 @@ Router: privacy
 Tham chiếu: SCRUM-92 / S-57 — Tài xế yêu cầu xoá dữ liệu cá nhân và lịch sử di chuyển (Nghị định 13/2023/NĐ-CP).
 Phân quyền:
 - Tài xế: gửi yêu cầu và tra cứu yêu cầu của chính mình.
-- Quản trị viên/Vận hành (admin, operator): tra cứu danh sách yêu cầu.
-- Quản trị viên (admin): phê duyệt hoặc từ chối yêu cầu.
+- Quản trị viên (admin): tra cứu, phê duyệt hoặc từ chối yêu cầu.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -175,7 +174,7 @@ def cancel_page_deletion_request(
 
 @router.get(
     "/admin/deletion-requests",
-    dependencies=[Depends(require_role("admin", "operator"))],
+    dependencies=[Depends(require_role("admin"))],
 )
 def list_page_deletion_requests(
     status_filter: str | None = Query(None, alias="status"),
@@ -278,7 +277,7 @@ def get_my_requests(
 @router.get(
     "/admin/erasure-requests",
     response_model=DataErasureListResponse,
-    dependencies=[Depends(require_role("admin", "operator"))],
+    dependencies=[Depends(require_role("admin"))],
 )
 def list_all_erasure_requests(
     status_filter: str | None = Query(
@@ -291,7 +290,7 @@ def list_all_erasure_requests(
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Quản trị viên và người vận hành tra cứu danh sách các yêu cầu xóa dữ liệu."""
+    """Quản trị viên tra cứu danh sách các yêu cầu xóa dữ liệu."""
     items, total = list_erasure_requests(
         db, status=status_filter, driver_id=driver_id, skip=skip, limit=limit
     )

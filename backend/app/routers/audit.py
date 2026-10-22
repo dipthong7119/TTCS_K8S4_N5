@@ -1,4 +1,4 @@
-"""Read-only, paginated audit history for administrators and operators."""
+"""Read-only, paginated audit history for administrators, operators, and accountants."""
 
 from datetime import date, datetime, time, timedelta
 
@@ -50,6 +50,10 @@ async def list_audit_logs(
     date_to: date | None = Query(None),
 ):
     query = db.query(AuditLog)
+    role_names = {role.name for role in current_user.roles}
+    if "operator" in role_names and not {"admin", "accountant"}.intersection(role_names):
+        query = query.filter(~AuditLog.action.like("wallet.%"))
+
     if charge_point_code:
         query = query.filter(AuditLog.charge_point_code.ilike(f"%{charge_point_code.strip()}%"))
     if actor:

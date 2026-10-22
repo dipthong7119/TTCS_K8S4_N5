@@ -1398,7 +1398,7 @@ test('SCRUM-95: driver waits for its remote-start request before navigating', as
 
   request = { id: 95, status: 'started', session_id: 123 };
   await page.advance(2000);
-  assert.deepEqual(page.redirects, ['/sessions/mine']);
+  assert.deepEqual(page.redirects, ['/driver/session']);
   assert.match(page.message.textContent, /đã bắt đầu/);
   assert.equal(page.timers.size, 0);
 });

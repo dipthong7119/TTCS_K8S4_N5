@@ -415,8 +415,8 @@ def test_api_endpoints_role_guards_and_permissions():
     assert resp.json()["status"] == "approved"
 
 
-def test_operator_can_view_requests_but_cannot_approve_or_reject():
-    """AC5: Operator được xem danh sách yêu cầu nhưng không có quyền duyệt/từ chối."""
+def test_operator_cannot_view_or_process_erasure_requests():
+    """Operator không có quyền xem hoặc xử lý yêu cầu xóa dữ liệu."""
     db = SessionLocalTest()
     driver = _seed_user_and_roles(db, "driver10@test.local", "Tài Xế Mười", "driver")
     operator = _seed_user_and_roles(db, "operator1@test.local", "Vận Hành 1", "operator")
@@ -431,9 +431,9 @@ def test_operator_can_view_requests_but_cannot_approve_or_reject():
         op_id, ["operator"], op_email, op_name
     )
 
-    # Operator xem danh sách -> 200 OK
+    # Operator không được xem danh sách yêu cầu -> 403 Forbidden
     resp = client.get("/api/privacy/admin/erasure-requests")
-    assert resp.status_code == 200
+    assert resp.status_code == 403
 
     # Operator duyệt -> 403 Forbidden
     resp = client.post(f"/api/privacy/admin/erasure-requests/{req_id}/approve")
