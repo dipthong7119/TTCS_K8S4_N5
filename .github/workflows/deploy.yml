@@ -3,6 +3,7 @@ name: CD Pipeline - Deploy to Staging
 on:
   push:
     branches: [ "main", "master", "sprint-3" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
