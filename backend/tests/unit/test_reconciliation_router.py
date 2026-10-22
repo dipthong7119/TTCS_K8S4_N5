@@ -5,11 +5,10 @@ Phụ trách: Hoàng Văn Đức
 Kiểm tra:
 - Phân quyền (admin, operator được phép; driver bị 403; chưa đăng nhập bị 401/403).
 - Định dạng trả về đáp ứng yêu cầu của frontend (metadata, summary, sessions).
-- Fallback dữ liệu mẫu khi chưa có file kết quả từ SCRUM-182.
-- Đối chiếu thành công khi có kết quả thật từ SCRUM-182.
+- Fallback dữ liệu mẫu khi DB chưa có phiên phù hợp.
+- Đối chiếu thành công trực tiếp từ các phiên OCPP trong DB.
 """
 
-import json
 from datetime import UTC, datetime
 
 import pytest
@@ -25,7 +24,6 @@ from app.models.charge_point import ChargePoint
 from app.models.charging_session import ChargingSession
 from app.models.station import Station
 from app.models.user import User
-from app.routers import reconciliation
 
 engine_test = create_engine(
     "sqlite:///:memory:",
@@ -124,8 +122,8 @@ def test_reconciliation_operator_access():
     assert resp.status_code == 200
 
 
-def test_reconciliation_with_scrum182_file(tmp_path, monkeypatch):
-    """Khi có file kết quả SCRUM-182 từ kịch bản của Tú, API đối chiếu thật và trả về is_sample=False."""
+def test_reconciliation_uses_recent_ocpp_sessions():
+    """API đối chiếu trực tiếp phiên OCPP trong DB, không cần file kết quả."""
     app.dependency_overrides[get_current_user] = lambda: MockUser(1, ["admin"])
 
     # Tạo session trong DB để đối chiếu
@@ -148,38 +146,12 @@ def test_reconciliation_with_scrum182_file(tmp_path, monkeypatch):
     db.commit()
     db.close()
 
-    fake_scrum182_data = {
-        "scrum_task": "SCRUM-182",
-        "generated_at": datetime.now(UTC).isoformat(),
-        "charger_count": 1,
-        "items": [
-            {
-                "code": "CP01",
-                "transaction_id": 2001,
-                "do_disconnect": True,
-                "disconnect_count": 1,
-                "meter_start_wh": 10000,
-                "meter_stop_wh": 20000,
-                "expected_kwh": 10.0,
-                "db_kwh": 10.0,
-                "db_status": "completed",
-                "errors": [],
-            }
-        ],
-    }
-
-    ketqua_dir = tmp_path / "ketqua"
-    ketqua_dir.mkdir(parents=True)
-    scrum182_path = ketqua_dir / "scrum182_kwh_result.json"
-    scrum182_path.write_text(json.dumps(fake_scrum182_data, ensure_ascii=False), encoding="utf-8")
-
-    monkeypatch.setattr(reconciliation, "_get_project_paths", lambda: (ketqua_dir, tmp_path / "static"))
-
     resp = client.get("/api/reconciliation/kwh")
     assert resp.status_code == 200
     data = resp.json()
 
     assert data["metadata"]["is_sample"] is False
+    assert data["metadata"]["source"] == "ocpp_meter_readings"
     assert data["summary"]["total_sessions"] == 1
     assert data["summary"]["matched_sessions"] == 1
     assert data["summary"]["verdict"] == "PASSED"

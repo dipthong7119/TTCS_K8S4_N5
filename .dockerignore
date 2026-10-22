@@ -16,7 +16,6 @@ __pycache__/
 **/csms.db-*
 prompts/
 huongdan/
-ketqua/
 tests/
 backend/tests/
 backend/skillbackend/
