@@ -49,22 +49,18 @@ def _get_project_paths() -> tuple[Path, Path]:
     return ketqua_dir, static_data_dir
 
 
-def _load_sample_data(static_data_dir: Path, ketqua_dir: Path, tolerance: float) -> dict[str, Any]:
+def _load_sample_data(static_data_dir: Path, tolerance: float) -> dict[str, Any]:
     """Tải dữ liệu mẫu khi chưa có kết quả chạy kịch bản thật từ SCRUM-182."""
-    candidates = [
-        static_data_dir / "kwh_reconciliation_sample.json",
-        ketqua_dir / "kwh_reconciliation_sample.json",
-    ]
-    for p in candidates:
-        if p.exists():
-            try:
-                data = json.loads(p.read_text(encoding="utf-8"))
-                metadata = data.setdefault("metadata", {})
-                metadata["is_sample"] = True
-                metadata["tolerance_kwh"] = tolerance
-                return data
-            except Exception as e:
-                logger.warning("Không thể đọc file mẫu %s: %s", p, e)
+    sample_file = static_data_dir / "kwh_reconciliation_sample.json"
+    if sample_file.exists():
+        try:
+            data = json.loads(sample_file.read_text(encoding="utf-8"))
+            metadata = data.setdefault("metadata", {})
+            metadata["is_sample"] = True
+            metadata["tolerance_kwh"] = tolerance
+            return data
+        except Exception as e:
+            logger.warning("Không thể đọc file mẫu %s: %s", sample_file, e)
 
     return {
         "metadata": {
@@ -289,4 +285,4 @@ def get_kwh_reconciliation(
             }
 
     # Trường hợp 2: Fallback sang dữ liệu mẫu
-    return _load_sample_data(static_data_dir, ketqua_dir, tolerance)
+    return _load_sample_data(static_data_dir, tolerance)
