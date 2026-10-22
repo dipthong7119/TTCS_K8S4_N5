@@ -38,7 +38,7 @@
   --color-text-muted:     hsl(220, 10%, 65%);
   --color-text-inverse:   hsl(0, 0%, 100%);
 
-  --sidebar-bg:           hsl(222, 47%, 11%);
+  --sidebar-bg:           hsl(222, 40%, 19%);
   --sidebar-text:         hsl(215, 25%, 75%);
   --sidebar-active:       hsl(210, 90%, 54%);
   --sidebar-hover:        hsl(222, 47%, 16%);

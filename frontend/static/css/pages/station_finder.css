@@ -60,57 +60,6 @@
   box-shadow: var(--shadow-xs);
 }
 
-/* ── Map container ─────────────────────────────────────────────────────── */
-.finder-map-container {
-  position: relative;
-  isolation: isolate;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: var(--space-5);
-}
-.finder-map-container.is-hidden { display: none; }
-.finder-map {
-  width: 100%;
-  height: 460px;
-  background: var(--color-surface-alt);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  position: relative;
-}
-
-/* Leaflet map tiles */
-.finder-map .leaflet-container { height: 460px; width: 100%; }
-
-.finder-map-legend {
-  position: absolute;
-  bottom: var(--space-3);
-  left: var(--space-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: hsla(220,20%,10%,.75);
-  color: white;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  backdrop-filter: blur(6px);
-  z-index: 500;
-}
-.map-legend-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.map-legend-dot--available { background: var(--color-online); }
-.map-legend-dot--busy { background: var(--color-primary); }
-.map-legend-dot--offline { background: var(--color-text-muted); }
-
 /* ── Grid ───────────────────────────────────────────────────────────────── */
 .finder-grid {
   display: grid;
@@ -339,60 +288,68 @@
   letter-spacing: .05em;
   margin-bottom: var(--space-3);
 }
+.finder-detail-cp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
 .finder-detail-cp {
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  margin-bottom: var(--space-3);
 }
 .finder-detail-cp__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--color-surface-alt);
   border-bottom: 1px solid var(--color-border);
 }
 .finder-detail-cp__code {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-xs);
   font-family: monospace;
   font-weight: 700;
   color: var(--color-text-secondary);
 }
-.finder-detail-connector {
+.finder-detail-connectors {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--font-size-sm);
-  transition: background var(--transition-fast);
+  gap: var(--space-1);
+  padding: var(--space-2);
 }
-.finder-detail-connector:last-child { border-bottom: none; }
-.finder-detail-connector:hover { background: var(--color-surface-alt); }
-.finder-detail-connector__name { color: var(--color-text); font-weight: 500; }
+.finder-detail-connector {
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.finder-detail-no-connectors,
+.finder-detail-empty {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.finder-detail-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-2) 0;
+}
+.finder-detail-map {
+  display: block;
+  width: 100%;
+  height: 260px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.finder-detail-map-link { margin-top: var(--space-3); }
 
 /* Start charging button in drawer */
 .finder-start-btn {
   width: 100%;
   margin-top: var(--space-4);
-}
-
-/* ── Map popup ──────────────────────────────────────────────────────────── */
-.finder-map-popup {
-  font-family: var(--font-family);
-  min-width: 180px;
-}
-.finder-map-popup__name {
-  font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 4px;
-  color: #1a1a2e;
-}
-.finder-map-popup__addr {
-  font-size: 11px;
-  color: #666;
-  margin-bottom: 8px;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────── */
@@ -443,6 +400,9 @@
   .finder-stats-row { grid-template-columns: 1fr 1fr; gap: var(--space-2); }
   .finder-filter-bar { flex-direction: column; align-items: stretch; }
   .finder-grid { grid-template-columns: 1fr; }
-  .finder-map { height: 300px; }
   .drawer__body { padding: var(--space-4); }
+}
+
+@media (max-width: 360px) {
+  .finder-detail-cp-grid { grid-template-columns: 1fr; }
 }

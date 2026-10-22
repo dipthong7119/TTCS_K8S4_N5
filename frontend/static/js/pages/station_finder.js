@@ -16,9 +16,6 @@ const StationFinder = (() => {
   let _filtered = [];       // after filter/sort
   let _userLat = null;
   let _userLng = null;
-  let _leafletMap = null;
-  let _mapMarkers = {};     // { stationId: L.marker }
-  let _viewMode = 'cards';  // 'cards' | 'map'
   let _activeStationId = null;
 
   // ── DOM refs ───────────────────────────────────────────────────────────
@@ -34,8 +31,6 @@ const StationFinder = (() => {
   const $drawerBody  = () => document.getElementById('finder-detail-body');
   const $sseInd      = () => document.getElementById('finder-sse-indicator');
   const $sseLabel    = () => document.getElementById('finder-sse-label');
-  const $cardsView   = () => document.getElementById('finder-cards-view');
-  const $mapView     = () => document.getElementById('finder-map-view');
 
   // ── Connector status helpers ───────────────────────────────────────────
   const STATUS_LABEL = {
@@ -304,7 +299,6 @@ const StationFinder = (() => {
     });
 
     _renderGrid(_filtered);
-    if (_viewMode === 'map') _updateMapMarkers(_filtered);
   }
 
   // ── Detail drawer ─────────────────────────────────────────────────────
@@ -331,19 +325,25 @@ const StationFinder = (() => {
     const total = _countTotal(station);
     const distKm = _dist(_userLat, _userLng, station.latitude, station.longitude);
     const distText = _fmtDist(distKm);
+    const latitude = Number(station.latitude);
+    const longitude = Number(station.longitude);
+    const hasCoordinates = station.latitude != null && station.longitude != null &&
+      Number.isFinite(latitude) && Number.isFinite(longitude);
+    const mapQuery = hasCoordinates ? encodeURIComponent(`${latitude},${longitude}`) : '';
+    const googleMapsUrl = `https://www.google.com/maps?q=${mapQuery}`;
+    const googleMapsEmbedUrl = `https://maps.google.com/maps?q=${mapQuery}&z=15&output=embed`;
 
     let cpHtml = '';
     (station.charge_points || []).forEach(cp => {
       const connHtml = (cp.connectors || []).map(c => {
         const cls = _connectorClass(c.status);
-        const label = STATUS_LABEL[(c.status || 'unknown').toLowerCase()] || c.status;
+        const label = STATUS_LABEL[(c.status || 'unknown').toLowerCase()] || c.status || 'Chưa rõ';
         return `
-          <div class="finder-detail-connector">
-            <span class="finder-detail-connector__name">Đầu nối #${c.connector_id}</span>
-            <span class="finder-connector-chip ${cls}">
-              <span class="connector-dot" aria-hidden="true"></span> ${label}
-            </span>
-          </div>`;
+          <span class="finder-connector-chip finder-detail-connector ${cls}"
+            title="Đầu nối #${c.connector_id}: ${_esc(label)}">
+            <span class="connector-dot" aria-hidden="true"></span>
+            #${c.connector_id} · ${_esc(label)}
+          </span>`;
       }).join('');
 
       cpHtml += `
@@ -354,12 +354,14 @@ const StationFinder = (() => {
               ${cp.status === 'online' ? 'Online' : 'Offline'}
             </span>
           </div>
-          ${connHtml || '<div style="padding:var(--space-3) var(--space-4);font-size:var(--font-size-xs);color:var(--color-text-muted);">Chưa có đầu nối</div>'}
+          <div class="finder-detail-connectors">
+            ${connHtml || '<span class="finder-detail-no-connectors">Chưa có đầu nối</span>'}
+          </div>
         </div>`;
     });
 
     if (!cpHtml) {
-      cpHtml = '<p style="font-size:var(--font-size-sm);color:var(--color-text-secondary);">Trạm chưa có trụ sạc nào.</p>';
+      cpHtml = '<p class="finder-detail-empty">Trạm chưa có trụ sạc nào.</p>';
     }
 
     $drawerBody().innerHTML = `
@@ -386,21 +388,16 @@ const StationFinder = (() => {
         </div>` : ''}
       </div>
 
-      <!-- Charge points -->
-      <div class="finder-detail-section">
-        <div class="finder-detail-section-title">Trụ sạc & đầu nối</div>
-        ${cpHtml}
-      </div>
-
-      <!-- Map mini if has coordinates -->
-      ${station.latitude && station.longitude ? `
+      <!-- Google Maps appears directly in station details -->
+      ${hasCoordinates ? `
       <div class="finder-detail-section">
         <div class="finder-detail-section-title">Vị trí trạm</div>
-        <div id="detail-mini-map" style="height:180px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border);">
-        </div>
-        <a href="https://maps.google.com/?q=${station.latitude},${station.longitude}"
+        <iframe class="finder-detail-map" title="Google Maps: ${_esc(station.name)}"
+          src="${googleMapsEmbedUrl}" loading="eager" allow="fullscreen" allowfullscreen
+          referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <a href="${googleMapsUrl}"
           target="_blank" rel="noopener noreferrer"
-          class="btn btn--secondary btn--sm" style="margin-top:var(--space-3);">
+          class="btn btn--secondary btn--sm finder-detail-map-link">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
@@ -408,6 +405,12 @@ const StationFinder = (() => {
           Mở Google Maps
         </a>
       </div>` : ''}
+
+      <!-- Charge points -->
+      <div class="finder-detail-section">
+        <div class="finder-detail-section-title">Trụ sạc & đầu nối</div>
+        <div class="finder-detail-cp-grid">${cpHtml}</div>
+      </div>
 
       <!-- Start charging CTA (chỉ khi có đầu nối rảnh) -->
       ${avail > 0 ? `
@@ -426,68 +429,6 @@ const StationFinder = (() => {
         </p>
       </div>`}
     `;
-
-    // Init mini-map in drawer
-    if (station.latitude && station.longitude && window.L) {
-      setTimeout(() => {
-        const miniMap = L.map('detail-mini-map', { zoomControl: false, attributionControl: false })
-          .setView([station.latitude, station.longitude], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMap);
-        L.marker([station.latitude, station.longitude])
-          .addTo(miniMap)
-          .bindPopup(`<b>${_esc(station.name)}</b>`)
-          .openPopup();
-      }, 100);
-    }
-  }
-
-  // ── Map view (SCRUM-242) ───────────────────────────────────────────────
-  function _initMap() {
-    if (_leafletMap || !window.L) return;
-    const center = _userLat ? [_userLat, _userLng] : [16.047, 108.206]; // Đà Nẵng default
-    _leafletMap = L.map('finder-map').setView(center, 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(_leafletMap);
-  }
-
-  function _markerColor(station) {
-    const avail = _countAvailable(station);
-    const total = _countTotal(station);
-    if (total === 0) return '#8b8b8b';
-    if (avail === 0) return '#3b82f6';
-    return '#22c55e';
-  }
-
-  function _updateMapMarkers(stations) {
-    if (!_leafletMap) return;
-    // Remove old
-    Object.values(_mapMarkers).forEach(m => m.remove());
-    _mapMarkers = {};
-
-    stations.forEach(s => {
-      if (!s.latitude || !s.longitude) return;
-      const avail = _countAvailable(s);
-      const total = _countTotal(s);
-      const color = _markerColor(s);
-      const icon = L.divIcon({
-        html: `<div style="width:28px;height:28px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;">${avail}</div>`,
-        className: '',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-      });
-      const m = L.marker([s.latitude, s.longitude], { icon })
-        .addTo(_leafletMap)
-        .bindPopup(`
-          <div class="finder-map-popup">
-            <div class="finder-map-popup__name">${_esc(s.name)}</div>
-            <div class="finder-map-popup__addr">${_esc(s.address || '')}</div>
-            <div style="font-size:12px;font-weight:700;color:${color};">${avail}/${total} đầu nối rảnh</div>
-            <button onclick="StationFinder.openDetail(${s.id})" style="margin-top:8px;padding:4px 10px;background:${color};color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Xem chi tiết</button>
-          </div>`, { maxWidth: 220 });
-      _mapMarkers[s.id] = m;
-    });
   }
 
   // ── SSE realtime updates ───────────────────────────────────────────────
@@ -518,13 +459,6 @@ const StationFinder = (() => {
       if (card) {
         const newCard = _renderCard(_stations[idx]);
         card.replaceWith(newCard);
-      }
-
-      // Update map marker
-      if (_leafletMap && _mapMarkers[station_id]) {
-        _mapMarkers[station_id].remove();
-        delete _mapMarkers[station_id];
-        _updateMapMarkers([_stations[idx]]);
       }
 
       // Update stats
@@ -567,7 +501,6 @@ const StationFinder = (() => {
         if (distOpt) distOpt.disabled = false;
         $sort().value = 'distance_asc';
         _applyFilter();
-        if (_leafletMap) _leafletMap.setView([_userLat, _userLng], 13);
         _showToast('Đã bật định vị. Đang sắp xếp theo khoảng cách.', 'success');
       },
       () => _showToast('Không thể lấy vị trí của bạn. Vui lòng cho phép trong trình duyệt.', 'warning')
@@ -592,45 +525,6 @@ const StationFinder = (() => {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // ── View toggle ───────────────────────────────────────────────────────
-  function _setView(mode) {
-    _viewMode = mode;
-    const cardsBtn = document.getElementById('view-cards');
-    const mapBtn   = document.getElementById('view-map-btn');
-    if (mode === 'map') {
-      $cardsView().style.display = 'none';
-      $mapView().classList.remove('is-hidden');
-      cardsBtn.classList.remove('is-active'); cardsBtn.setAttribute('aria-pressed', 'false');
-      mapBtn.classList.add('is-active');      mapBtn.setAttribute('aria-pressed', 'true');
-      // Load Leaflet dynamically
-      if (!window.L) {
-        _loadLeaflet().then(() => { _initMap(); _updateMapMarkers(_filtered); });
-      } else {
-        _initMap();
-        _updateMapMarkers(_filtered);
-      }
-    } else {
-      $cardsView().style.display = '';
-      $mapView().classList.add('is-hidden');
-      mapBtn.classList.remove('is-active');  mapBtn.setAttribute('aria-pressed', 'false');
-      cardsBtn.classList.add('is-active');   cardsBtn.setAttribute('aria-pressed', 'true');
-    }
-  }
-
-  function _loadLeaflet() {
-    return new Promise((resolve) => {
-      if (window.L) { resolve(); return; }
-      const css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(css);
-      const js = document.createElement('script');
-      js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      js.onload = resolve;
-      document.head.appendChild(js);
-    });
-  }
-
   // ── Init ──────────────────────────────────────────────────────────────
   function init() {
     // Filter/sort listeners
@@ -640,10 +534,6 @@ const StationFinder = (() => {
 
     // Location button
     document.getElementById('btn-use-location').addEventListener('click', _requestLocation);
-
-    // View toggle
-    document.getElementById('view-cards').addEventListener('click', () => _setView('cards'));
-    document.getElementById('view-map-btn').addEventListener('click', () => _setView('map'));
 
     // Drawer close
     document.getElementById('finder-detail-close').addEventListener('click', _closeDetail);

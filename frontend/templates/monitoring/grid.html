@@ -95,7 +95,7 @@
     <!-- <option value="unknown">Chưa rõ</option> -->
   </select>
   <div class="view-toggle" role="group" aria-label="Chế độ xem">
-    <button class="view-toggle__btn is-active" id="view-grid" type="button" aria-pressed="true" title="Xem dạng lưới">
+    <button class="view-toggle__btn" id="view-grid" type="button" aria-pressed="false" title="Xem dạng lưới">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="3" y="3" width="7" height="7" />
@@ -104,7 +104,7 @@
         <rect x="3" y="14" width="7" height="7" />
       </svg>
     </button>
-    <button class="view-toggle__btn" id="view-list" type="button" aria-pressed="false" title="Xem dạng danh sách">
+    <button class="view-toggle__btn is-active" id="view-list" type="button" aria-pressed="true" title="Xem dạng danh sách">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <line x1="8" y1="6" x2="21" y2="6" />
@@ -119,8 +119,8 @@
 </div>
 
 <!-- Grid container -->
-<div id="monitoring-grid" class="monitoring-grid" data-can-reset="{{ 'true' if can_reset else 'false' }}"
-  aria-label="Lưới trạm sạc" aria-live="polite">
+<div id="monitoring-grid" class="monitoring-grid list-view" data-can-reset="{{ 'true' if can_reset else 'false' }}"
+  aria-label="Danh sách trạm sạc" aria-live="polite">
   <!-- Filled by JS from SSE or API -->
   <div class="loading-state" id="mon-loading">
     <div class="spinner spinner--lg" aria-hidden="true"></div>

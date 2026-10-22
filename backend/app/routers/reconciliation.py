@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.core.deps import deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
@@ -68,7 +69,7 @@ def _load_sample_data(static_data_dir: Path, ketqua_dir: Path, tolerance: float)
     return {
         "metadata": {
             "title": "Bảng dữ liệu mẫu đối chiếu kWh (Chưa có dữ liệu)",
-            "task": "SCRUM-183 (Đức) & SCRUM-184 (Tuấn) & SCRUM-182 (Tú)",
+            "task": "Báo cáo đối chiếu kWh",
             "generated_at": datetime.now(UTC).isoformat(),
             "total_charge_points": 0,
             "tolerance_kwh": tolerance,
@@ -199,8 +200,8 @@ def get_kwh_reconciliation(
 
                 return {
                     "metadata": {
-                        "title": "Bảng đối chiếu kWh hệ thống CSMS vs Simulator (SCRUM-182)",
-                        "task": "SCRUM-183 (Đức) & SCRUM-184 (Tuấn) & SCRUM-182 (Tú)",
+                        "title": "Bảng đối chiếu kWh hệ thống CSMS vs Simulator",
+                        "task": "Báo cáo đối chiếu kWh",
                         "epic": "E-04 / S-21 / T-46",
                         "generated_at": scrum_data.get(
                             "generated_at", datetime.now(UTC).isoformat()
@@ -216,6 +217,76 @@ def get_kwh_reconciliation(
                 }
         except Exception:
             logger.exception("Lỗi khi xử lý dữ liệu SCRUM-182")
+
+    # When there is no standalone simulator report, reconcile recent OCPP
+    # sessions against the meterStart/meterStop readings saved from the charger.
+    if not sample:
+        recent_since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+        sessions_query = db.query(ChargingSession).filter(
+            ChargingSession.status == "completed",
+            ChargingSession.ended_at.is_not(None),
+            ChargingSession.meter_stop_wh.is_not(None),
+            ChargingSession.started_at >= recent_since,
+        )
+        if settings.APP_ENV != "development":
+            sessions_query = sessions_query.filter(ChargingSession.is_demo.is_(False))
+        recent_sessions = (
+            sessions_query.order_by(ChargingSession.started_at.desc(), ChargingSession.id.desc())
+            .limit(500)
+            .all()
+        )
+        if recent_sessions:
+            system_sessions = []
+            sim_sessions = []
+            session_by_key = {}
+            for session in recent_sessions:
+                meter_start = int(session.meter_start_wh or 0)
+                meter_stop = int(session.meter_stop_wh)
+                meter_kwh = round(max(meter_stop - meter_start, 0) / 1000.0, 3)
+                session_key = str(session.id)
+                session_by_key[session_key] = session
+                common = {
+                    "session_id": session.id,
+                    "charge_point_code": session.charge_point_code,
+                    "connector_id": session.connector_number,
+                    "meter_start_wh": meter_start,
+                    "meter_stop_wh": meter_stop,
+                    "disconnect_count": 0,
+                    "notes": "Đối chiếu từ số đo công tơ OCPP đã lưu.",
+                }
+                system_sessions.append(
+                    {
+                        **common,
+                        "system_kwh": float(
+                            session.energy_kwh
+                            if session.energy_kwh is not None
+                            else meter_kwh
+                        ),
+                    }
+                )
+                sim_sessions.append({**common, "simulator_kwh": meter_kwh})
+
+            reconciliation = reconcile_datasets(
+                system_sessions, sim_sessions, tolerance=tolerance
+            )
+            for item in reconciliation["sessions"]:
+                session = session_by_key.get(str(item["session_id"]))
+                if session is not None:
+                    item["station_id"] = session.station_id
+                    item["station_name"] = session.station_name
+
+            return {
+                "metadata": {
+                    "title": "Đối chiếu các phiên OCPP gần đây",
+                    "generated_at": datetime.now(UTC).isoformat(),
+                    "total_charge_points": len({s.charge_point_code for s in recent_sessions}),
+                    "tolerance_kwh": tolerance,
+                    "is_sample": False,
+                    "source": "ocpp_meter_readings",
+                },
+                "summary": reconciliation["summary"],
+                "sessions": reconciliation["sessions"],
+            }
 
     # Trường hợp 2: Fallback sang dữ liệu mẫu
     return _load_sample_data(static_data_dir, ketqua_dir, tolerance)

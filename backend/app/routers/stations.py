@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.core.deps import CurrentUser, deny_unannotated_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
@@ -148,7 +149,7 @@ async def get_station_revenue(
         }
         for point in charge_points
     }
-    finalized_sessions = (
+    finalized_query = (
         db.query(ChargingSession, ChargingInvoice)
         .join(ChargingInvoice, ChargingInvoice.session_id == ChargingSession.id)
         .filter(
@@ -156,11 +157,16 @@ async def get_station_revenue(
             ChargingSession.started_at >= start_utc,
             ChargingSession.started_at < end_utc,
             ChargingSession.status == "completed",
+        )
+    )
+    # In development, a real session may use a demo tariff. Include the
+    # resulting invoice even when its demo flag differs from the session flag.
+    if settings.APP_ENV != "development":
+        finalized_query = finalized_query.filter(
             ChargingSession.is_demo.is_(False),
             ChargingInvoice.is_demo.is_(False),
         )
-        .all()
-    )
+    finalized_sessions = finalized_query.all()
     total_kwh = 0.0
     total_revenue_vnd = 0
     total_occupancy_fee_vnd = 0
@@ -196,6 +202,9 @@ async def get_station_revenue(
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "timezone": timezone_name,
+        "includes_demo_data": any(
+            session.is_demo or invoice.is_demo for session, invoice in finalized_sessions
+        ),
         "session_count": len(finalized_sessions),
         "total_kwh": round(total_kwh, 3),
         "revenue_vnd": total_revenue_vnd,

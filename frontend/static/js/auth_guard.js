@@ -12,6 +12,8 @@ window.AuthGuard = (() => {
     [/^\/sessions\/anomalies\/?$/, ['admin', 'operator']],
     [/^\/sessions\/?$/, ['admin', 'operator', 'accountant', 'station_owner']],
     [/^\/audit\/?$/, ['admin', 'operator']],
+    [/^\/wallet\/audit\/?$/, ['admin', 'accountant']],
+    [/^\/privacy\/?$/, ['admin', 'driver']],
     [/^\/wallet\/?$/, ['admin', 'accountant', 'driver']],
   ];
   function canVisit(path, roles = []) {

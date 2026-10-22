@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import CurrentUser, public_route, require_role
 from app.database import get_db
 from app.models.charge_point import ChargePoint
@@ -153,6 +154,16 @@ async def station_revenue_page(
     roles = _require_any_role(current_user, "admin", "station_owner")
     q = filter_by_owner(db.query(Station), current_user.id, roles)
     stations = q.order_by(Station.name.asc()).all()
+    if station_id is None and settings.APP_ENV == "development":
+        virtual_station_ids = {
+            row[0]
+            for row in db.query(ChargePoint.station_id)
+            .filter(ChargePoint.code.like("SIM-%"))
+            .all()
+        }
+        virtual_station = next((station for station in stations if station.id in virtual_station_ids), None)
+        if virtual_station is not None:
+            station_id = virtual_station.id
     return templates.TemplateResponse(
         request,
         "stations/revenue.html",
@@ -347,18 +358,18 @@ async def monitoring_alerts_page(request: Request, current_user: CurrentUser):
 
 
 # SCRUM-91 — Nhật ký thao tác ví (Phạm Văn Tuấn)
-@router.get("/wallet/audit", dependencies=[Depends(require_role("admin", "operator", "accountant"))])
+@router.get("/wallet/audit", dependencies=[Depends(require_role("admin", "accountant"))])
 async def wallet_audit_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "admin", "operator", "accountant")
+    _require_any_role(current_user, "admin", "accountant")
     return templates.TemplateResponse(
         request, "wallet/wallet_audit.html", _page_context(request, current_user)
     )
 
 
 # SCRUM-92 — Quyền riêng tư & Yêu cầu xóa dữ liệu cá nhân (Phạm Văn Tuấn)
-@router.get("/privacy", dependencies=[Depends(require_role("driver", "admin", "operator"))])
+@router.get("/privacy", dependencies=[Depends(require_role("driver", "admin"))])
 async def privacy_page(request: Request, current_user: CurrentUser):
-    _require_any_role(current_user, "driver", "admin", "operator")
+    _require_any_role(current_user, "driver", "admin")
     return templates.TemplateResponse(
         request, "privacy/privacy.html", _page_context(request, current_user)
     )

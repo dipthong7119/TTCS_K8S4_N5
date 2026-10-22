@@ -5,6 +5,7 @@
     endInput = document.getElementById('rev-end'),
     errBox = document.getElementById('rev-err'),
     loadBox = document.getElementById('rev-load'),
+    demoNote = document.getElementById('rev-demo-note'),
     emptyBox = document.getElementById('rev-empty'),
     reportBox = document.getElementById('rev-report'),
     tableBody = document.getElementById('rev-tbody'),
@@ -30,6 +31,7 @@
       exportMessage.hidden = true;
     }
     if (loadBox) loadBox.hidden = true;
+    if (demoNote) demoNote.hidden = true;
     if (emptyBox) emptyBox.hidden = true;
     if (errBox) { errBox.textContent = ''; errBox.classList.remove('is-visible'); }
   }
@@ -86,6 +88,7 @@
   }
 
   function render(d) {
+    if (demoNote) demoNote.hidden = !d.includes_demo_data;
     document.getElementById('stat-rev').textContent = fmtVnd(d.revenue_vnd);
     document.getElementById('stat-kwh').textContent = fmtKwh(d.total_kwh);
     document.getElementById('stat-sessions').textContent = fmtNum(d.session_count);
