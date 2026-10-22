@@ -581,6 +581,15 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
             "all_passed":   len(mismatches) == 0,
         },
     }
+    result_path = os.getenv("SCRUM182_RESULT_PATH")
+    if result_path:
+        result_file = Path(result_path)
+        result_file.parent.mkdir(parents=True, exist_ok=True)
+        result_file.write_text(
+            json.dumps(result_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"\n[SCRUM-182] Ket qua JSON xuat tai: {result_file}")
     print(f"[SCRUM-182] Tong: {len(result_items)} phien | "
           f"OK: {result_payload['summary']['kwh_ok']} | "
           f"Loi: {len(mismatches)}")
@@ -589,6 +598,11 @@ async def test_scrum182_20_chargers_random_disconnect_kwh_integrity(docker_stack
     assert not mismatches, (
         f"kWh khong khop giua tru gui va DB ({len(mismatches)} tru):\n"
         + "\n".join(mismatches)
+        + (
+            f"\n\nXem chi tiet: {result_path}"
+            if result_path
+            else ""
+        )
     )
 
     still_active = [it for it in result_items if it["db_status"] == "active"]
