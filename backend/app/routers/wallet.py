@@ -208,14 +208,23 @@ async def unlock_driver_wallet_endpoint(
     dependencies=[Depends(require_role("admin", "accountant"))],
 )
 async def get_driver_wallets(
+    current_user: CurrentUser,
     db: Session = Depends(get_db),
     q: str | None = Query(None, max_length=120),
+    account_status: Literal["active", "locked"] | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
 ):
     """List driver balances for the existing administrator screen."""
+    role_names = {role.name for role in current_user.roles}
+    if account_status is None and "accountant" in role_names and "admin" not in role_names:
+        account_status = "active"
     return list_driver_wallet_summaries(
-        db, query_text=q, page=page, page_size=page_size
+        db,
+        query_text=q,
+        page=page,
+        page_size=page_size,
+        is_active=None if account_status is None else account_status == "active",
     )
 
 

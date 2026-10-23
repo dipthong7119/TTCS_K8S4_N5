@@ -28,10 +28,21 @@
       <h2 class="card__title" id="drivers-heading">Tài khoản tài xế</h2>
       <p class="driver-wallet-hint">Số dư và tổng chi được tính từ sổ giao dịch. Mọi khoản nạp cần mã phiếu thu duy nhất.</p>
     </div>
-    <label class="driver-search">
-      <span class="sr-only">Tìm tài xế</span>
-      <input class="form-input" id="driver-search" type="search" maxlength="120" placeholder="Tìm theo tên hoặc email" autocomplete="off" />
-    </label>
+    <div class="driver-wallet-filters">
+      {% if 'accountant' in current_user.roles and 'admin' not in current_user.roles %}
+      <label class="driver-status-filter">
+        <span>Trạng thái</span>
+        <select class="form-input" id="driver-status-filter">
+          <option value="active" selected>Đang hoạt động</option>
+          <option value="locked">Đã khóa</option>
+        </select>
+      </label>
+      {% endif %}
+      <label class="driver-search">
+        <span class="sr-only">Tìm tài xế</span>
+        <input class="form-input" id="driver-search" type="search" maxlength="120" placeholder="Tìm theo tên hoặc email" autocomplete="off" />
+      </label>
+    </div>
   </div>
 
   <div class="table-wrap">
