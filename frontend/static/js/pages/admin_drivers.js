@@ -5,6 +5,7 @@
   const PAGE_SIZE = 20;
   let page = 1;
   let query = '';
+  let status = document.getElementById('driver-status-filter')?.value || '';
   let searchTimer;
   let selectedDriver = null; // { id, name, balance }
 
@@ -22,7 +23,12 @@
     const tbody = document.getElementById('driver-wallet-tbody');
     tbody.innerHTML = '<tr><td colspan="6" class="driver-table-message">Đang tải danh sách tài xế...</td></tr>';
     try {
-      const result = await ApiClient.listDriverWallets({ q: query, page, page_size: PAGE_SIZE });
+      const result = await ApiClient.listDriverWallets({
+        q: query,
+        ...(status ? { status } : {}),
+        page,
+        page_size: PAGE_SIZE,
+      });
       renderRows(result.items || []);
       renderPagination(result.total || 0);
       document.getElementById('driver-count').textContent = `${result.total || 0} tài khoản tài xế`;
@@ -158,6 +164,11 @@
     document.getElementById('driver-search').addEventListener('input', event => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => { query = event.target.value.trim(); page = 1; loadDrivers(); }, 250);
+    });
+    document.getElementById('driver-status-filter')?.addEventListener('change', event => {
+      status = event.target.value;
+      page = 1;
+      loadDrivers();
     });
     document.getElementById('topup-form')?.addEventListener('submit', submitTopUp);
     document.getElementById('topup-close')?.addEventListener('click', () => document.getElementById('topup-dialog').close());

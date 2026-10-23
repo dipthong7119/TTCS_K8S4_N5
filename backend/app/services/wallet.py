@@ -132,7 +132,8 @@ def list_wallet_entries(
 
 
 def list_driver_wallet_summaries(
-    db: Session, *, query_text: str | None, page: int, page_size: int
+    db: Session, *, query_text: str | None, page: int, page_size: int,
+    is_active: bool | None = None,
 ) -> dict:
     query = (
         db.query(User)
@@ -141,6 +142,8 @@ def list_driver_wallet_summaries(
         .filter(Role.name == "driver")
         .distinct()
     )
+    if is_active is not None:
+        query = query.filter(User.is_active.is_(is_active))
     if query_text:
         search = f"%{query_text.strip()}%"
         query = query.filter((User.full_name.ilike(search)) | (User.email.ilike(search)))

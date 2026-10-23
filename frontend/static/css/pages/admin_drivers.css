@@ -1,8 +1,11 @@
 .driver-wallet-card { overflow: hidden; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.driver-wallet-toolbar { gap: var(--space-5); align-items: flex-start; }
+.driver-wallet-toolbar { gap: var(--space-5); align-items: flex-start; flex-wrap: wrap; }
 .driver-wallet-hint { margin: var(--space-2) 0 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
-.driver-search { width: min(100%, 340px); flex-shrink: 0; }
+.driver-wallet-filters { display: flex; align-items: center; gap: var(--space-3); width: min(100%, 560px); flex-shrink: 0; }
+.driver-status-filter { display: flex; align-items: center; gap: var(--space-2); width: 220px; flex-shrink: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.driver-status-filter .form-input { width: 100%; }
+.driver-search { width: min(100%, 340px); flex: 1 1 240px; }
 .driver-search .form-input { width: 100%; }
 .driver-wallet-table { min-width: 900px; }
 .driver-cell__name { color: var(--color-text); font-weight: 650; }
@@ -38,7 +41,9 @@
 
 @media (max-width: 720px) {
   .driver-wallet-toolbar { flex-direction: column; }
-  .driver-search { width: 100%; }
+  .driver-wallet-filters { width: 100%; flex-direction: column; align-items: stretch; }
+  .driver-status-filter { width: 100%; }
+  .driver-search { width: 100%; flex: 0 0 auto; }
   .driver-wallet-footer { align-items: flex-start; flex-direction: column; }
 }
 
